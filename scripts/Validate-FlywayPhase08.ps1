@@ -701,7 +701,7 @@ function Start-ValidationBackend {
             '--spring.flyway.enabled=true',
             "--spring.flyway.baseline-on-migrate=$($Baseline.ToString().ToLowerInvariant())",
             '--spring.flyway.baseline-version=1',
-            '--spring.flyway.target=1',
+            '--spring.flyway.target=2',
             '--spring.flyway.locations=classpath:db/migration',
             '--spring.flyway.validate-on-migrate=true',
             '--spring.flyway.clean-disabled=true',
@@ -973,6 +973,138 @@ function Assert-Sentinel {
         -Message 'Sentinel table counts changed unexpectedly.'
 }
 
+function Assert-ProvenanceSchema {
+    param([string]$ContainerId)
+
+    $actual = @(Invoke-DockerSql -ContainerId $ContainerId -Sql @'
+SELECT CONCAT(column_name,'|',column_type,'|',is_nullable,'|',IF(column_default IS NULL,'NONE',column_default))
+FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='auditorias'
+AND column_name IN ('version_motor','version_reglas','fecha_analisis','tipo_fuente') ORDER BY column_name;
+'@)
+    $expected = @('fecha_analisis|datetime(6)|NO|NONE', 'tipo_fuente|varchar(16)|NO|NONE',
+        'version_motor|varchar(50)|NO|NONE', 'version_reglas|varchar(50)|NO|NONE')
+    Assert-Condition -Condition (($actual -join "`n") -ceq ($expected -join "`n")) `
+        -Message 'V2 provenance column types, nullability or defaults differ.'
+}
+
+function Get-AuditDataSnapshot {
+    param([string]$ContainerId, [switch]$IncludeProvenance)
+
+    # Hash every old column, preserving NULL, case, whitespace, IDs and relationships.
+    # The second-start snapshot additionally includes the new metadata and new audit.
+    $extra = ''
+    if ($IncludeProvenance) { $extra = ',version_motor,version_reglas,fecha_analisis,tipo_fuente' }
+    return @(Invoke-DockerSql -ContainerId $ContainerId -Sql @"
+SELECT CONCAT('audit|',id,'|',SHA2(JSON_ARRAY(id,fecha_creacion,puntuacion_riesgo,resultado_json,texto_original,tipo_documento,titulo,url_opcional,usuario_id,estado$extra),256)) FROM auditorias ORDER BY id;
+SELECT CONCAT('result|',id,'|',SHA2(JSON_ARRAY(id,fecha_resultado,puntuacion_cumplimiento,recomendaciones_generales,resumen_general,auditoria_id),256)) FROM resultados ORDER BY id;
+SELECT CONCAT('incident|',id,'|',SHA2(JSON_ARRAY(id,categoria,descripcion,evidencia,impacto,recomendacion,severidad,auditoria_id),256)) FROM incidencias ORDER BY id;
+SELECT CONCAT('history|',id,'|',SHA2(JSON_ARRAY(id,accion,fecha_acceso,ip_acceso,auditoria_id,usuario_id),256)) FROM historial_auditorias ORDER BY id;
+SELECT CONCAT('admin|',id,'|',SHA2(JSON_ARRAY(id,admin_email,admin_nombre,detalles,fecha,objetivo_email,objetivo_nombre,tipo_accion,admin_id,usuario_objetivo_id),256)) FROM historial_acciones_admin ORDER BY id;
+"@)
+}
+
+function Assert-AuditDataSnapshot {
+    param([string]$ContainerId, [string[]]$Expected, [switch]$IncludeProvenance)
+
+    $actual = @(Get-AuditDataSnapshot -ContainerId $ContainerId -IncludeProvenance:$IncludeProvenance)
+    Assert-Condition -Condition (($actual -join "`n") -ceq ($Expected -join "`n")) `
+        -Message 'Audit sentinel data, ownership, results or related rows changed unexpectedly.'
+}
+
+function Assert-HistoricalProvenance {
+    param([string]$ContainerId)
+
+    # Frozen expectations for the historical motor, independent of future runtime versions.
+    $actual = @(Invoke-DockerSql -ContainerId $ContainerId -Sql @'
+SELECT CONCAT(id,'|',version_motor,'|',version_reglas,'|',DATE_FORMAT(fecha_analisis,'%Y-%m-%d %H:%i:%s.%f'),'|',tipo_fuente)
+FROM auditorias WHERE id IN (900001,900002) ORDER BY id;
+'@)
+    $expected = @('900001|1|1|2002-03-04 05:06:07.123456|MANUAL',
+        '900002|1|1|2003-04-05 06:07:08.654321|MANUAL')
+    Assert-Condition -Condition (($actual -join "`n") -ceq ($expected -join "`n")) `
+        -Message 'Historical provenance backfill differs from the original creation timestamps or versions.'
+}
+
+function Assert-ProvenanceConstraints {
+    param([string]$ContainerId)
+
+    $columns = @('version_motor', 'version_reglas', 'fecha_analisis', 'tipo_fuente')
+    $values = @("'constraint-engine'", "'constraint-rules'", "'2004-01-02 03:04:05.123456'", "'MANUAL'")
+    $invalidInserts = @()
+    for ($index = 0; $index -lt $columns.Count; $index++) {
+        $nullValues = @($values)
+        $nullValues[$index] = 'NULL'
+        $invalidInserts += "INSERT INTO auditorias (id,usuario_id,titulo,estado,fecha_creacion,$($columns -join ',')) VALUES (999999,900001,'Constraint probe','COMPLETADA',NOW(6),$($nullValues -join ','));"
+        $others = @(0..3 | Where-Object { $_ -ne $index })
+        $names = @($others | ForEach-Object { $columns[$_] }) -join ','
+        $data = @($others | ForEach-Object { $values[$_] }) -join ','
+        $invalidInserts += "INSERT INTO auditorias (id,usuario_id,titulo,estado,fecha_creacion,$names) VALUES (999999,900001,'Constraint probe','COMPLETADA',NOW(6),$data);"
+    }
+    foreach ($invalidSource in @('UNKNOWN', 'manual', 'MANUAL ')) {
+        $invalidInserts += "INSERT INTO auditorias (id,usuario_id,titulo,estado,fecha_creacion,$($columns -join ',')) VALUES (999999,900001,'Constraint probe','COMPLETADA',NOW(6),'probe','probe',NOW(6),'$invalidSource');"
+    }
+    foreach ($sql in $invalidInserts) {
+        # A failed statement closes the connection and rolls back; an unexpected
+        # success also rolls back. No probe can persist or alter business rows.
+        $previousPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $diagnostic = @("SET SESSION sql_mode='STRICT_ALL_TABLES'; START TRANSACTION; $sql ROLLBACK;" |
+                & docker exec -i $ContainerId sh -c `
+                    'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE" -N' 2>&1)
+            $code = $LASTEXITCODE
+        }
+        finally { $ErrorActionPreference = $previousPreference }
+        Assert-Condition -Condition ($code -ne 0 -and ($diagnostic -join "`n") -match 'ERROR (1048|1364|4025) ') `
+            -Message 'Missing, NULL or invalid provenance was not rejected by the expected database constraint.'
+    }
+    foreach ($source in @('MANUAL', 'CRAWLER', 'FILE', 'API')) {
+        Invoke-DockerSql -ContainerId $ContainerId -Sql "START TRANSACTION; INSERT INTO auditorias (id,usuario_id,titulo,estado,fecha_creacion,$($columns -join ',')) VALUES (999999,900001,'Constraint probe','COMPLETADA',NOW(6),'probe','probe',NOW(6),'$source'); ROLLBACK;" | Out-Null
+    }
+    Write-Host 'V2 NOT NULL + SOURCE CONSTRAINTS OK'
+}
+
+function ConvertTo-Base64Url {
+    param([byte[]]$Bytes)
+    return [Convert]::ToBase64String($Bytes).TrimEnd('=').Replace('+','-').Replace('/','_')
+}
+
+function Assert-NewAuditViaApi {
+    param([string]$ContainerId, [int]$ApiPort, [string]$JwtSecret)
+
+    # Authenticate only the synthetic sentinel against this run's loopback backend.
+    # The signing key was generated for this temporary DB; no real credentials.
+    $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    $claims = @{sub='900001'; userId=900001; tokenVersion=7; role='CLIENTE';
+        iss='smartaudits-phase08-legacy-baseline'; aud=@('smartaudits-phase08-legacy-baseline-api');
+        iat=$now; exp=($now + 300)} | ConvertTo-Json -Compress
+    $header = ConvertTo-Base64Url ([Text.Encoding]::UTF8.GetBytes('{"alg":"HS256","typ":"JWT"}'))
+    $payload = ConvertTo-Base64Url ([Text.Encoding]::UTF8.GetBytes($claims))
+    $unsigned = "$header.$payload"
+    $hmac = New-Object System.Security.Cryptography.HMACSHA256
+    try {
+        $hmac.Key = [Convert]::FromBase64String($JwtSecret)
+        $signature = ConvertTo-Base64Url ($hmac.ComputeHash([Text.Encoding]::UTF8.GetBytes($unsigned)))
+    }
+    finally { $hmac.Dispose() }
+    $body = @{titulo='Phase22 new audit'; tipoDocumento='Aviso Legal';
+        textoOriginal='Responsable: Ejemplo. Contacto: sentinel@phase08.invalid.';
+        urlOpcional='https://example.invalid/reference-only'} | ConvertTo-Json -Compress
+    $response = Invoke-WebRequest -UseBasicParsing -Method Post -Uri "http://127.0.0.1:${ApiPort}/auditorias" `
+        -Headers @{Authorization="Bearer $unsigned.$signature"} -ContentType 'application/json' `
+        -Body ([Text.Encoding]::UTF8.GetBytes($body))
+    $audit = $response.Content | ConvertFrom-Json
+    Assert-Condition -Condition ($response.StatusCode -eq 201 -and $audit.id -gt 900002 -and
+        $audit.versionMotor -ceq '1' -and $audit.versionReglas -ceq '1' -and
+        $audit.tipoFuente -ceq 'MANUAL' -and $audit.fechaAnalisis) `
+        -Message 'New API audit did not return the current analysis provenance.'
+    $id = [long]$audit.id
+    $stored = @(Invoke-DockerSql -ContainerId $ContainerId -Sql "SELECT CONCAT(version_motor,'|',version_reglas,'|',tipo_fuente,'|',usuario_id,'|',url_opcional,'|',IF(fecha_analisis <= fecha_creacion AND fecha_analisis >= fecha_creacion - INTERVAL 1 MINUTE,1,0),'|',IF(JSON_VALID(resultado_json),1,0)) FROM auditorias WHERE id=$id;")
+    Assert-Condition -Condition ($stored.Count -eq 1 -and $stored[0] -ceq '1|1|MANUAL|900001|https://example.invalid/reference-only|1|1') `
+        -Message 'New API audit provenance or result was not persisted correctly.'
+    Write-Host 'NEW AUDIT PROVENANCE PERSISTED OK'
+}
+
 function New-ValidationContainer {
     param(
         [string]$Name,
@@ -1096,10 +1228,11 @@ try {
 
     Assert-Condition `
         -Condition (
-            $sourceMigrations.Count -eq 1 -and
-            $sourceMigrations[0] -eq 'V1__initial_schema.sql'
+            $sourceMigrations.Count -eq 2 -and
+            $sourceMigrations[0] -ceq 'V1__initial_schema.sql' -and
+            $sourceMigrations[1] -ceq 'V2__audit_analysis_provenance.sql'
         ) `
-        -Message 'Phase 0.8 validation requires exactly V1__initial_schema.sql in the migration source directory.'
+        -Message 'Migration validation requires exactly the frozen V1 and the analysis provenance V2.'
 
     $jarEntries = @(
         & jar tf $jar
@@ -1119,10 +1252,11 @@ try {
 
     Assert-Condition `
         -Condition (
-            $jarMigrations.Count -eq 1 -and
-            $jarMigrations[0] -eq 'BOOT-INF/classes/db/migration/V1__initial_schema.sql'
+            $jarMigrations.Count -eq 2 -and
+            @($jarMigrations | Sort-Object)[0] -ceq 'BOOT-INF/classes/db/migration/V1__initial_schema.sql' -and
+            @($jarMigrations | Sort-Object)[1] -ceq 'BOOT-INF/classes/db/migration/V2__audit_analysis_provenance.sql'
         ) `
-        -Message 'Backend JAR must contain exactly V1__initial_schema.sql for Phase 0.8 validation.'
+        -Message 'Backend JAR must contain exactly the frozen V1 and the analysis provenance V2.'
 
     $ports = New-Object System.Collections.Generic.HashSet[int]
 
@@ -1200,10 +1334,14 @@ try {
 
     Assert-Condition `
         -Condition (
-            $emptyHistory.Count -eq 1 -and
-            $emptyHistory[0].Trim() -eq '1|1|initial schema|SQL|1'
+            $emptyHistory.Count -eq 2 -and
+            $emptyHistory[0] -ceq '1|1|initial schema|SQL|1' -and
+            $emptyHistory[1] -ceq '2|2|audit analysis provenance|SQL|1'
         ) `
         -Message 'Unexpected Flyway history for empty installation.'
+
+    Assert-ProvenanceSchema -ContainerId $emptyContainerId
+    Write-Host 'FRESH V1 -> V2 OK'
 
     $emptyHttp = Get-HttpStatus `
         -Uri "http://127.0.0.1:${emptyApiPort}/auditorias/mias"
@@ -1259,6 +1397,22 @@ try {
     Assert-Sentinel `
         -ContainerId $legacyContainerId
 
+    Invoke-DockerSql -ContainerId $legacyContainerId -Sql @'
+INSERT INTO auditorias (id,fecha_creacion,puntuacion_riesgo,resultado_json,texto_original,tipo_documento,titulo,url_opcional,usuario_id,estado) VALUES
+(900001,'2002-03-04 05:06:07.123456',37,'{ "resumen": "Historical RESULT  ", "puntuacionRiesgo": 37 }','Original Text  ','Aviso Legal','Historical audit  ','https://example.invalid/historical',900001,'COMPLETADA'),
+(900002,'2003-04-05 06:07:08.654321',NULL,NULL,NULL,NULL,'Nullable historical audit',NULL,900001,'EN_PROCESO');
+INSERT INTO resultados (id,fecha_resultado,puntuacion_cumplimiento,recomendaciones_generales,resumen_general,auditoria_id)
+VALUES (900001,'2002-03-04 05:06:08.123456',37,'Original recommendations  ','Original summary  ',900001);
+INSERT INTO incidencias (id,categoria,descripcion,evidencia,impacto,recomendacion,severidad,auditoria_id)
+VALUES (900001,'Original category','Original description  ','Original evidence','Original impact','Original recommendation','MEDIA',900001);
+INSERT INTO historial_auditorias (id,accion,fecha_acceso,ip_acceso,auditoria_id,usuario_id)
+VALUES (900001,'CREACION','2002-03-04 05:06:09.123456','192.0.2.22',900001,900001);
+INSERT INTO historial_acciones_admin (id,admin_email,admin_nombre,detalles,fecha,objetivo_email,objetivo_nombre,tipo_accion,admin_id,usuario_objetivo_id)
+VALUES (900001,'historical-admin@example.invalid','Historical admin','Original admin event  ','2002-03-04 05:06:10.123456','sentinel@phase08.invalid','Sentinel Phase08','REACTIVAR',900001,900001);
+'@ | Out-Null
+    $legacyAuditSnapshot = @(Get-AuditDataSnapshot -ContainerId $legacyContainerId)
+    Assert-Condition -Condition ($legacyAuditSnapshot.Count -eq 6) -Message 'Incomplete historical audit fixture.'
+
     $legacyDbUrl = "jdbc:mariadb://127.0.0.1:${legacyDbPort}/sa08_legacy_validation"
 
     $rejectBackend = Start-ValidationBackend `
@@ -1286,6 +1440,8 @@ try {
         -ContainerId $legacyContainerId
 
     Write-Host 'LEGACY WITHOUT BASELINE REJECTED'
+
+    Assert-AuditDataSnapshot -ContainerId $legacyContainerId -Expected $legacyAuditSnapshot
 
     Write-Step 'Legacy baseline'
 
@@ -1315,10 +1471,20 @@ try {
 
     Assert-Condition `
         -Condition (
-            $baselineHistory.Count -eq 1 -and
-            $baselineHistory[0].Trim() -eq '1|1|Legacy SmartAudits schema|BASELINE|1'
+            $baselineHistory.Count -eq 2 -and
+            $baselineHistory[0] -ceq '1|1|Legacy SmartAudits schema|BASELINE|1' -and
+            $baselineHistory[1] -ceq '2|2|audit analysis provenance|SQL|1'
         ) `
         -Message 'Unexpected Flyway history after historical baseline.'
+
+    Assert-ProvenanceSchema -ContainerId $legacyContainerId
+    Assert-AuditDataSnapshot -ContainerId $legacyContainerId -Expected $legacyAuditSnapshot
+    Assert-HistoricalProvenance -ContainerId $legacyContainerId
+    Assert-ProvenanceConstraints -ContainerId $legacyContainerId
+    Assert-AuditDataSnapshot -ContainerId $legacyContainerId -Expected $legacyAuditSnapshot
+    Assert-NewAuditViaApi -ContainerId $legacyContainerId -ApiPort $legacyBaselineApiPort -JwtSecret $legacyJwt
+    $upgradedAuditSnapshot = @(Get-AuditDataSnapshot -ContainerId $legacyContainerId -IncludeProvenance)
+    Write-Host 'HISTORICAL BASELINE 1 -> V2 + DATA PRESERVATION OK'
 
     Assert-Sentinel `
         -ContainerId $legacyContainerId
@@ -1359,10 +1525,16 @@ try {
 
     Assert-Condition `
         -Condition (
-            $secondHistory.Count -eq 1 -and
-            $secondHistory[0].Trim() -eq '1|1|Legacy SmartAudits schema|BASELINE|1'
+            $secondHistory.Count -eq 2 -and
+            $secondHistory[0] -ceq '1|1|Legacy SmartAudits schema|BASELINE|1' -and
+            $secondHistory[1] -ceq '2|2|audit analysis provenance|SQL|1'
         ) `
         -Message 'Flyway history changed unexpectedly on second historical startup.'
+
+    Assert-ProvenanceSchema -ContainerId $legacyContainerId
+    Assert-HistoricalProvenance -ContainerId $legacyContainerId
+    Assert-AuditDataSnapshot -ContainerId $legacyContainerId -Expected $upgradedAuditSnapshot -IncludeProvenance
+    Write-Host 'SECOND START ALL AUDIT DATA + PROVENANCE UNCHANGED'
 
     Assert-ExactTables `
         -ContainerId $legacyContainerId `

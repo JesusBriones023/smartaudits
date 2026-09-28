@@ -5,6 +5,7 @@ import com.smartaudits.model.Auditoria;
 import com.smartaudits.model.Incidencia;
 import com.smartaudits.model.Resultado;
 import com.smartaudits.model.Usuario;
+import com.smartaudits.model.TipoFuente;
 import com.smartaudits.model.dto.AuditoriaRequest;
 import com.smartaudits.model.dto.AuditoriaResponse;
 import com.smartaudits.model.dto.ResultadoAuditoria;
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 
 @Service
 @RequiredArgsConstructor
@@ -38,11 +40,15 @@ public class AuditoriaService {
 
         auditQuotaService.verificarPuedeCrear(usuario);
         // 1. Analizar texto con motor propio
+        var version = analizadorLegal.version();
+        LocalDateTime fechaAnalisis = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
         ResultadoAuditoria resultadoDto = analizadorLegal.analyze(new EntradaAnalisis(
                 request.getTextoOriginal(), request.getTipoDocumento()));
 
         // 2. Crear entidad Auditoria
         Auditoria auditoria = new Auditoria();
+        auditoria.registrarProcedencia(version.versionMotor(), version.versionReglas(),
+                fechaAnalisis, TipoFuente.MANUAL);
         auditoria.setTitulo(request.getTitulo());
         auditoria.setTipoDocumento(request.getTipoDocumento());
         auditoria.setTextoOriginal(request.getTextoOriginal());
@@ -223,6 +229,10 @@ private Pageable crearPageable(int page, int size) {
         response.setTitulo(auditoria.getTitulo());
         response.setTipoDocumento(auditoria.getTipoDocumento());
         response.setFechaCreacion(auditoria.getFechaCreacion());
+        response.setVersionMotor(auditoria.getVersionMotor());
+        response.setVersionReglas(auditoria.getVersionReglas());
+        response.setFechaAnalisis(auditoria.getFechaAnalisis());
+        response.setTipoFuente(auditoria.getTipoFuente());
         response.setPuntuacionRiesgo(auditoria.getPuntuacionRiesgo());
         response.setUrlOpcional(auditoria.getUrlOpcional());
         response.setUsuarioId(auditoria.getUsuario().getId());

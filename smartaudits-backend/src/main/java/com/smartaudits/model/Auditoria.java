@@ -4,10 +4,15 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.AccessLevel;
+import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Entity
 @Table(name = "auditorias")
@@ -26,6 +31,41 @@ public class Auditoria {
 
     @Column(name = "fecha_creacion", nullable = false)
     private LocalDateTime fechaCreacion;
+
+    @Setter(AccessLevel.NONE)
+    @Column(name = "version_motor", nullable = false, updatable = false, length = 50)
+    private String versionMotor;
+
+    @Setter(AccessLevel.NONE)
+    @Column(name = "version_reglas", nullable = false, updatable = false, length = 50)
+    private String versionReglas;
+
+    @Setter(AccessLevel.NONE)
+    @Column(name = "fecha_analisis", nullable = false, updatable = false)
+    private LocalDateTime fechaAnalisis;
+
+    @Setter(AccessLevel.NONE)
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "tipo_fuente", nullable = false, updatable = false, length = 16)
+    private TipoFuente tipoFuente;
+
+    /** La procedencia se fija una sola vez, al ejecutar el análisis. */
+    public void registrarProcedencia(String motor, String reglas, LocalDateTime fecha, TipoFuente fuente) {
+        if (versionMotor != null || versionReglas != null || fechaAnalisis != null || tipoFuente != null) {
+            throw new IllegalStateException("La procedencia del análisis ya está registrada");
+        }
+        if (motor == null || motor.isBlank() || motor.length() > 50
+                || reglas == null || reglas.isBlank() || reglas.length() > 50) {
+            throw new IllegalArgumentException("Las versiones deben tener entre 1 y 50 caracteres");
+        }
+        Objects.requireNonNull(fecha, "fechaAnalisis");
+        Objects.requireNonNull(fuente, "tipoFuente");
+        versionMotor = motor;
+        versionReglas = reglas;
+        fechaAnalisis = fecha;
+        tipoFuente = fuente;
+    }
 
     @Column(nullable = false, length = 200)
     private String titulo;

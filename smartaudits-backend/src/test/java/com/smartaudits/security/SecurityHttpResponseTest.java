@@ -172,6 +172,8 @@ class SecurityHttpResponseTest {
 
     Auditoria audit(Usuario owner) {
         Auditoria audit = new Auditoria();
+        audit.registrarProcedencia("http-test", "http-rules",
+                java.time.LocalDateTime.of(2025, 1, 1, 12, 0), com.smartaudits.model.TipoFuente.MANUAL);
         audit.setUsuario(owner);
         audit.setTitulo("HTTP authorization test");
         audit.setResultadoJson("{}");

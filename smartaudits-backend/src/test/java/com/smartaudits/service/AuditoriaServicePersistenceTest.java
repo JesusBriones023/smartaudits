@@ -3,6 +3,7 @@ package com.smartaudits.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartaudits.model.Auditoria;
 import com.smartaudits.model.Usuario;
+import com.smartaudits.model.TipoFuente;
 import com.smartaudits.model.dto.AuditoriaRequest;
 import com.smartaudits.model.dto.AuditoriaResponse;
 import com.smartaudits.model.dto.ResultadoAuditoria;
@@ -11,7 +12,11 @@ import com.smartaudits.repository.HistorialAuditoriaRepository;
 import com.smartaudits.repository.UsuarioRepository;
 import com.smartaudits.service.motor.AnalizadorLegal;
 import com.smartaudits.service.motor.EntradaAnalisis;
+import com.smartaudits.service.motor.VersionAnalizador;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
@@ -20,6 +25,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,6 +34,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
 
 @DataJpaTest(showSql = false, properties = {
         "spring.config.location=optional:classpath:/phase11-no-config.properties",
@@ -58,6 +65,8 @@ class AuditoriaServicePersistenceTest {
         request.setUrlOpcional("https://example.invalid/privacidad");
 
         ResultadoAuditoria analysis = new ResultadoAuditoria();
+        var version = new VersionAnalizador("test-engine", "test-rules");
+        when(motor.version()).thenReturn(version);
         analysis.setResumen("Falta información sobre conservación y derechos.");
         analysis.setPuntuacionRiesgo(62);
         analysis.setRiesgos(List.of("Conservación sin definir"));
@@ -86,6 +95,14 @@ class AuditoriaServicePersistenceTest {
         assertThat(stored.getTextoOriginal()).isEqualTo(request.getTextoOriginal());
         assertThat(stored.getUrlOpcional()).isEqualTo(request.getUrlOpcional());
         assertThat(stored.getEstado()).isEqualTo("COMPLETADA");
+        assertThat(stored.getVersionMotor()).isEqualTo(version.versionMotor());
+        assertThat(stored.getVersionReglas()).isEqualTo(version.versionReglas());
+        assertThat(stored.getFechaAnalisis()).isBetween(before, LocalDateTime.now());
+        assertThat(stored.getTipoFuente()).isEqualTo(TipoFuente.MANUAL);
+        assertThat(response.getVersionMotor()).isEqualTo(stored.getVersionMotor());
+        assertThat(response.getVersionReglas()).isEqualTo(stored.getVersionReglas());
+        assertThat(response.getFechaAnalisis()).isEqualTo(stored.getFechaAnalisis());
+        assertThat(response.getTipoFuente()).isEqualTo(stored.getTipoFuente());
         assertThat(stored.getPuntuacionRiesgo()).isEqualTo(62);
         assertThat(stored.getFechaCreacion()).isBetween(before, LocalDateTime.now().plusSeconds(1));
         assertThat(mapper.readValue(stored.getResultadoJson(), ResultadoAuditoria.class)).isEqualTo(analysis);
@@ -176,9 +193,13 @@ class AuditoriaServicePersistenceTest {
         ResultadoAuditoria analysis = new ResultadoAuditoria();
         analysis.setResumen("Resultado del analizador alternativo");
         analysis.setPuntuacionRiesgo(37);
-        AnalizadorLegal alternative = input -> {
-            received.add(input);
-            return analysis;
+        var version = new VersionAnalizador("alternative-engine", "alternative-rules");
+        AnalizadorLegal alternative = new AnalizadorLegal() {
+            public VersionAnalizador version() { return version; }
+            public ResultadoAuditoria analyze(EntradaAnalisis input) {
+                received.add(input);
+                return analysis;
+            }
         };
         var alternativeService = new AuditoriaService(
                 audits, alternative, historialService, mapper, quotaService);
@@ -193,6 +214,8 @@ class AuditoriaServicePersistenceTest {
             request.setUrlOpcional("https://" + name + ".example.invalid/legal");
             AuditoriaResponse response = alternativeService.crearAuditoria(request, owner, null);
             assertThat(response.getResultado()).isEqualTo(analysis);
+            assertThat(response.getVersionMotor()).isEqualTo(version.versionMotor());
+            assertThat(response.getVersionReglas()).isEqualTo(version.versionReglas());
             assertThat(response.getUsuarioId()).isEqualTo(owner.getId());
             assertThat(response.getUrlOpcional()).isEqualTo(request.getUrlOpcional());
         }
@@ -203,6 +226,8 @@ class AuditoriaServicePersistenceTest {
         var stored = audits.findAll();
         assertThat(stored).hasSize(2);
         for (Auditoria audit : stored) {
+            assertThat(audit.getVersionMotor()).isEqualTo(version.versionMotor());
+            assertThat(audit.getVersionReglas()).isEqualTo(version.versionReglas());
             assertThat(audit.getPuntuacionRiesgo()).isEqualTo(37);
             assertThat(audit.getTextoOriginal()).isEqualTo(content.texto());
             assertThat(mapper.readValue(audit.getResultadoJson(), ResultadoAuditoria.class)).isEqualTo(analysis);
@@ -210,6 +235,98 @@ class AuditoriaServicePersistenceTest {
         assertThat(history.findAll()).hasSize(2).allSatisfy(event ->
                 assertThat(event.getAccion()).isEqualTo("CREACION"));
         verifyNoInteractions(motor);
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = "https://example.invalid/reference-only")
+    void sourceRemainsManualAndTimestampCapturesAnalysisExecution(String url) {
+        Usuario owner = user("manual");
+        var version = new VersionAnalizador("execution-engine", "execution-rules");
+        var analysis = new ResultadoAuditoria();
+        analysis.setPuntuacionRiesgo(50);
+        LocalDateTime[] executionWindow = new LocalDateTime[2];
+        when(motor.version()).thenAnswer(invocation -> {
+            executionWindow[0] = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+            return version;
+        });
+        when(motor.analyze(any())).thenAnswer(invocation -> {
+            executionWindow[1] = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
+            return analysis;
+        });
+        var request = new AuditoriaRequest();
+        request.setTitulo("Manual");
+        request.setTextoOriginal("Texto introducido por el usuario");
+        request.setTipoDocumento("Aviso Legal");
+        request.setUrlOpcional(url);
+
+        var response = service.crearAuditoria(request, owner, null);
+        entityManager.flush();
+        entityManager.clear();
+
+        var stored = audits.findById(response.getId()).orElseThrow();
+        assertThat(stored.getFechaAnalisis()).isBetween(executionWindow[0], executionWindow[1]);
+        assertThat(stored.getVersionMotor()).isEqualTo(version.versionMotor());
+        assertThat(stored.getVersionReglas()).isEqualTo(version.versionReglas());
+        assertThat(stored.getTipoFuente()).isEqualTo(TipoFuente.MANUAL);
+        assertThat(response.getFechaAnalisis()).isEqualTo(stored.getFechaAnalisis());
+        assertThat(response.getTipoFuente()).isEqualTo(TipoFuente.MANUAL);
+    }
+
+    @Test
+    void historicalReadAndListingsReturnStoredProvenanceWithoutConsultingAnalyzer() throws Exception {
+        Usuario owner = user("historical");
+        var historical = audit(owner, "Histórica");
+        String originalJson = "{\"resumen\":\"Resultado original\",\"puntuacionRiesgo\":23}";
+        historical.setResultadoJson(originalJson);
+        entityManager.flush();
+        entityManager.clear();
+
+        var read = service.obtenerAuditoriaPorId(historical.getId(), owner.getId(), false, owner, null);
+        var personal = service.obtenerMisAuditorias(owner.getId(), 0, 10).content().get(0);
+        var administrative = service.obtenerTodasLasAuditorias(0, 10, "").content().get(0);
+        for (var response : List.of(read, personal, administrative)) {
+            assertThat(response.getVersionMotor()).isEqualTo(historical.getVersionMotor());
+            assertThat(response.getVersionReglas()).isEqualTo(historical.getVersionReglas());
+            assertThat(response.getFechaAnalisis()).isEqualTo(historical.getFechaAnalisis());
+            assertThat(response.getTipoFuente()).isEqualTo(historical.getTipoFuente());
+        }
+        assertThat(read.getResultado()).isEqualTo(mapper.readValue(originalJson, ResultadoAuditoria.class));
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(audits.findById(historical.getId()).orElseThrow().getResultadoJson()).isEqualTo(originalJson);
+        verifyNoInteractions(motor);
+    }
+
+    @Test
+    void persistedProvenanceCannotBeReplacedWhenAuditIsUpdated() {
+        var historical = audit(user("immutable"), "Original");
+        entityManager.flush();
+        entityManager.clear();
+        var stored = audits.findById(historical.getId()).orElseThrow();
+
+        assertThatThrownBy(() -> stored.registrarProcedencia("other-engine", "other-rules",
+                LocalDateTime.of(2030, 1, 1, 0, 0), TipoFuente.CRAWLER))
+                .isInstanceOf(IllegalStateException.class);
+        stored.setTitulo("Título actualizado");
+        entityManager.flush();
+        entityManager.clear();
+
+        var reloaded = audits.findById(historical.getId()).orElseThrow();
+        assertThat(reloaded.getTitulo()).isEqualTo("Título actualizado");
+        assertThat(reloaded.getVersionMotor()).isEqualTo(historical.getVersionMotor());
+        assertThat(reloaded.getVersionReglas()).isEqualTo(historical.getVersionReglas());
+        assertThat(reloaded.getFechaAnalisis()).isEqualTo(historical.getFechaAnalisis());
+        assertThat(reloaded.getTipoFuente()).isEqualTo(historical.getTipoFuente());
+    }
+
+    @Test
+    void persistenceRejectsNewAuditWithoutProvenance() {
+        var missing = new Auditoria();
+        missing.setUsuario(user("missing-provenance"));
+        missing.setTitulo("Sin metadatos");
+        assertThatThrownBy(() -> audits.saveAndFlush(missing))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
     }
 
     private Usuario user(String name) {
@@ -222,6 +339,8 @@ class AuditoriaServicePersistenceTest {
 
     private Auditoria audit(Usuario owner, String title) {
         Auditoria audit = new Auditoria();
+        audit.registrarProcedencia("historical-engine", "historical-rules",
+                LocalDateTime.of(2025, 1, 1, 12, 0), TipoFuente.MANUAL);
         audit.setUsuario(owner);
         audit.setTitulo(title);
         audit.setTextoOriginal("Texto de prueba");

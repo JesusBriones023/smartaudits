@@ -3,6 +3,7 @@ package com.smartaudits.service;
 import com.smartaudits.model.Auditoria;
 import com.smartaudits.model.Role;
 import com.smartaudits.model.Usuario;
+import com.smartaudits.model.TipoFuente;
 import com.smartaudits.repository.AuditoriaRepository;
 import com.smartaudits.repository.HistorialAuditoriaRepository;
 import com.smartaudits.repository.UsuarioRepository;
@@ -39,6 +40,8 @@ class HistorialServicePersistenceTest {
         Usuario owner = user("owner", Role.CLIENTE);
         Usuario actor = action.equals("CREACION") ? owner : user("admin", Role.ADMIN);
         Auditoria audit = new Auditoria();
+        audit.registrarProcedencia("history-test", "history-rules",
+                LocalDateTime.of(2025, 1, 1, 12, 0), TipoFuente.MANUAL);
         audit.setUsuario(owner);
         audit.setTitulo("Auditoría del propietario");
         audits.saveAndFlush(audit);

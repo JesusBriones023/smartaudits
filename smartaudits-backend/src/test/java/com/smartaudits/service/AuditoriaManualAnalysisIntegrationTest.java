@@ -2,6 +2,7 @@ package com.smartaudits.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartaudits.model.Usuario;
+import com.smartaudits.model.TipoFuente;
 import com.smartaudits.model.dto.AuditoriaRequest;
 import com.smartaudits.model.dto.ResultadoAuditoria;
 import com.smartaudits.repository.AuditoriaRepository;
@@ -60,6 +61,10 @@ class AuditoriaManualAnalysisIntegrationTest {
         assertThat(created.getPuntuacionRiesgo()).isEqualTo(expected.getPuntuacionRiesgo());
         var stored = audits.findById(created.getId()).orElseThrow();
         assertThat(stored.getUsuario().getId()).isEqualTo(owner.getId());
+        assertThat(stored.getVersionMotor()).isEqualTo(analizador.version().versionMotor());
+        assertThat(stored.getVersionReglas()).isEqualTo(analizador.version().versionReglas());
+        assertThat(stored.getTipoFuente()).isEqualTo(TipoFuente.MANUAL);
+        assertThat(stored.getFechaAnalisis()).isEqualTo(created.getFechaAnalisis());
         assertThat(stored.getTextoOriginal()).isEqualTo(request.getTextoOriginal());
         assertThat(stored.getTipoDocumento()).isEqualTo(request.getTipoDocumento());
         assertThat(stored.getUrlOpcional()).isEqualTo(request.getUrlOpcional());
@@ -69,6 +74,10 @@ class AuditoriaManualAnalysisIntegrationTest {
 
         var read = service.obtenerAuditoriaPorId(created.getId(), owner.getId(), false, owner, "192.0.2.11");
         assertThat(read.getResultado()).isEqualTo(expected);
+        assertThat(read.getVersionMotor()).isEqualTo(stored.getVersionMotor());
+        assertThat(read.getVersionReglas()).isEqualTo(stored.getVersionReglas());
+        assertThat(read.getFechaAnalisis()).isEqualTo(stored.getFechaAnalisis());
+        assertThat(read.getTipoFuente()).isEqualTo(stored.getTipoFuente());
         assertThat(history.findAll()).extracting(event -> event.getAccion())
                 .containsExactlyInAnyOrder("CREACION", "CONSULTA");
     }

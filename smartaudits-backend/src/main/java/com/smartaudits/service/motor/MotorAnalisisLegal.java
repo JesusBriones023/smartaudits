@@ -34,6 +34,13 @@ import java.util.stream.Collectors;
 @Service
 public class MotorAnalisisLegal implements AnalizadorLegal {
 
+    private static final VersionAnalizador VERSION = new VersionAnalizador("1", "1");
+
+    @Override
+    public VersionAnalizador version() {
+        return VERSION;
+    }
+
     // -----------------------------------------------------------------------
     // Clase interna: Regla de análisis
     // -----------------------------------------------------------------------
