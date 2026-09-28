@@ -9,7 +9,8 @@ import com.smartaudits.model.dto.ResultadoAuditoria;
 import com.smartaudits.repository.AuditoriaRepository;
 import com.smartaudits.repository.HistorialAuditoriaRepository;
 import com.smartaudits.repository.UsuarioRepository;
-import com.smartaudits.service.motor.MotorAnalisisLegal;
+import com.smartaudits.service.motor.AnalizadorLegal;
+import com.smartaudits.service.motor.EntradaAnalisis;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
@@ -19,6 +20,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,7 +44,9 @@ class AuditoriaServicePersistenceTest {
     @Autowired HistorialAuditoriaRepository history;
     @Autowired TestEntityManager entityManager;
     @Autowired ObjectMapper mapper;
-    @MockBean MotorAnalisisLegal motor;
+    @Autowired HistorialService historialService;
+    @Autowired AuditQuotaService quotaService;
+    @MockBean AnalizadorLegal motor;
 
     @Test
     void creationPersistsOwnerAnalysisAndHistoryAndReturnsCompleteResponse() throws Exception {
@@ -65,14 +69,15 @@ class AuditoriaServicePersistenceTest {
                 "Conservación", "Falta un plazo concreto", "MEDIA",
                 "Cláusula ausente", "Conservación excesiva", "Indicar un plazo");
         analysis.setErrores(List.of(error));
-        when(motor.analyze(request.getTextoOriginal(), request.getTipoDocumento())).thenReturn(analysis);
+        EntradaAnalisis input = new EntradaAnalisis(request.getTextoOriginal(), request.getTipoDocumento());
+        when(motor.analyze(input)).thenReturn(analysis);
 
         LocalDateTime before = LocalDateTime.now().minusSeconds(1);
         AuditoriaResponse response = service.crearAuditoria(request, owner, "192.0.2.10");
         entityManager.flush();
         entityManager.clear(); // Assert database state, not just the managed entity graph.
 
-        verify(motor).analyze(request.getTextoOriginal(), request.getTipoDocumento());
+        verify(motor).analyze(input);
         Auditoria stored = audits.findById(response.getId()).orElseThrow();
         assertThat(audits.count()).isEqualTo(1);
         assertThat(stored.getUsuario().getId()).isEqualTo(owner.getId());
@@ -162,6 +167,48 @@ class AuditoriaServicePersistenceTest {
         entityManager.clear();
         assertThat(history.count()).isZero();
         assertThat(audits.count()).isZero();
+        verifyNoInteractions(motor);
+    }
+
+    @Test
+    void alternativeAnalyzerReceivesOnlyContentRegardlessOfAuditMetadata() throws Exception {
+        var received = new ArrayList<EntradaAnalisis>();
+        ResultadoAuditoria analysis = new ResultadoAuditoria();
+        analysis.setResumen("Resultado del analizador alternativo");
+        analysis.setPuntuacionRiesgo(37);
+        AnalizadorLegal alternative = input -> {
+            received.add(input);
+            return analysis;
+        };
+        var alternativeService = new AuditoriaService(
+                audits, alternative, historialService, mapper, quotaService);
+        EntradaAnalisis content = new EntradaAnalisis("  Texto sin normalizar.\n", "Aviso Legal");
+
+        for (String name : List.of("first", "second")) {
+            Usuario owner = user(name);
+            AuditoriaRequest request = new AuditoriaRequest();
+            request.setTitulo("Auditoría " + name);
+            request.setTextoOriginal(content.texto());
+            request.setTipoDocumento(content.tipoDocumento());
+            request.setUrlOpcional("https://" + name + ".example.invalid/legal");
+            AuditoriaResponse response = alternativeService.crearAuditoria(request, owner, null);
+            assertThat(response.getResultado()).isEqualTo(analysis);
+            assertThat(response.getUsuarioId()).isEqualTo(owner.getId());
+            assertThat(response.getUrlOpcional()).isEqualTo(request.getUrlOpcional());
+        }
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(received).containsExactly(content, content);
+        var stored = audits.findAll();
+        assertThat(stored).hasSize(2);
+        for (Auditoria audit : stored) {
+            assertThat(audit.getPuntuacionRiesgo()).isEqualTo(37);
+            assertThat(audit.getTextoOriginal()).isEqualTo(content.texto());
+            assertThat(mapper.readValue(audit.getResultadoJson(), ResultadoAuditoria.class)).isEqualTo(analysis);
+        }
+        assertThat(history.findAll()).hasSize(2).allSatisfy(event ->
+                assertThat(event.getAccion()).isEqualTo("CREACION"));
         verifyNoInteractions(motor);
     }
 

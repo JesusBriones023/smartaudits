@@ -32,7 +32,7 @@ import java.util.stream.Collectors;
  * No utiliza APIs externas. Todo el análisis se realiza mediante reglas en Java.
  */
 @Service
-public class MotorAnalisisLegal {
+public class MotorAnalisisLegal implements AnalizadorLegal {
 
     // -----------------------------------------------------------------------
     // Clase interna: Regla de análisis
@@ -624,7 +624,9 @@ public class MotorAnalisisLegal {
     // Análisis legal principal
     // -----------------------------------------------------------------------
 
-    public ResultadoAuditoria analyze(String texto, String tipoDocumento) {
+    @Override
+    public ResultadoAuditoria analyze(EntradaAnalisis entrada) {
+        String texto = entrada.texto();
 
         if (texto == null || texto.isBlank()) {
             return generarResultadoTextoVacio();

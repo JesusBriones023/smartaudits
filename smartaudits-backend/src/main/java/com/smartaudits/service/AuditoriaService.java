@@ -9,7 +9,8 @@ import com.smartaudits.model.dto.AuditoriaRequest;
 import com.smartaudits.model.dto.AuditoriaResponse;
 import com.smartaudits.model.dto.ResultadoAuditoria;
 import com.smartaudits.repository.AuditoriaRepository;
-import com.smartaudits.service.motor.MotorAnalisisLegal;
+import com.smartaudits.service.motor.AnalizadorLegal;
+import com.smartaudits.service.motor.EntradaAnalisis;
 import com.smartaudits.model.dto.PaginaResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -27,7 +28,7 @@ import java.time.LocalDateTime;
 public class AuditoriaService {
 
     private final AuditoriaRepository auditoriaRepository;
-    private final MotorAnalisisLegal motorAnalisisLegal;
+    private final AnalizadorLegal analizadorLegal;
     private final HistorialService historialService;
     private final ObjectMapper objectMapper;
     private final AuditQuotaService auditQuotaService;
@@ -37,8 +38,8 @@ public class AuditoriaService {
 
         auditQuotaService.verificarPuedeCrear(usuario);
         // 1. Analizar texto con motor propio
-        ResultadoAuditoria resultadoDto = motorAnalisisLegal.analyze(
-                request.getTextoOriginal(), request.getTipoDocumento());
+        ResultadoAuditoria resultadoDto = analizadorLegal.analyze(new EntradaAnalisis(
+                request.getTextoOriginal(), request.getTipoDocumento()));
 
         // 2. Crear entidad Auditoria
         Auditoria auditoria = new Auditoria();

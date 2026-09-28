@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class MotorAnalisisLegalTest {
-    private final MotorAnalisisLegal motor = new MotorAnalisisLegal();
+    private final AnalizadorLegal motor = new MotorAnalisisLegal();
 
     // Basic structural examples only; the regression corpus belongs to Phase 1.2.
     private static final String COMPLETE_TEXT = """
@@ -35,7 +35,7 @@ class MotorAnalisisLegalTest {
 
     @Test
     void completeTextProducesCoherentStructuredResult() {
-        ResultadoAuditoria result = motor.analyze(COMPLETE_TEXT, "Documento Completo");
+        ResultadoAuditoria result = motor.analyze(new EntradaAnalisis(COMPLETE_TEXT, "Documento Completo"));
 
         assertStructure(result);
         assertThat(result.getErrores()).isEmpty();
@@ -47,7 +47,7 @@ class MotorAnalisisLegalTest {
 
     @Test
     void incompleteTextProducesActionableIncidentsAndBoundedScore() {
-        ResultadoAuditoria result = motor.analyze("Bienvenido a nuestra página.", "Documento Completo");
+        ResultadoAuditoria result = motor.analyze(new EntradaAnalisis("Bienvenido a nuestra página.", "Documento Completo"));
 
         assertStructure(result);
         assertThat(result.getErrores()).isNotEmpty().allSatisfy(error -> {

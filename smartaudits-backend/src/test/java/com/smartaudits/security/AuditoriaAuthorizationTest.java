@@ -10,7 +10,7 @@ import com.smartaudits.repository.UsuarioRepository;
 import com.smartaudits.service.AuditoriaService;
 import com.smartaudits.service.HistorialService;
 import com.smartaudits.service.UsuarioService;
-import com.smartaudits.service.motor.MotorAnalisisLegal;
+import com.smartaudits.service.motor.AnalizadorLegal;
 import com.smartaudits.service.AuditQuotaService;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Encoders;
@@ -53,7 +53,7 @@ class AuditoriaAuthorizationTest {
     @MockBean UsuarioService userService;
     @MockBean AuditoriaRepository audits;
     @MockBean HistorialService history;
-    @MockBean MotorAnalisisLegal motor;
+    @MockBean AnalizadorLegal motor;
     @MockBean AuditQuotaService auditQuotaService;
     Auditoria audit;
 

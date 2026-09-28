@@ -39,7 +39,8 @@ class MotorAnalisisLegalRegressionTest {
             assertThat(example.limitation()).isEmpty();
         }
 
-        ResultadoAuditoria result = new MotorAnalisisLegal().analyze(example.texto(), example.tipoDocumento());
+        AnalizadorLegal analizador = new MotorAnalisisLegal();
+        ResultadoAuditoria result = analizador.analyze(new EntradaAnalisis(example.texto(), example.tipoDocumento()));
         String context = example.id() + " knownLimitation=" + example.knownLimitation()
                 + " — " + example.notas();
 
