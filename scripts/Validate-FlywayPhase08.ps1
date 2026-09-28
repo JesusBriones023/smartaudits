@@ -1471,3 +1471,8 @@ if ($KeepContainers) {
 else {
     Write-Host 'PHASE 0.8 FLYWAY VALIDATION PASSED'
 }
+
+# Reached only after all validation/cleanup guards above have succeeded.
+# Cleanup's expected "not found" inspections leave a native LASTEXITCODE of 1;
+# do not let the GitHub Actions PowerShell epilogue treat it as our result.
+exit 0
