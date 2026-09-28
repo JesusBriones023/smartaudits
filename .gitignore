@@ -1,0 +1,41 @@
+# Frontend dependencies
+node_modules/
+
+# Frontend builds
+dist/
+build/
+
+# Java / Maven
+target/
+
+# Environment variables and secrets
+# Local runtime configuration; never force-add this file.
+.env
+.env.*
+!.env.example
+application-local.properties
+application-local.yml
+application-local.yaml
+secrets/
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Isolated E2E runtime and failure artifacts (temporary credentials only)
+smartaudits-frontend/.e2e-runtime/
+smartaudits-frontend/test-results/
+smartaudits-frontend/playwright-report/
+
+# Operating system
+.DS_Store
+Thumbs.db

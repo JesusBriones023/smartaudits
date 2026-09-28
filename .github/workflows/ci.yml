@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: smartaudits-backend/pom.xml
+      - run: mvn --batch-mode test
+        working-directory: smartaudits-backend
+
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: smartaudits-frontend
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: smartaudits-frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npm run lint
+      - run: npm run audit:dependencies
+
+  migrations:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: smartaudits-backend/pom.xml
+      - run: mvn --batch-mode -DskipTests package
+        working-directory: smartaudits-backend
+      - run: docker pull mariadb:11.2
+      - name: Validate empty and legacy schemas, sentinel and cleanup
+        shell: pwsh
+        run: ./scripts/Validate-CiMigrations.ps1
+
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6.0.1
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: smartaudits-backend/pom.xml
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: smartaudits-frontend/package-lock.json
+      # Warm all dependencies/plugins for the runner's subsequent offline build.
+      - run: mvn --batch-mode -DskipTests package
+        working-directory: smartaudits-backend
+      - run: docker pull mariadb:11.2
+      - run: npm ci
+        working-directory: smartaudits-frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: smartaudits-frontend
+      - run: npm run test:e2e
+        working-directory: smartaudits-frontend
+      # No trace/log uploads: they can contain temporary authentication tokens.
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@v5.0.0
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: never

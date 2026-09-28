@@ -1,0 +1,37 @@
+name: smartaudits-ia
+
+services:
+  mariadb:
+    image: mariadb:11.2
+    container_name: smartaudits_mariadb
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Define DB_ROOT_PASSWORD en el entorno o .env}
+      MYSQL_DATABASE: smartaudits_db
+      MYSQL_USER: ${DB_USERNAME:?Define DB_USERNAME en el entorno o .env}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en el entorno o .env}
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    networks:
+      - smartaudits_network
+
+  adminer:
+    image: adminer:4.8.1
+    container_name: smartaudits_adminer
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8081:8080"
+    networks:
+      - smartaudits_network
+    depends_on:
+      - mariadb
+
+volumes:
+  mariadb_data:
+    driver: local
+
+networks:
+  smartaudits_network:
+    driver: bridge

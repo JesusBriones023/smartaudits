@@ -1,0 +1,619 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "4002e44",
+  "purpose": "Caracterización reproducible del motor actual; no certificación jurídica. Las limitaciones se preservan explícitamente para su revisión en Motor 2.0.",
+  "rules": {
+    "R01": {
+      "titulo": "Identidad del responsable del tratamiento no especificada",
+      "severidad": "ALTA",
+      "peso": 8,
+      "campoFaltante": "Identidad y datos de contacto del responsable del tratamiento"
+    },
+    "R02": {
+      "titulo": "Datos de contacto del responsable ausentes o incompletos",
+      "severidad": "ALTA",
+      "peso": 6,
+      "campoFaltante": "Datos de contacto del responsable del tratamiento"
+    },
+    "R03": {
+      "titulo": "Información sobre el Delegado de Protección de Datos (DPO) ausente",
+      "severidad": "MEDIA",
+      "peso": 4,
+      "campoFaltante": "Datos de contacto del Delegado de Protección de Datos (si procede)"
+    },
+    "R04": {
+      "titulo": "Finalidad del tratamiento de datos no especificada",
+      "severidad": "ALTA",
+      "peso": 8,
+      "campoFaltante": "Finalidades específicas del tratamiento de datos"
+    },
+    "R05": {
+      "titulo": "Base legal del tratamiento no indicada",
+      "severidad": "ALTA",
+      "peso": 8,
+      "campoFaltante": "Base legal de cada finalidad de tratamiento"
+    },
+    "R06": {
+      "titulo": "Derechos del interesado (ARSULIPO) no informados",
+      "severidad": "ALTA",
+      "peso": 8,
+      "campoFaltante": "Derechos ARSULIPO del interesado y procedimiento para ejercerlos"
+    },
+    "R07": {
+      "titulo": "Plazo de conservación de datos no especificado",
+      "severidad": "MEDIA",
+      "peso": 5,
+      "campoFaltante": "Plazo de conservación de los datos o criterios para determinarlo"
+    },
+    "R08": {
+      "titulo": "Destinatarios o cesiones de datos no informadas",
+      "severidad": "MEDIA",
+      "peso": 5,
+      "campoFaltante": "Destinatarios o categorías de destinatarios de los datos"
+    },
+    "R09": {
+      "titulo": "Transferencias internacionales de datos no declaradas",
+      "severidad": "MEDIA",
+      "peso": 4,
+      "campoFaltante": "Transferencias internacionales de datos y garantías aplicables"
+    },
+    "R10": {
+      "titulo": "Política de cookies ausente o incompleta",
+      "severidad": "ALTA",
+      "peso": 7,
+      "campoFaltante": "Política de cookies completa con tipología, finalidades y botones de gestión equivalentes"
+    },
+    "R11": {
+      "titulo": "Derecho a reclamar ante la autoridad de control (AEPD) no informado",
+      "severidad": "MEDIA",
+      "peso": 4,
+      "campoFaltante": "Derecho a reclamar ante la Agencia Española de Protección de Datos (AEPD)"
+    },
+    "R12": {
+      "titulo": "Mecanismo de consentimiento no descrito adecuadamente",
+      "severidad": "ALTA",
+      "peso": 6,
+      "campoFaltante": "Mecanismo claro de obtención y retirada del consentimiento"
+    },
+    "R13": {
+      "titulo": "Tratamiento de datos de menores no regulado",
+      "severidad": "BAJA",
+      "peso": 3,
+      "campoFaltante": "Tratamiento de datos de menores de 14 años y consentimiento parental"
+    },
+    "R14": {
+      "titulo": "Tratamiento de categorías especiales de datos no regulado",
+      "severidad": "BAJA",
+      "peso": 3,
+      "campoFaltante": "Tratamiento de categorías especiales de datos y garantías adicionales"
+    },
+    "R15": {
+      "titulo": "Medidas de seguridad técnicas no mencionadas",
+      "severidad": "MEDIA",
+      "peso": 4,
+      "campoFaltante": "Descripción de medidas de seguridad técnicas y organizativas aplicadas"
+    },
+    "R16": {
+      "titulo": "Aviso legal con información LSSI-CE ausente o incompleto",
+      "severidad": "ALTA",
+      "peso": 7,
+      "campoFaltante": "Aviso legal con datos identificativos completos del prestador (LSSI-CE Art. 10)"
+    },
+    "R17": {
+      "titulo": "Información sobre decisiones automatizadas o perfilado ausente",
+      "severidad": "MEDIA",
+      "peso": 4,
+      "campoFaltante": "Información sobre decisiones automatizadas y/o perfilado (Art. 22 RGPD)"
+    },
+    "R18": {
+      "titulo": "Procedimiento ante brechas de seguridad no mencionado",
+      "severidad": "MEDIA",
+      "peso": 3,
+      "campoFaltante": "Procedimiento de notificación de brechas de seguridad (Arts. 33-34 RGPD)"
+    },
+    "R19": {
+      "titulo": "Información sobre comunicaciones comerciales y derecho de exclusión publicitaria ausente",
+      "severidad": "MEDIA",
+      "peso": 3,
+      "campoFaltante": "Información sobre comunicaciones comerciales y derecho de oposición/baja"
+    }
+  },
+  "globalRisks": {
+    "G01": {
+      "titulo": "Cláusula abusiva de cesión de datos",
+      "severidad": "ALTA",
+      "penalizacion": 2
+    },
+    "G02": {
+      "titulo": "Conservación de datos de forma indefinida",
+      "severidad": "ALTA",
+      "penalizacion": 2
+    },
+    "G03": {
+      "titulo": "Consentimiento tácito o por defecto",
+      "severidad": "ALTA",
+      "penalizacion": 2
+    },
+    "G04": {
+      "titulo": "Exclusión de responsabilidad en seguridad",
+      "severidad": "MEDIA",
+      "penalizacion": 2
+    },
+    "G05": {
+      "titulo": "Tecnologías de seguimiento invasivo sin información",
+      "severidad": "MEDIA",
+      "penalizacion": 2
+    }
+  },
+  "cases": [
+    {
+      "id": "M01",
+      "categoria": "VALIDO",
+      "descripcion": "Documento completo para las reglas actuales.",
+      "tipoDocumento": "Documento Completo",
+      "texto": "Aviso legal. Responsable del tratamiento: Ejemplo S.L., NIF de prueba,\ndomicilio social en Madrid e inscrita en el Registro Mercantil de Madrid.\nContacto: privacidad@example.invalid. Delegado de protección de datos:\ndpo@example.invalid.\nLa finalidad es la prestación del servicio y la gestión de clientes.\nLa base legal es la ejecución del contrato y el consentimiento del interesado.\nPuede ejercer su derecho de acceso, rectificación, supresión, limitación,\nportabilidad y oposición escribiendo al contacto indicado.\nEl plazo de conservación es de cinco años tras finalizar la relación contractual.\nLos destinatarios son proveedores de alojamiento sujetos a contrato.\nLas transferencias internacionales cuentan con cláusulas contractuales tipo.\nLa política de cookies informa de tipos, finalidades y duración; el panel permite\naceptar, rechazar o configurar cookies con igual facilidad.\nPuede presentar una reclamación ante la AEPD.\nEl consentimiento se obtiene mediante una casilla desmarcada y puede retirarse.\nLos menores de 14 años requieren autorización parental.\nLas categorías especiales de datos tienen garantías reforzadas.\nAplicamos medidas de seguridad: cifrado, control de acceso y copias de seguridad.\nLas decisiones automatizadas están sujetas a intervención humana.\nEl procedimiento ante una brecha de seguridad contempla notificación en 72 horas.\nLas comunicaciones comerciales requieren consentimiento y permiten darse de baja.",
+      "expectedScore": 100,
+      "expectedSummaryMarker": "BAJO RIESGO",
+      "expectedIncidents": [],
+      "expectedStructure": {
+        "riesgos": 0,
+        "recomendaciones": 3,
+        "textosSugeridos": 0,
+        "referenciasLegales": 6,
+        "faltantes": 0
+      },
+      "notas": "Todas las cláusulas del ejemplo son reconocidas. Score 100 caracteriza el motor, no certifica cumplimiento jurídico.",
+      "knownLimitation": false,
+      "limitation": ""
+    },
+    {
+      "id": "M02",
+      "categoria": "INCOMPLETO",
+      "descripcion": "Documento genérico sin cláusulas reconocibles.",
+      "tipoDocumento": "Documento Completo",
+      "texto": "Bienvenido a nuestra página.",
+      "expectedScore": 0,
+      "expectedSummaryMarker": "RIESGO MUY ALTO",
+      "expectedIncidents": [
+        "R01:MISSING",
+        "R02:MISSING",
+        "R03:MISSING",
+        "R04:MISSING",
+        "R05:MISSING",
+        "R06:MISSING",
+        "R07:MISSING",
+        "R08:MISSING",
+        "R09:MISSING",
+        "R10:MISSING",
+        "R11:MISSING",
+        "R12:MISSING",
+        "R13:MISSING",
+        "R14:MISSING",
+        "R15:MISSING",
+        "R16:MISSING",
+        "R17:MISSING",
+        "R18:MISSING",
+        "R19:MISSING"
+      ],
+      "expectedStructure": {
+        "riesgos": 19,
+        "recomendaciones": 22,
+        "textosSugeridos": 19,
+        "referenciasLegales": 25,
+        "faltantes": 19
+      },
+      "notas": "Se registran las 19 carencias, sus severidades y la estructura de recomendaciones.",
+      "knownLimitation": false,
+      "limitation": ""
+    },
+    {
+      "id": "M03",
+      "categoria": "AMBIGUO",
+      "descripcion": "Una subcadena de barco activa la regla de derechos.",
+      "tipoDocumento": "Documento Completo",
+      "texto": "El barco sale mañana.",
+      "expectedScore": 8,
+      "expectedSummaryMarker": "RIESGO MUY ALTO",
+      "expectedIncidents": [
+        "R01:MISSING",
+        "R02:MISSING",
+        "R03:MISSING",
+        "R04:MISSING",
+        "R05:MISSING",
+        "R07:MISSING",
+        "R08:MISSING",
+        "R09:MISSING",
+        "R10:MISSING",
+        "R11:MISSING",
+        "R12:MISSING",
+        "R13:MISSING",
+        "R14:MISSING",
+        "R15:MISSING",
+        "R16:MISSING",
+        "R17:MISSING",
+        "R18:MISSING",
+        "R19:MISSING"
+      ],
+      "expectedStructure": {
+        "riesgos": 18,
+        "recomendaciones": 21,
+        "textosSugeridos": 18,
+        "referenciasLegales": 24,
+        "faltantes": 18
+      },
+      "notas": "R06 no genera incidencia y suma 8 por la subcadena arco.",
+      "knownLimitation": true,
+      "limitation": "Falso negativo por coincidencia dentro de una palabra: barco no informa derechos. Motor 2.0 debe revisar límites de palabra y contexto."
+    },
+    {
+      "id": "M04",
+      "categoria": "NEGACION",
+      "descripcion": "La negación no evita detectar conservación indefinida.",
+      "tipoDocumento": "Documento Completo",
+      "texto": "Plazo de conservación: cinco años. No conservamos los datos indefinidamente.",
+      "expectedScore": 0,
+      "expectedSummaryMarker": "RIESGO MUY ALTO",
+      "expectedIncidents": [
+        "R01:MISSING",
+        "R02:MISSING",
+        "R03:MISSING",
+        "R04:MISSING",
+        "R05:MISSING",
+        "R06:MISSING",
+        "R08:MISSING",
+        "R09:MISSING",
+        "R10:MISSING",
+        "R11:MISSING",
+        "R12:MISSING",
+        "R13:MISSING",
+        "R14:MISSING",
+        "R15:MISSING",
+        "R16:MISSING",
+        "R17:MISSING",
+        "R18:MISSING",
+        "R19:MISSING",
+        "R07:RISK",
+        "G02"
+      ],
+      "expectedStructure": {
+        "riesgos": 20,
+        "recomendaciones": 21,
+        "textosSugeridos": 18,
+        "referenciasLegales": 24,
+        "faltantes": 18
+      },
+      "notas": "R07 aporta 5/2=2 puntos enteros; G02 resta 2. Se fijan ambas incidencias aunque el score final sea 0.",
+      "knownLimitation": true,
+      "limitation": "Falso positivo: el motor trata indefinidamente como riesgo incluso negado y pese al plazo explícito. Revisar interpretación de negaciones."
+    },
+    {
+      "id": "M05",
+      "categoria": "FALSO_NEGATIVO",
+      "descripcion": "Mencionar cookies oculta una política insuficiente.",
+      "tipoDocumento": "Documento Completo",
+      "texto": "Este sitio utiliza cookies.",
+      "expectedScore": 7,
+      "expectedSummaryMarker": "RIESGO MUY ALTO",
+      "expectedIncidents": [
+        "R01:MISSING",
+        "R02:MISSING",
+        "R03:MISSING",
+        "R04:MISSING",
+        "R05:MISSING",
+        "R06:MISSING",
+        "R07:MISSING",
+        "R08:MISSING",
+        "R09:MISSING",
+        "R11:MISSING",
+        "R12:MISSING",
+        "R13:MISSING",
+        "R14:MISSING",
+        "R15:MISSING",
+        "R16:MISSING",
+        "R17:MISSING",
+        "R18:MISSING",
+        "R19:MISSING"
+      ],
+      "expectedStructure": {
+        "riesgos": 18,
+        "recomendaciones": 21,
+        "textosSugeridos": 18,
+        "referenciasLegales": 24,
+        "faltantes": 18
+      },
+      "notas": "La mera palabra cookies satisface R10; no existe incidencia R10.",
+      "knownLimitation": true,
+      "limitation": "Falso negativo: faltan tipos, duración y opciones de gestión, pero R10 suma 7. Motor 2.0 debe evaluar contenido y suficiencia."
+    },
+    {
+      "id": "M06",
+      "categoria": "FALSO_NEGATIVO",
+      "descripcion": "Un enlace HTTPS se interpreta como información de seguridad.",
+      "tipoDocumento": "Documento Completo",
+      "texto": "El enlace del catálogo es https://example.invalid.",
+      "expectedScore": 4,
+      "expectedSummaryMarker": "RIESGO MUY ALTO",
+      "expectedIncidents": [
+        "R01:MISSING",
+        "R02:MISSING",
+        "R03:MISSING",
+        "R04:MISSING",
+        "R05:MISSING",
+        "R06:MISSING",
+        "R07:MISSING",
+        "R08:MISSING",
+        "R09:MISSING",
+        "R10:MISSING",
+        "R11:MISSING",
+        "R12:MISSING",
+        "R13:MISSING",
+        "R14:MISSING",
+        "R16:MISSING",
+        "R17:MISSING",
+        "R18:MISSING",
+        "R19:MISSING"
+      ],
+      "expectedStructure": {
+        "riesgos": 18,
+        "recomendaciones": 21,
+        "textosSugeridos": 18,
+        "referenciasLegales": 24,
+        "faltantes": 18
+      },
+      "notas": "La subcadena https satisface R15 y suma 4.",
+      "knownLimitation": true,
+      "limitation": "Falso negativo: el enlace no describe las medidas de protección de los datos. Revisar el contexto de las evidencias de seguridad."
+    },
+    {
+      "id": "M07",
+      "categoria": "RIESGO_EXPLICITO",
+      "descripcion": "Consentimiento tácito con penalización local y global.",
+      "tipoDocumento": "Documento Completo",
+      "texto": "Continuar navegando implica consentimiento.",
+      "expectedScore": 1,
+      "expectedSummaryMarker": "RIESGO MUY ALTO",
+      "expectedIncidents": [
+        "R01:MISSING",
+        "R02:MISSING",
+        "R03:MISSING",
+        "R04:MISSING",
+        "R05:MISSING",
+        "R06:MISSING",
+        "R07:MISSING",
+        "R08:MISSING",
+        "R09:MISSING",
+        "R10:MISSING",
+        "R11:MISSING",
+        "R13:MISSING",
+        "R14:MISSING",
+        "R15:MISSING",
+        "R16:MISSING",
+        "R17:MISSING",
+        "R18:MISSING",
+        "R19:MISSING",
+        "R12:RISK",
+        "G03"
+      ],
+      "expectedStructure": {
+        "riesgos": 20,
+        "recomendaciones": 21,
+        "textosSugeridos": 18,
+        "referenciasLegales": 24,
+        "faltantes": 18
+      },
+      "notas": "R12 aporta 6/2=3 puntos; G03 resta 2. Ambas incidencias son ALTA y el score queda en 1.",
+      "knownLimitation": false,
+      "limitation": ""
+    },
+    {
+      "id": "M08",
+      "categoria": "SIN_DERECHOS",
+      "descripcion": "Documento completo salvo la sección de derechos.",
+      "tipoDocumento": "Documento Completo",
+      "texto": "Aviso legal. Responsable del tratamiento: Ejemplo S.L., NIF de prueba,\ndomicilio social en Madrid e inscrita en el Registro Mercantil de Madrid.\nContacto: privacidad@example.invalid. Delegado de protección de datos:\ndpo@example.invalid.\nLa finalidad es la prestación del servicio y la gestión de clientes.\nLa base legal es la ejecución del contrato y el consentimiento del interesado.\nEl plazo de conservación es de cinco años tras finalizar la relación contractual.\nLos destinatarios son proveedores de alojamiento sujetos a contrato.\nLas transferencias internacionales cuentan con cláusulas contractuales tipo.\nLa política de cookies informa de tipos, finalidades y duración; el panel permite\naceptar, rechazar o configurar cookies con igual facilidad.\nPuede presentar una reclamación ante la AEPD.\nEl consentimiento se obtiene mediante una casilla desmarcada y puede retirarse.\nLos menores de 14 años requieren autorización parental.\nLas categorías especiales de datos tienen garantías reforzadas.\nAplicamos medidas de seguridad: cifrado, control de acceso y copias de seguridad.\nLas decisiones automatizadas están sujetas a intervención humana.\nEl procedimiento ante una brecha de seguridad contempla notificación en 72 horas.\nLas comunicaciones comerciales requieren consentimiento y permiten darse de baja.",
+      "expectedScore": 92,
+      "expectedSummaryMarker": "BAJO RIESGO",
+      "expectedIncidents": [
+        "R06:MISSING"
+      ],
+      "expectedStructure": {
+        "riesgos": 1,
+        "recomendaciones": 4,
+        "textosSugeridos": 1,
+        "referenciasLegales": 7,
+        "faltantes": 1
+      },
+      "notas": "Falta únicamente R06: se descuentan sus 8 puntos y se conserva la incidencia ALTA.",
+      "knownLimitation": false,
+      "limitation": ""
+    },
+    {
+      "id": "M09",
+      "categoria": "INCOMPLETO",
+      "descripcion": "Solo identidad, contacto y finalidad están presentes.",
+      "tipoDocumento": "Documento Completo",
+      "texto": "Responsable del tratamiento: Ejemplo. Contacto: persona@example.invalid. Finalidad: gestionar pedidos.",
+      "expectedScore": 22,
+      "expectedSummaryMarker": "RIESGO MUY ALTO",
+      "expectedIncidents": [
+        "R03:MISSING",
+        "R05:MISSING",
+        "R06:MISSING",
+        "R07:MISSING",
+        "R08:MISSING",
+        "R09:MISSING",
+        "R10:MISSING",
+        "R11:MISSING",
+        "R12:MISSING",
+        "R13:MISSING",
+        "R14:MISSING",
+        "R15:MISSING",
+        "R16:MISSING",
+        "R17:MISSING",
+        "R18:MISSING",
+        "R19:MISSING"
+      ],
+      "expectedStructure": {
+        "riesgos": 16,
+        "recomendaciones": 19,
+        "textosSugeridos": 16,
+        "referenciasLegales": 22,
+        "faltantes": 16
+      },
+      "notas": "Suma 8+6+8=22; se fijan las otras 16 carencias simultáneas.",
+      "knownLimitation": false,
+      "limitation": ""
+    },
+    {
+      "id": "M10",
+      "categoria": "VACIO",
+      "descripcion": "Entrada vacía admitida directamente por el motor.",
+      "tipoDocumento": "Documento Completo",
+      "texto": "",
+      "expectedScore": 0,
+      "expectedSummaryMarker": "el texto proporcionado está vacío",
+      "expectedIncidents": [],
+      "expectedStructure": {
+        "riesgos": 1,
+        "recomendaciones": 1,
+        "textosSugeridos": 0,
+        "referenciasLegales": 0,
+        "faltantes": 0
+      },
+      "notas": "El método analyze admite texto vacío aunque la API de creación lo rechace. Devuelve el resultado especial sin ejecutar reglas.",
+      "knownLimitation": false,
+      "limitation": ""
+    },
+    {
+      "id": "M11",
+      "categoria": "FALSO_POSITIVO",
+      "descripcion": "Información de contacto expresada sin palabras del catálogo.",
+      "tipoDocumento": "Documento Completo",
+      "texto": "Escríbanos a soporte@example.invalid para hablar con nuestro equipo.",
+      "expectedScore": 0,
+      "expectedSummaryMarker": "RIESGO MUY ALTO",
+      "expectedIncidents": [
+        "R01:MISSING",
+        "R02:MISSING",
+        "R03:MISSING",
+        "R04:MISSING",
+        "R05:MISSING",
+        "R06:MISSING",
+        "R07:MISSING",
+        "R08:MISSING",
+        "R09:MISSING",
+        "R10:MISSING",
+        "R11:MISSING",
+        "R12:MISSING",
+        "R13:MISSING",
+        "R14:MISSING",
+        "R15:MISSING",
+        "R16:MISSING",
+        "R17:MISSING",
+        "R18:MISSING",
+        "R19:MISSING"
+      ],
+      "expectedStructure": {
+        "riesgos": 19,
+        "recomendaciones": 22,
+        "textosSugeridos": 19,
+        "referenciasLegales": 25,
+        "faltantes": 19
+      },
+      "notas": "El motor emite R02:MISSING aunque el texto proporciona una dirección de contacto.",
+      "knownLimitation": true,
+      "limitation": "Falso positivo por vocabulario limitado: Escríbanos y la dirección no activan R02. Revisar reconocimiento de medios de contacto; no afirmar ausencia real."
+    },
+    {
+      "id": "M12",
+      "categoria": "FALSO_NEGATIVO",
+      "descripcion": "Una denegación explícita de derechos se reconoce como cumplimiento.",
+      "tipoDocumento": "Documento Completo",
+      "texto": "No puede ejercer sus derechos.",
+      "expectedScore": 8,
+      "expectedSummaryMarker": "RIESGO MUY ALTO",
+      "expectedIncidents": [
+        "R01:MISSING",
+        "R02:MISSING",
+        "R03:MISSING",
+        "R04:MISSING",
+        "R05:MISSING",
+        "R07:MISSING",
+        "R08:MISSING",
+        "R09:MISSING",
+        "R10:MISSING",
+        "R11:MISSING",
+        "R12:MISSING",
+        "R13:MISSING",
+        "R14:MISSING",
+        "R15:MISSING",
+        "R16:MISSING",
+        "R17:MISSING",
+        "R18:MISSING",
+        "R19:MISSING"
+      ],
+      "expectedStructure": {
+        "riesgos": 18,
+        "recomendaciones": 21,
+        "textosSugeridos": 18,
+        "referenciasLegales": 24,
+        "faltantes": 18
+      },
+      "notas": "R06 suma 8 y no aparece en las incidencias pese a la denegación.",
+      "knownLimitation": true,
+      "limitation": "Falso negativo por negación: reconocer palabras de derechos no implica que se concedan. Motor 2.0 debe distinguir reconocimiento y denegación."
+    },
+    {
+      "id": "M13",
+      "categoria": "PENALIZACIONES",
+      "descripcion": "Los cinco grupos globales se acumulan con cuatro riesgos locales.",
+      "tipoDocumento": "Documento Completo",
+      "texto": "Aviso legal. Responsable del tratamiento: Ejemplo S.L., NIF de prueba,\ndomicilio social en Madrid e inscrita en el Registro Mercantil de Madrid.\nContacto: privacidad@example.invalid. Delegado de protección de datos:\ndpo@example.invalid.\nLa finalidad es la prestación del servicio y la gestión de clientes.\nLa base legal es la ejecución del contrato y el consentimiento del interesado.\nPuede ejercer su derecho de acceso, rectificación, supresión, limitación,\nportabilidad y oposición escribiendo al contacto indicado.\nEl plazo de conservación es de cinco años tras finalizar la relación contractual.\nLos destinatarios son proveedores de alojamiento sujetos a contrato.\nLas transferencias internacionales cuentan con cláusulas contractuales tipo.\nLa política de cookies informa de tipos, finalidades y duración; el panel permite\naceptar, rechazar o configurar cookies con igual facilidad.\nPuede presentar una reclamación ante la AEPD.\nEl consentimiento se obtiene mediante una casilla desmarcada y puede retirarse.\nLos menores de 14 años requieren autorización parental.\nLas categorías especiales de datos tienen garantías reforzadas.\nAplicamos medidas de seguridad: cifrado, control de acceso y copias de seguridad.\nLas decisiones automatizadas están sujetas a intervención humana.\nEl procedimiento ante una brecha de seguridad contempla notificación en 72 horas.\nLas comunicaciones comerciales requieren consentimiento y permiten darse de baja.\nVendemos sus datos. Conservaremos sus datos indefinidamente. Continuar navegando implica consentimiento. No podemos garantizar la seguridad. Usamos fingerprinting.",
+      "expectedScore": 79,
+      "expectedSummaryMarker": "RIESGO MODERADO",
+      "expectedIncidents": [
+        "R07:RISK",
+        "R08:RISK",
+        "R12:RISK",
+        "R15:RISK",
+        "G01",
+        "G02",
+        "G03",
+        "G04",
+        "G05"
+      ],
+      "expectedStructure": {
+        "riesgos": 9,
+        "recomendaciones": 3,
+        "textosSugeridos": 0,
+        "referenciasLegales": 6,
+        "faltantes": 0
+      },
+      "notas": "100 menos 3+3+3+2 por medias enteras locales y menos 10 por cinco grupos globales = 79. No fija el orden de emisión.",
+      "knownLimitation": false,
+      "limitation": ""
+    },
+    {
+      "id": "M14",
+      "categoria": "REPETICION",
+      "descripcion": "Varias coincidencias del mismo grupo global solo penalizan una vez.",
+      "tipoDocumento": "Documento Completo",
+      "texto": "Aviso legal. Responsable del tratamiento: Ejemplo S.L., NIF de prueba,\ndomicilio social en Madrid e inscrita en el Registro Mercantil de Madrid.\nContacto: privacidad@example.invalid. Delegado de protección de datos:\ndpo@example.invalid.\nLa finalidad es la prestación del servicio y la gestión de clientes.\nLa base legal es la ejecución del contrato y el consentimiento del interesado.\nPuede ejercer su derecho de acceso, rectificación, supresión, limitación,\nportabilidad y oposición escribiendo al contacto indicado.\nEl plazo de conservación es de cinco años tras finalizar la relación contractual.\nLos destinatarios son proveedores de alojamiento sujetos a contrato.\nLas transferencias internacionales cuentan con cláusulas contractuales tipo.\nLa política de cookies informa de tipos, finalidades y duración; el panel permite\naceptar, rechazar o configurar cookies con igual facilidad.\nPuede presentar una reclamación ante la AEPD.\nEl consentimiento se obtiene mediante una casilla desmarcada y puede retirarse.\nLos menores de 14 años requieren autorización parental.\nLas categorías especiales de datos tienen garantías reforzadas.\nAplicamos medidas de seguridad: cifrado, control de acceso y copias de seguridad.\nLas decisiones automatizadas están sujetas a intervención humana.\nEl procedimiento ante una brecha de seguridad contempla notificación en 72 horas.\nLas comunicaciones comerciales requieren consentimiento y permiten darse de baja.\nUsamos fingerprinting y web beacon; fingerprinting.",
+      "expectedScore": 98,
+      "expectedSummaryMarker": "BAJO RIESGO",
+      "expectedIncidents": [
+        "G05"
+      ],
+      "expectedStructure": {
+        "riesgos": 1,
+        "recomendaciones": 3,
+        "textosSugeridos": 0,
+        "referenciasLegales": 6,
+        "faltantes": 0
+      },
+      "notas": "Dos patrones y una repetición de G05 producen una sola incidencia MEDIA y una única penalización de 2.",
+      "knownLimitation": false,
+      "limitation": ""
+    }
+  ]
+}

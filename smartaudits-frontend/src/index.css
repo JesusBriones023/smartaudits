@@ -1,0 +1,112 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 font-sans antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply tracking-tight;
+  }
+
+  /* Scroll bar más fina y discreta */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-slate-100;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-400;
+  }
+}
+
+@layer components {
+
+  /* ---------- BOTONES ---------- */
+
+  .btn-primary {
+    @apply bg-primary-600 text-white px-5 py-2.5 rounded-xl
+           hover:bg-primary-700 active:bg-primary-800
+           transition-all font-semibold text-sm
+           shadow-soft hover:shadow-medium
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none;
+  }
+
+  .btn-secondary {
+    @apply bg-white text-slate-700 px-5 py-2.5 rounded-xl
+           border border-slate-200
+           hover:bg-slate-50 hover:border-slate-300
+           transition-all font-semibold text-sm
+           shadow-soft;
+  }
+
+  .btn-danger {
+    @apply bg-red-600 text-white px-5 py-2.5 rounded-xl
+           hover:bg-red-700 active:bg-red-800
+           transition-all font-semibold text-sm
+           shadow-soft hover:shadow-medium;
+  }
+
+  .btn-dark {
+    @apply bg-slate-900 text-white px-5 py-2.5 rounded-xl
+           hover:bg-slate-800 active:bg-slate-950
+           transition-all font-semibold text-sm
+           shadow-soft hover:shadow-medium;
+  }
+
+  /* ---------- INPUTS ---------- */
+
+  .input-field {
+    @apply w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl
+           text-slate-900 placeholder:text-slate-400
+           focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500
+           outline-none transition-all;
+  }
+
+  /* ---------- CARDS ---------- */
+
+  .card {
+    @apply bg-white rounded-2xl shadow-soft border border-slate-200/60 p-6
+           transition-shadow;
+  }
+
+  .card-hover {
+    @apply hover:shadow-medium hover:border-slate-300/80 transition-all duration-200;
+  }
+
+  /* ---------- BADGES SEVERIDAD INCIDENCIAS ---------- */
+
+  .badge-alta {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold
+           bg-red-50 text-red-700 border border-red-200;
+  }
+
+  .badge-media {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold
+           bg-accent-50 text-accent-700 border border-accent-200;
+  }
+
+  .badge-baja {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold
+           bg-primary-50 text-primary-700 border border-primary-200;
+  }
+
+  /* ---------- HEADERS DECORATIVOS ---------- */
+
+  .gradient-header {
+    @apply bg-gradient-to-br from-slate-900 via-slate-800 to-primary-900 text-white;
+  }
+
+  .gradient-primary {
+    @apply bg-gradient-to-br from-primary-600 to-primary-800 text-white;
+  }
+}
