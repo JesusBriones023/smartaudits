@@ -182,7 +182,7 @@ try {
   habitualBefore = habitualState()
   envBefore = await envMetadata()
   docker(['image', 'inspect', '--format', '{{.Id}}', 'mariadb:11.2'])
-  console.log(`E2E run ${runId}: isolated MariaDB 11.2, Flyway V1 + V2, Chromium.`)
+  console.log(`E2E run ${runId}: isolated MariaDB 11.2, Flyway V1 + V2 + V3, Chromium.`)
 
   // Always build current sources; offline Maven avoids runtime Internet dependency.
   const build = process.platform === 'win32'
@@ -219,14 +219,14 @@ try {
     SMARTAUDITS_ADMIN_NOMBRE: 'Administrador E2E',
   })
   await waitUntil('backend startup', () => backend.log.includes('Started SmartAuditsApplication'), 120_000, backend)
-  if (sql('SELECT version, type, script, success FROM flyway_schema_history ORDER BY installed_rank') !== '1\tSQL\tV1__initial_schema.sql\t1\n2\tSQL\tV2__audit_analysis_provenance.sql\t1') {
-    throw new Error('Expected exactly V1 + V2 migrations and no baseline.')
+  if (sql('SELECT version, type, script, success FROM flyway_schema_history ORDER BY installed_rank') !== '1\tSQL\tV1__initial_schema.sql\t1\n2\tSQL\tV2__audit_analysis_provenance.sql\t1\n3\tSQL\tV3__incident_rule_provenance.sql\t1') {
+    throw new Error('Expected exactly V1 + V2 + V3 migrations and no baseline.')
   }
   // Spring's Started log precedes CommandLineRunner; wait for its transaction
   // to commit before allowing registration or login in the browser.
   await waitUntil('temporary ADMIN bootstrap', () =>
     sql("SELECT COUNT(*) FROM usuarios WHERE role = 'ADMIN' AND protegido = b'1'") === '1', 30_000, backend)
-  console.log('EMPTY DATABASE + FLYWAY V1 + V2 OK (no baseline)')
+  console.log('EMPTY DATABASE + FLYWAY V1 + V2 + V3 OK (no baseline)')
   const web = start('frontend', process.execPath, [join(frontend, 'e2e/server.mjs')], frontend, {
     E2E_BACKEND_URL: `http://127.0.0.1:${backendPort}`, E2E_FRONTEND_PORT: String(frontendPort),
   })

@@ -34,7 +34,8 @@ import java.util.stream.Collectors;
 @Service
 public class MotorAnalisisLegal implements AnalizadorLegal {
 
-    private static final VersionAnalizador VERSION = new VersionAnalizador("1", "1");
+    private static final String MOTOR = "LEGAL_TEXT";
+    private static final VersionAnalizador VERSION = new VersionAnalizador("2", "1");
 
     @Override
     public VersionAnalizador version() {
@@ -589,42 +590,35 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
     // Cada patrón detectado resta 2 puntos del total (máx -10 adicionales).
     // -----------------------------------------------------------------------
 
-    private static final List<String[]> PATRONES_RIESGO_GLOBALES = Arrays.asList(
-        new String[]{
+    private record PatronRiesgo(String id, String titulo, String descripcion, String severidad,
+                                List<String> patrones) {}
+
+    private static final List<PatronRiesgo> PATRONES_RIESGO_GLOBALES = List.of(
+        new PatronRiesgo("G01",
             "Cláusula abusiva de cesión de datos",
             "Se detecta lenguaje que indica cesión o venta de datos sin base legal adecuada.",
             "ALTA",
-            "cederemos sus datos", "venderemos sus datos", "vendemos sus datos",
-            "transferimos sus datos a socios publicitarios sin restriccion"
-        },
-        new String[]{
+            List.of("cederemos sus datos", "venderemos sus datos", "vendemos sus datos", "transferimos sus datos a socios publicitarios sin restriccion")),
+        new PatronRiesgo("G02",
             "Conservación de datos de forma indefinida",
             "Se detecta referencia a conservación de datos sin límite temporal, contraria al principio de minimización (Art. 5.1.e RGPD).",
             "ALTA",
-            "indefinidamente", "sin limite de tiempo", "de forma indefinida",
-            "almacenamos sus datos permanentemente"
-        },
-        new String[]{
+            List.of("indefinidamente", "sin limite de tiempo", "de forma indefinida", "almacenamos sus datos permanentemente")),
+        new PatronRiesgo("G03",
             "Consentimiento tácito o por defecto",
             "Se detectan prácticas de consentimiento que no cumplen con los requisitos del Art. 7 RGPD (libre, específico, informado e inequívoco).",
             "ALTA",
-            "continuar navegando implica", "al usar este sitio acepta",
-            "se entiende prestado el consentimiento", "el silencio implica aceptacion"
-        },
-        new String[]{
+            List.of("continuar navegando implica", "al usar este sitio acepta", "se entiende prestado el consentimiento", "el silencio implica aceptacion")),
+        new PatronRiesgo("G04",
             "Exclusión de responsabilidad en seguridad",
             "El documento declina responsabilidad sobre la seguridad, contradiciendo el Art. 32 RGPD.",
             "MEDIA",
-            "no podemos garantizar la seguridad", "no somos responsables de brechas",
-            "transmision no es segura", "no garantizamos la confidencialidad"
-        },
-        new String[]{
+            List.of("no podemos garantizar la seguridad", "no somos responsables de brechas", "transmision no es segura", "no garantizamos la confidencialidad")),
+        new PatronRiesgo("G05",
             "Tecnologías de seguimiento invasivo sin información",
             "Se detectan tecnologías de seguimiento (tracking, fingerprinting, beacons) que requieren información y consentimiento explícito.",
             "MEDIA",
-            "fingerprinting", "web beacon", "pixel de seguimiento",
-            "pixel de rastreo", "supercookie", "local shared object"
-        }
+            List.of("fingerprinting", "web beacon", "pixel de seguimiento", "pixel de rastreo", "supercookie", "local shared object"))
     );
 
     // -----------------------------------------------------------------------
@@ -667,7 +661,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
 
             if (!cumple) {
                 // No cumple → no suma puntos, genera incidencia
-                ErrorAuditoria error = new ErrorAuditoria();
+                ErrorAuditoria error = nuevoError(regla.id);
                 error.setTitulo(regla.titulo);
                 error.setDescripcion(regla.descripcion);
                 error.setSeveridad(regla.severidad);
@@ -697,7 +691,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
                 for (String patron : regla.patronesRiesgo) {
                     if (textoNorm.contains(normalizar(patron))) {
                         tieneRiesgo = true;
-                        ErrorAuditoria error = new ErrorAuditoria();
+                        ErrorAuditoria error = nuevoError(regla.id);
                         error.setTitulo("Cláusula presente pero con redacción problemática: " + regla.titulo);
                         error.setDescripcion("La cláusula existe pero contiene lenguaje que puede ser ilegal o abusivo: \"" + patron + "\"");
                         error.setSeveridad("ALTA");
@@ -716,18 +710,18 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
         }
 
         // ---- Evaluar patrones de riesgo globales (restan hasta 2 pts cada uno) ----
-        for (String[] patron : PATRONES_RIESGO_GLOBALES) {
-            String nombreRiesgo = patron[0];
-            String descripRiesgo = patron[1];
-            String severidadRiesgo = patron[2];
+        for (PatronRiesgo patron : PATRONES_RIESGO_GLOBALES) {
+            String nombreRiesgo = patron.titulo();
+            String descripRiesgo = patron.descripcion();
+            String severidadRiesgo = patron.severidad();
 
-            for (int i = 3; i < patron.length; i++) {
-                if (textoNorm.contains(normalizar(patron[i]))) {
-                    ErrorAuditoria error = new ErrorAuditoria();
+            for (String expresion : patron.patrones()) {
+                if (textoNorm.contains(normalizar(expresion))) {
+                    ErrorAuditoria error = nuevoError(patron.id());
                     error.setTitulo(nombreRiesgo);
                     error.setDescripcion(descripRiesgo);
                     error.setSeveridad(severidadRiesgo);
-                    error.setEvidencia("Patrón detectado: \"" + patron[i] + "\"");
+                    error.setEvidencia("Patrón detectado: \"" + expresion + "\"");
                     error.setImpacto("Posible incumplimiento de la normativa de protección de datos.");
                     error.setAccion("Revisar y reformular el texto que contiene este patrón.");
                     errores.add(error);
@@ -767,6 +761,14 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
     // -----------------------------------------------------------------------
     // Métodos auxiliares
     // -----------------------------------------------------------------------
+
+    private ErrorAuditoria nuevoError(String ruleId) {
+        ErrorAuditoria error = new ErrorAuditoria();
+        error.setRuleId(ruleId);
+        error.setMotor(MOTOR);
+        error.setVersion(version().versionReglas());
+        return error;
+    }
 
     /**
      * Normaliza el texto: minúsculas, elimina acentos/diacríticos y colapsa espacios.

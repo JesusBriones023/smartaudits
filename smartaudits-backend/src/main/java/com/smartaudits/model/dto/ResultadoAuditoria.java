@@ -28,6 +28,9 @@ public class ResultadoAuditoria {
     @AllArgsConstructor
     @NoArgsConstructor
     public static class ErrorAuditoria {
+        private String ruleId;
+        private String motor;
+        private String version;
         private String titulo;
         private String descripcion;
         private String severidad;

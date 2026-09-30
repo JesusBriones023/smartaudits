@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartaudits.model.Auditoria;
 import com.smartaudits.model.Usuario;
 import com.smartaudits.model.TipoFuente;
+import com.smartaudits.model.Incidencia;
 import com.smartaudits.model.dto.AuditoriaRequest;
 import com.smartaudits.model.dto.AuditoriaResponse;
 import com.smartaudits.model.dto.ResultadoAuditoria;
@@ -47,6 +48,7 @@ import static org.mockito.ArgumentMatchers.any;
 class AuditoriaServicePersistenceTest {
     @Autowired AuditoriaService service;
     @Autowired AuditoriaRepository audits;
+    @Autowired com.smartaudits.repository.IncidenciaRepository incidents;
     @Autowired UsuarioRepository users;
     @Autowired HistorialAuditoriaRepository history;
     @Autowired TestEntityManager entityManager;
@@ -75,6 +77,7 @@ class AuditoriaServicePersistenceTest {
         analysis.setReferenciasLegales(List.of("Referencia de prueba"));
         analysis.setFaltantes(List.of("Plazo de conservación"));
         var error = new ResultadoAuditoria.ErrorAuditoria(
+                "ALT-07", "ALTERNATIVE_ENGINE", version.versionReglas(),
                 "Conservación", "Falta un plazo concreto", "MEDIA",
                 "Cláusula ausente", "Conservación excesiva", "Indicar un plazo");
         analysis.setErrores(List.of(error));
@@ -115,6 +118,9 @@ class AuditoriaServicePersistenceTest {
             assertThat(result.getFechaResultado()).isBetween(before, LocalDateTime.now().plusSeconds(1));
         });
         assertThat(stored.getIncidencias()).singleElement().satisfies(incident -> {
+            assertThat(incident.getRuleId()).isEqualTo(error.getRuleId());
+            assertThat(incident.getMotor()).isEqualTo(error.getMotor());
+            assertThat(incident.getVersion()).isEqualTo(version.versionReglas());
             assertThat(incident.getId()).isNotNull();
             assertThat(incident.getAuditoria().getId()).isEqualTo(stored.getId());
             assertThat(incident.getCategoria()).isEqualTo(error.getTitulo());
@@ -131,6 +137,10 @@ class AuditoriaServicePersistenceTest {
         assertThat(response.getFechaCreacion()).isBetween(before, LocalDateTime.now().plusSeconds(1));
         assertThat(response.getPuntuacionRiesgo()).isEqualTo(62);
         assertThat(response.getResultado()).isEqualTo(analysis);
+        var storedFinding = mapper.readTree(stored.getResultadoJson()).path("errores").get(0);
+        assertThat(storedFinding.path("ruleId").asText()).isEqualTo(error.getRuleId());
+        assertThat(storedFinding.path("motor").asText()).isEqualTo(error.getMotor());
+        assertThat(storedFinding.path("version").asText()).isEqualTo(version.versionReglas());
         assertThat(response.getUsuarioId()).isEqualTo(owner.getId());
         assertThat(response.getUsuarioNombre()).isEqualTo(owner.getNombre());
         assertThat(response.getUsuarioEmail()).isEqualTo(owner.getEmail());
@@ -277,7 +287,10 @@ class AuditoriaServicePersistenceTest {
     void historicalReadAndListingsReturnStoredProvenanceWithoutConsultingAnalyzer() throws Exception {
         Usuario owner = user("historical");
         var historical = audit(owner, "Histórica");
-        String originalJson = "{\"resumen\":\"Resultado original\",\"puntuacionRiesgo\":23}";
+        String originalJson = """
+                { "resumen": "Resultado original", "puntuacionRiesgo": 23,
+                  "errores": [{"titulo":"Categoría histórica","severidad":"MEDIA","evidencia":"Original  "}] }
+                """;
         historical.setResultadoJson(originalJson);
         entityManager.flush();
         entityManager.clear();
@@ -292,6 +305,11 @@ class AuditoriaServicePersistenceTest {
             assertThat(response.getTipoFuente()).isEqualTo(historical.getTipoFuente());
         }
         assertThat(read.getResultado()).isEqualTo(mapper.readValue(originalJson, ResultadoAuditoria.class));
+        assertThat(read.getResultado().getErrores()).singleElement().satisfies(error -> {
+            assertThat(error.getRuleId()).isNull();
+            assertThat(error.getMotor()).isNull();
+            assertThat(error.getVersion()).isNull();
+        });
         entityManager.flush();
         entityManager.clear();
         assertThat(audits.findById(historical.getId()).orElseThrow().getResultadoJson()).isEqualTo(originalJson);
@@ -327,6 +345,76 @@ class AuditoriaServicePersistenceTest {
         missing.setTitulo("Sin metadatos");
         assertThatThrownBy(() -> audits.saveAndFlush(missing))
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void incidentProvenanceCannotBeReassignedAfterReload() {
+        var audit = audit(user("incident-owner"), "Incidencia");
+        var incident = new Incidencia();
+        incident.setAuditoria(audit);
+        incident.setCategoria("Categoría independiente del ID");
+        incident.setSeveridad("MEDIA");
+        incident.registrarProcedencia("ALT-19", "TEST_ANALYZER", "test-rules");
+        audit.getIncidencias().add(incident);
+        audits.saveAndFlush(audit);
+        entityManager.clear();
+
+        var loaded = audits.findById(audit.getId()).orElseThrow().getIncidencias().get(0);
+        assertThatThrownBy(() -> loaded.registrarProcedencia("R01", "LEGAL_TEXT", "replacement"))
+                .isInstanceOf(IllegalStateException.class);
+        loaded.setDescripcion("Descripción actualizada");
+        entityManager.flush();
+        entityManager.clear();
+
+        var reloaded = audits.findById(audit.getId()).orElseThrow().getIncidencias().get(0);
+        assertThat(reloaded.getRuleId()).isEqualTo("ALT-19");
+        assertThat(reloaded.getMotor()).isEqualTo("TEST_ANALYZER");
+        assertThat(reloaded.getVersion()).isEqualTo("test-rules");
+    }
+
+    @Test
+    void persistenceRejectsIncidentWithoutProvenance() {
+        var audit = audit(user("missing-incident"), "Sin procedencia");
+        var incident = new Incidencia();
+        incident.setAuditoria(audit);
+        incident.setSeveridad("MEDIA");
+        audit.getIncidencias().add(incident);
+        assertThatThrownBy(() -> audits.saveAndFlush(audit))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @org.springframework.transaction.annotation.Transactional(
+            propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
+    void serviceRollsBackAuditIncidentsAndHistoryWhenAnalyzerOmitsProvenance() {
+        // No surrounding test transaction: observe the service proxy's own rollback.
+        Usuario owner = user("rollback-provenance");
+        long auditCount = audits.count();
+        long historyCount = history.count();
+        long incidentCount = incidents.count();
+        var request = new AuditoriaRequest();
+        request.setTitulo("Rollback");
+        request.setTextoOriginal("Texto manual");
+        request.setTipoDocumento("Aviso Legal");
+        var invalidFinding = new ResultadoAuditoria.ErrorAuditoria();
+        invalidFinding.setTitulo("Finding without provenance");
+        invalidFinding.setSeveridad("MEDIA");
+        var result = new ResultadoAuditoria();
+        result.setPuntuacionRiesgo(25);
+        result.setErrores(List.of(invalidFinding));
+        when(motor.version()).thenReturn(new VersionAnalizador("test-engine", "test-rules"));
+        when(motor.analyze(any())).thenReturn(result);
+        try {
+            assertThatThrownBy(() -> service.crearAuditoria(request, owner, null))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThat(audits.count()).isEqualTo(auditCount);
+            assertThat(history.count()).isEqualTo(historyCount);
+            assertThat(incidents.count()).isEqualTo(incidentCount);
+            assertThat(audits.findByUsuarioId(owner.getId(), org.springframework.data.domain.Pageable.unpaged()))
+                    .isEmpty();
+        } finally {
+            users.deleteById(owner.getId());
+        }
     }
 
     private Usuario user(String name) {

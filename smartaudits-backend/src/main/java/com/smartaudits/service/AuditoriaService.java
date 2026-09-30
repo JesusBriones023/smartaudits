@@ -82,6 +82,7 @@ public class AuditoriaService {
         if (resultadoDto.getErrores() != null) {
             for (ResultadoAuditoria.ErrorAuditoria error : resultadoDto.getErrores()) {
                 Incidencia inc = new Incidencia();
+                inc.registrarProcedencia(error.getRuleId(), error.getMotor(), error.getVersion());
                 inc.setAuditoria(auditoria);
                 inc.setCategoria(error.getTitulo());
                 inc.setSeveridad(error.getSeveridad());

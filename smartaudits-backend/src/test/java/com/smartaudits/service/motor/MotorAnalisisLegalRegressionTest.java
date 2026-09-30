@@ -55,6 +55,8 @@ class MotorAnalisisLegalRegressionTest {
             assertThat(error.getEvidencia()).isNotBlank();
             assertThat(error.getImpacto()).isNotBlank();
             assertThat(error.getAccion()).isNotBlank();
+            assertThat(error.getMotor()).isEqualTo("LEGAL_TEXT");
+            assertThat(error.getVersion()).isEqualTo(analizador.version().versionReglas());
         });
 
         // Compare the entire incident multiset, including absences and severity.
@@ -62,7 +64,7 @@ class MotorAnalisisLegalRegressionTest {
         List<Incident> expected = example.expectedIncidents().stream()
                 .map(MotorAnalisisLegalRegressionTest::expectedIncident).toList();
         List<Incident> actual = result.getErrores().stream()
-                .map(error -> new Incident(error.getTitulo(), error.getSeveridad())).toList();
+                .map(error -> new Incident(error.getRuleId(), error.getTitulo(), error.getSeveridad())).toList();
         assertThat(actual).as(context).containsExactlyInAnyOrderElementsOf(expected);
 
         Structure structure = example.expectedStructure();
@@ -87,14 +89,14 @@ class MotorAnalisisLegalRegressionTest {
         if (id.startsWith("G")) {
             GlobalRisk risk = CORPUS.globalRisks().get(id);
             assertThat(risk).as("Unknown global risk %s", id).isNotNull();
-            return new Incident(risk.titulo(), risk.severidad());
+            return new Incident(id, risk.titulo(), risk.severidad());
         }
         assertThat(id).matches("R(0[1-9]|1[0-9]):(MISSING|RISK)");
         Rule rule = CORPUS.rules().get(id.substring(0, 3));
         assertThat(rule).as("Unknown rule %s", id).isNotNull();
         return id.endsWith(":RISK")
-                ? new Incident(RISK_PREFIX + rule.titulo(), "ALTA")
-                : new Incident(rule.titulo(), rule.severidad());
+                ? new Incident(id.substring(0, 3), RISK_PREFIX + rule.titulo(), "ALTA")
+                : new Incident(id.substring(0, 3), rule.titulo(), rule.severidad());
     }
 
     private static Corpus loadCorpus() {
@@ -122,7 +124,7 @@ class MotorAnalisisLegalRegressionTest {
     record Rule(String titulo, String severidad, int peso, String campoFaltante) {}
     record GlobalRisk(String titulo, String severidad, int penalizacion) {}
     record Structure(int riesgos, int recomendaciones, int textosSugeridos, int referenciasLegales, int faltantes) {}
-    record Incident(String titulo, String severidad) {}
+    record Incident(String ruleId, String titulo, String severidad) {}
     record CorpusCase(String id, String categoria, String descripcion, String tipoDocumento, String texto,
                       Integer expectedScore, String expectedSummaryMarker, List<String> expectedIncidents,
                       Structure expectedStructure, String notas, Boolean knownLimitation, String limitation) {
