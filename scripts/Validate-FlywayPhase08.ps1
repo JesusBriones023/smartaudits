@@ -1237,7 +1237,12 @@ function Invoke-IsolatedFlywayRepair {
             $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
             [Environment]::SetEnvironmentVariable($name, $values[$name], 'Process')
         }
-        Invoke-Native -FilePath 'java' -Arguments @('-cp', "$scratch/*", (Join-Path $PSScriptRoot 'fixtures/IsolatedFlyway.java'), 'repair', '3') -Operation 'Repair owned synthetic validation DB' | Out-Null
+        # Unix pwsh expands wildcards in splatted native arguments. Pass one explicit
+        # classpath, using the platform separator (; on Windows, : on Unix).
+        $repairClasspath = (@(Get-ChildItem -LiteralPath $scratch -Filter '*.jar' -File |
+            Sort-Object Name | ForEach-Object { $_.FullName }) -join [IO.Path]::PathSeparator)
+        Assert-Condition -Condition (-not [string]::IsNullOrWhiteSpace($repairClasspath)) -Message 'No packaged dependencies extracted for repair.'
+        Invoke-Native -FilePath 'java' -Arguments @('-cp', $repairClasspath, (Join-Path $PSScriptRoot 'fixtures/IsolatedFlyway.java'), 'repair', '3') -Operation 'Repair owned synthetic validation DB' | Out-Null
     } finally {
         foreach ($name in $saved.Keys) { [Environment]::SetEnvironmentVariable($name, $saved[$name], 'Process') }
         if (Test-Path -LiteralPath $scratch) { Remove-Item -LiteralPath $scratch -Recurse -Force }
