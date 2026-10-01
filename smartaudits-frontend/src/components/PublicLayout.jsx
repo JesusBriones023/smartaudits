@@ -1,3 +1,4 @@
+import LegalLinks from './LegalLinks'
 import { Outlet, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
@@ -49,15 +50,7 @@ const PublicLayout = () => {
           <p className="text-xs text-slate-400">
             © 2026 SmartAudits — Proyecto fin de ciclo DAW · ESIC University
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
-            <Link to="/aviso-legal" className="text-xs text-slate-500 hover:text-primary-600 transition-colors">Aviso legal</Link>
-            <span className="text-slate-300 text-xs">·</span>
-            <Link to="/politica-privacidad" className="text-xs text-slate-500 hover:text-primary-600 transition-colors">Privacidad</Link>
-            <span className="text-slate-300 text-xs">·</span>
-            <Link to="/politica-cookies" className="text-xs text-slate-500 hover:text-primary-600 transition-colors">Cookies</Link>
-            <span className="text-slate-300 text-xs">·</span>
-            <Link to="/condiciones-uso" className="text-xs text-slate-500 hover:text-primary-600 transition-colors">Condiciones de uso</Link>
-          </div>
+          <LegalLinks variant="public" />
         </div>
       </footer>
 

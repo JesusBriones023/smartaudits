@@ -1,5 +1,5 @@
+import LegalLinks from './LegalLinks'
 import { Outlet } from 'react-router-dom'
-import { Link } from 'react-router-dom'
 import Sidebar from './Sidebar'
 
 const Layout = () => {
@@ -17,23 +17,7 @@ const Layout = () => {
             <p className="text-xs text-slate-400">
               © 2025 SmartAudits — Plataforma de auditoría legal y cumplimiento normativo. Todos los derechos reservados.
             </p>
-            <div className="flex items-center gap-4">
-              <Link to="/aviso-legal" className="text-xs text-slate-500 hover:text-primary-600 transition-colors">
-                Aviso legal
-              </Link>
-              <span className="text-slate-300 text-xs">·</span>
-              <Link to="/politica-privacidad" className="text-xs text-slate-500 hover:text-primary-600 transition-colors">
-                Privacidad
-              </Link>
-              <span className="text-slate-300 text-xs">·</span>
-              <Link to="/politica-cookies" className="text-xs text-slate-500 hover:text-primary-600 transition-colors">
-                Cookies
-              </Link>
-              <span className="text-slate-300 text-xs">·</span>
-              <Link to="/condiciones-uso" className="text-xs text-slate-500 hover:text-primary-600 transition-colors">
-                Condiciones de uso
-              </Link>
-            </div>
+            <LegalLinks variant="private" />
           </div>
         </footer>
       </main>

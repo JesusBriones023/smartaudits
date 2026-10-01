@@ -1,3 +1,4 @@
+import LegalLinks from '../components/LegalLinks'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -135,15 +136,7 @@ const Register = () => {
             </p>
           </div>
 
-          <div className="mt-6 pt-6 border-t border-slate-100 flex flex-wrap justify-center gap-x-4 gap-y-1">
-            <Link to="/aviso-legal" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">Aviso legal</Link>
-            <span className="text-slate-200 text-xs">·</span>
-            <Link to="/politica-privacidad" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">Privacidad</Link>
-            <span className="text-slate-200 text-xs">·</span>
-            <Link to="/politica-cookies" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">Cookies</Link>
-            <span className="text-slate-200 text-xs">·</span>
-            <Link to="/condiciones-uso" className="text-xs text-slate-400 hover:text-slate-600 transition-colors">Condiciones de uso</Link>
-          </div>
+          <LegalLinks variant="auth" />
         </div>
       </div>
     </div>
