@@ -271,7 +271,7 @@ Usuario objetivo      1 ── N HistorialAccionAdmin
 
 Detalles relevantes:
 
-- Hay siete entidades persistentes y una tabla de unión. `Role`, `NivelRiesgo` y `TipoAccionAdmin` son enums, no tablas independientes.
+- Hay siete entidades persistentes y una tabla de unión. `Role` y `TipoAccionAdmin` son enums, no tablas independientes. `NivelRiesgo` se eliminó en la fase 2.4C al no tener consumidores.
 - `Resultado.auditoria_id` es obligatorio y único.
 - Auditoría tiene cascada y `orphanRemoval` sobre resultado, incidencias e historial. Usuario los tiene sobre auditorías. La baja lógica no activa estas eliminaciones.
 - El resultado completo se guarda en `auditorias.resultado_json`, además de parte de su información en `resultados` e `incidencias`.
@@ -505,7 +505,7 @@ Puntos positivos existentes: BCrypt, validación de firma y expiración, DTOs qu
 ### Duplicación y contratos
 
 - `PrivateRoute.jsx` y `PrivateRoutes.jsx` duplican el mismo componente; se utiliza el primero.
-- Los umbrales aparecen en el motor, `NivelRiesgo` y `helpers.js`.
+- Los umbrales 85/65/40 tienen una implementación activa por capa: `MotorAnalisisLegal.generarResumen` y `helpers.js`. El enum sin consumidores `NivelRiesgo` se eliminó en la fase 2.4C. Los tests de ambas capas verifican las mismas fronteras mediante `smartaudits-backend/src/test/resources/motor/risk-boundaries.json`, sin compartir configuración de producción.
 - Rol enum y relación N:M mantienen dos representaciones de autorización.
 - Resultado JSON y tablas mantienen representaciones redundantes; el frontend depende del JSON.
 - Pantalla, copia e impresión tienen plantillas y contenidos distintos.

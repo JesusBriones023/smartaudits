@@ -1,0 +1,42 @@
+[
+  {
+    "score": 0,
+    "text": "Bienvenido.",
+    "riskLabel": "RIESGO MUY ALTO"
+  },
+  {
+    "score": 39,
+    "text": "Responsable del tratamiento. Finalidad. Base legal. Derecho de acceso. DPO. Menores.",
+    "riskLabel": "RIESGO MUY ALTO"
+  },
+  {
+    "score": 40,
+    "text": "Responsable del tratamiento. Finalidad. Base legal. Derecho de acceso. DPO. Transferencias internacionales.",
+    "riskLabel": "RIESGO ALTO"
+  },
+  {
+    "score": 64,
+    "text": "Responsable del tratamiento. Finalidad. Base legal. Derecho de acceso. DPO. Transferencias internacionales. Contacto. Plazo de conservacion. Destinatarios. AEPD. Medidas de seguridad.",
+    "riskLabel": "RIESGO ALTO"
+  },
+  {
+    "score": 65,
+    "text": "Contacto. DPO. Plazo de conservacion. Destinatarios. Transferencias internacionales. Cookies. AEPD. Consentimiento. Categorias especiales. Medidas de seguridad. Aviso legal. Decisiones automatizadas. Brecha de seguridad. Newsletter.",
+    "riskLabel": "RIESGO MODERADO"
+  },
+  {
+    "score": 84,
+    "text": "Contacto. DPO. Base legal. Derecho de acceso. Plazo de conservacion. Destinatarios. Transferencias internacionales. Cookies. AEPD. Consentimiento. Menores. Categorias especiales. Medidas de seguridad. Aviso legal. Decisiones automatizadas. Brecha de seguridad. Newsletter.",
+    "riskLabel": "RIESGO MODERADO"
+  },
+  {
+    "score": 85,
+    "text": "Contacto. DPO. Finalidad. Base legal. Derecho de acceso. Plazo de conservacion. Destinatarios. Transferencias internacionales. Cookies. AEPD. Consentimiento. Menores. Categorias especiales. Medidas de seguridad. Decisiones automatizadas. Brecha de seguridad. Newsletter.",
+    "riskLabel": "BAJO RIESGO"
+  },
+  {
+    "score": 100,
+    "text": "Responsable del tratamiento. Contacto. DPO. Finalidad. Base legal. Derecho de acceso. Plazo de conservacion. Destinatarios. Transferencias internacionales. Cookies. AEPD. Consentimiento. Menores. Categorias especiales. Medidas de seguridad. Aviso legal. Decisiones automatizadas. Brecha de seguridad. Newsletter.",
+    "riskLabel": "BAJO RIESGO"
+  }
+]

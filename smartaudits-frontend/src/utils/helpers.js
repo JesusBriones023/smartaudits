@@ -17,8 +17,8 @@ export const truncateText = (text, maxLength = 100) => {
 /**
  * Devuelve el nivel de cumplimiento a partir de la puntuación (0-100).
  *
- * Los umbrales coinciden EXACTAMENTE con los del MotorAnalisisLegal.java
- * y el enum NivelRiesgo.java del backend.
+ * Los umbrales coinciden EXACTAMENTE con los del MotorAnalisisLegal.java.
+ * El contrato entre capas se verifica con motor/risk-boundaries.json en tests.
  *
  * Niveles:
  *   85-100 → Cumplimiento Alto      (verde)   — BAJO RIESGO
