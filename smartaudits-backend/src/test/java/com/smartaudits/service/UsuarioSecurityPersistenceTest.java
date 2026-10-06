@@ -4,10 +4,14 @@ import com.smartaudits.model.*;
 import com.smartaudits.model.dto.*;
 import com.smartaudits.repository.*;
 import com.smartaudits.security.*;
+import com.smartaudits.config.DataInitializer;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Encoders;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -24,12 +28,16 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.util.List;
 import java.util.concurrent.*;
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
 @DataJpaTest(showSql = false, properties = {
+        "app.admin.bootstrap.enabled=true", "app.admin.bootstrap.email=bootstrap@example.invalid",
+        "app.admin.bootstrap.password=synthetic-bootstrap-password",
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "logging.level.root=WARN", "logging.level.org.springframework=WARN","spring.flyway.enabled=false",
         "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect"})
-@Import({UsuarioService.class, JwtUtil.class, BCryptPasswordEncoder.class})
+@Import({UsuarioService.class, RolUsuarioService.class, DataInitializer.class, JwtUtil.class, BCryptPasswordEncoder.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class UsuarioSecurityPersistenceTest {
     @DynamicPropertySource static void properties(DynamicPropertyRegistry registry) {
@@ -37,6 +45,8 @@ class UsuarioSecurityPersistenceTest {
         registry.add("jwt.secret", () -> key);
     }
     @Autowired UsuarioService service;
+    @Autowired RolUsuarioService roleSync;
+    @Autowired DataInitializer initializer;
     @Autowired UsuarioRepository users;
     @Autowired RolRepository roles;
     @Autowired JwtUtil jwt;
@@ -66,7 +76,10 @@ class UsuarioSecurityPersistenceTest {
         user.setPassword(encoder.encode("test-password-before"));
         user.setRole(role);
         user.setProtegido(protectedAccount);
-        return users.saveAndFlush(user);
+        return new TransactionTemplate(transactions).execute(status -> {
+            user.getRoles().add(roles.findByNombre(role.name()).orElseThrow());
+            return users.saveAndFlush(user);
+        });
     }
 
     String token(Usuario user) { return jwt.generateToken(new CustomUserDetails(user)); }
@@ -163,6 +176,167 @@ class UsuarioSecurityPersistenceTest {
         assertThat(valid(response.getToken(), response.getUserId())).isTrue();
         assertThat(response.getRole()).isEqualTo("CLIENTE");
         assertThat(users.findById(response.getUserId()).orElseThrow().getTokenVersion()).isZero();
+        assertRole(response.getUserId(), Role.CLIENTE);
+    }
+
+    @Test void bootstrapCreatesProtectedAdminWithBothRepresentationsAndDoesNotRepairExistingUsers() {
+        initializer.run();
+        Usuario admin = users.findByEmail("bootstrap@example.invalid").orElseThrow();
+        assertRole(admin.getId(), Role.ADMIN);
+        assertThat(admin.getProtegido()).isTrue();
+        assertThat(admin.getActivo()).isTrue();
+        assertThat(admin.getTokenVersion()).isZero();
+        assertThat(encoder.matches("synthetic-bootstrap-password", admin.getPassword())).isTrue();
+
+        setMembership(admin.getId(), "EMPTY");
+        initializer.run();
+        assertThat(users.count()).isEqualTo(1);
+        new TransactionTemplate(transactions).executeWithoutResult(status ->
+                assertThat(users.findById(admin.getId()).orElseThrow().getRoles()).isEmpty());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"ADMIN,EMPTY", "ADMIN,OPPOSITE", "ADMIN,BOTH",
+            "CLIENTE,EMPTY", "CLIENTE,OPPOSITE", "CLIENTE,BOTH"})
+    void sameRoleRepairsOnlyMembershipWithoutRevocationOrFictitiousHistory(Role role, String membership) {
+        Usuario actor = create(Role.ADMIN, true);
+        Usuario target = create(role, false);
+        Usuario untouched = create(Role.CLIENTE, false);
+        setMembership(target.getId(), membership);
+        setMembership(untouched.getId(), "EMPTY");
+        String before = token(target);
+
+        UsuarioListadoResponse response = service.cambiarRol(target.getId(), role.name(), actor.getId());
+
+        assertThat(response.getId()).isEqualTo(target.getId());
+        assertThat(response.getRole()).isEqualTo(role.name());
+        assertRole(target.getId(), role);
+        Usuario repaired = users.findById(target.getId()).orElseThrow();
+        assertThat(repaired.getTokenVersion()).isEqualTo(target.getTokenVersion());
+        assertThat(repaired.getActivo()).isTrue();
+        assertThat(repaired.getProtegido()).isFalse();
+        assertThat(valid(before, target.getId())).isTrue();
+        verifyNoInteractions(history);
+        new TransactionTemplate(transactions).executeWithoutResult(status ->
+                assertThat(users.findById(untouched.getId()).orElseThrow().getRoles()).isEmpty());
+
+        // A repeated request with an already coherent membership performs no write.
+        service.cambiarRol(target.getId(), role.name(), actor.getId());
+        assertThat(users.findById(target.getId()).orElseThrow().getRowVersion()).isEqualTo(repaired.getRowVersion());
+        assertRole(target.getId(), role);
+        verifyNoInteractions(history);
+    }
+
+    @Test void missingClientCatalogAbortsRegistrationWithoutPersistingUserOrMembership() {
+        deleteCatalog(Role.CLIENTE);
+        RegisterRequest request = new RegisterRequest();
+        request.setNombre("Registro fallido");
+        request.setEmail("missing-role@example.invalid");
+        request.setPassword("synthetic-registration-password");
+
+        assertThatThrownBy(() -> service.register(request)).isInstanceOf(IllegalStateException.class)
+                .hasMessage("Falta el rol CLIENTE del sistema");
+        assertThat(users.count()).isZero();
+        assertThat(users.existsByEmail(request.getEmail())).isFalse();
+        verifyNoInteractions(history);
+    }
+
+    @ParameterizedTest
+    @EnumSource(Role.class)
+    void missingDestinationCatalogAbortsRoleChangeWithoutPartialState(Role destination) {
+        Usuario actor = create(Role.ADMIN, true);
+        Usuario target = create(destination == Role.ADMIN ? Role.CLIENTE : Role.ADMIN, false);
+        if (destination == Role.ADMIN) setMembership(actor.getId(), "EMPTY");
+        deleteCatalog(destination);
+        String before = token(target);
+
+        assertThatThrownBy(() -> service.cambiarRol(target.getId(), destination.name(), actor.getId()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Falta el rol " + destination.name() + " del sistema");
+        assertRole(target.getId(), target.getRole());
+        Usuario unchanged = users.findById(target.getId()).orElseThrow();
+        assertThat(unchanged.getTokenVersion()).isEqualTo(target.getTokenVersion());
+        assertThat(unchanged.getRowVersion()).isEqualTo(target.getRowVersion());
+        assertThat(valid(before, target.getId())).isTrue();
+        verifyNoInteractions(history);
+    }
+
+    @Test void sameRoleStillFailsWhenItsCatalogIsMissing() {
+        Usuario actor = create(Role.ADMIN, true);
+        Usuario target = create(Role.CLIENTE, false);
+        setMembership(target.getId(), "EMPTY");
+        deleteCatalog(Role.CLIENTE);
+        Usuario before = users.findById(target.getId()).orElseThrow();
+
+        assertThatThrownBy(() -> service.cambiarRol(target.getId(), "CLIENTE", actor.getId()))
+                .isInstanceOf(IllegalStateException.class).hasMessage("Falta el rol CLIENTE del sistema");
+        Usuario after = users.findById(target.getId()).orElseThrow();
+        assertThat(after.getRole()).isEqualTo(Role.CLIENTE);
+        assertThat(after.getRowVersion()).isEqualTo(before.getRowVersion());
+        assertThat(after.getTokenVersion()).isEqualTo(before.getTokenVersion());
+        new TransactionTemplate(transactions).executeWithoutResult(status ->
+                assertThat(users.findById(target.getId()).orElseThrow().getRoles()).isEmpty());
+        verifyNoInteractions(history);
+    }
+
+    @Test void failureAfterSynchronizationRollsBackBothRolesAndRevocation() {
+        Usuario actor = create(Role.ADMIN, true);
+        Usuario target = create(Role.CLIENTE, false);
+        String before = token(target);
+        doThrow(new IllegalStateException("Synthetic history failure"))
+                .when(history).registrarAccion(any(), any(), any(), any());
+
+        assertThatThrownBy(() -> service.cambiarRol(target.getId(), "ADMIN", actor.getId()))
+                .hasMessage("Synthetic history failure");
+        assertRole(target.getId(), Role.CLIENTE);
+        Usuario unchanged = users.findById(target.getId()).orElseThrow();
+        assertThat(unchanged.getTokenVersion()).isEqualTo(target.getTokenVersion());
+        assertThat(unchanged.getRowVersion()).isEqualTo(target.getRowVersion());
+        assertThat(valid(before, target.getId())).isTrue();
+    }
+
+    @Test void synchronizationRequiresTheCallersTransaction() {
+        Usuario target = create(Role.CLIENTE, false);
+        assertThatThrownBy(() -> roleSync.sincronizar(target, Role.ADMIN))
+                .isInstanceOf(org.springframework.transaction.IllegalTransactionStateException.class);
+        assertRole(target.getId(), Role.CLIENTE);
+    }
+
+    @Test void lastAdminCannotDemoteItself() {
+        Usuario admin = create(Role.ADMIN, false);
+        assertThatThrownBy(() -> service.cambiarRol(admin.getId(), "CLIENTE", admin.getId()))
+                .isInstanceOf(AccessDeniedException.class);
+        assertRole(admin.getId(), Role.ADMIN);
+        assertThat(users.countByRoleAndActivoTrue(Role.ADMIN)).isEqualTo(1);
+    }
+
+    void deleteCatalog(Role role) {
+        new TransactionTemplate(transactions).executeWithoutResult(status -> {
+            roles.delete(roles.findByNombre(role.name()).orElseThrow());
+            roles.flush();
+        });
+    }
+
+    void setMembership(Long id, String membership) {
+        new TransactionTemplate(transactions).executeWithoutResult(status -> {
+            Usuario target = users.findById(id).orElseThrow();
+            target.getRoles().clear();
+            if (!membership.equals("EMPTY")) {
+                Role opposite = target.getRole() == Role.ADMIN ? Role.CLIENTE : Role.ADMIN;
+                target.getRoles().add(roles.findByNombre(opposite.name()).orElseThrow());
+                if (membership.equals("BOTH")) {
+                    target.getRoles().add(roles.findByNombre(target.getRole().name()).orElseThrow());
+                }
+            }
+        });
+    }
+
+    void assertRole(Long id, Role expected) {
+        new TransactionTemplate(transactions).executeWithoutResult(status -> {
+            Usuario persisted = users.findById(id).orElseThrow();
+            assertThat(persisted.getRole()).isEqualTo(expected);
+            assertThat(persisted.getRoles()).extracting(Rol::getNombre).containsExactly(expected.name());
+        });
     }
 
     @Test void staleEntityCannotOverwriteNewCredentialVersion() {
@@ -214,6 +388,7 @@ class UsuarioSecurityPersistenceTest {
         assertThat(valid(before, client.getId())).isFalse();
         assertThat(users.findById(client.getId()).orElseThrow().getActivo()).isTrue();
         assertThat(users.findById(client.getId()).orElseThrow().getTokenVersion()).isEqualTo(client.getTokenVersion() + 2);
+        assertRole(client.getId(), Role.CLIENTE);
     }
 
     @Test void protectedAdminCannotDeactivateSelfOrBeDegradedOrDeactivatedByAdmin() {
@@ -246,9 +421,13 @@ class UsuarioSecurityPersistenceTest {
         Usuario client = create(Role.CLIENTE, false);
         String before = token(client);
         service.cambiarRol(client.getId(), "ADMIN", admin.getId());
+        assertRole(client.getId(), Role.ADMIN);
+        assertThat(users.findById(client.getId()).orElseThrow().getTokenVersion()).isEqualTo(client.getTokenVersion() + 1);
         assertThat(valid(before, client.getId())).isFalse();
         String promoted = token(users.findById(client.getId()).orElseThrow());
         service.cambiarRol(client.getId(), "CLIENTE", admin.getId());
+        assertRole(client.getId(), Role.CLIENTE);
+        assertThat(users.findById(client.getId()).orElseThrow().getTokenVersion()).isEqualTo(client.getTokenVersion() + 2);
         assertThat(valid(promoted, client.getId())).isFalse();
         new TransactionTemplate(transactions).executeWithoutResult(status ->
                 assertThat(users.findById(client.getId()).orElseThrow().getRoles())
@@ -271,6 +450,8 @@ class UsuarioSecurityPersistenceTest {
             assertThat(List.of(one.get(10, TimeUnit.SECONDS), two.get(10, TimeUnit.SECONDS)))
                     .containsExactlyInAnyOrder(true, false);
             assertThat(users.countByRoleAndActivoTrue(Role.ADMIN)).isEqualTo(1);
+            assertRole(first.getId(), Role.ADMIN);
+            assertRole(second.getId(), Role.ADMIN);
         } finally {
             go.countDown();
             executor.shutdownNow();
@@ -291,6 +472,7 @@ class UsuarioSecurityPersistenceTest {
             assertThat(List.of(one.get(10, TimeUnit.SECONDS), two.get(10, TimeUnit.SECONDS)))
                     .containsExactlyInAnyOrder(true, false);
             assertThat(users.countByRoleAndActivoTrue(Role.ADMIN)).isEqualTo(1);
+            for (Usuario user : users.findAll()) assertRole(user.getId(), user.getRole());
         } finally {
             go.countDown();
             executor.shutdownNow();

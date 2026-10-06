@@ -1,6 +1,7 @@
 package com.smartaudits.controller;
 
 import com.smartaudits.model.Usuario;
+import com.smartaudits.model.Role;
 import com.smartaudits.model.dto.AuditoriaRequest;
 import com.smartaudits.model.dto.AuditoriaResponse;
 import com.smartaudits.security.CustomUserDetails;
@@ -71,7 +72,7 @@ public ResponseEntity<PaginaResponse<AuditoriaResponse>> obtenerTodasLasAuditori
             .orElseThrow(() ->
                     new RuntimeException("Usuario no encontrado"));
 
-    if (!"ADMIN".equals(solicitante.getRole().name())) {
+    if (solicitante.getRole() != Role.ADMIN) {
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
                 .build();
@@ -95,7 +96,7 @@ public ResponseEntity<PaginaResponse<AuditoriaResponse>> obtenerTodasLasAuditori
         Usuario usuario = usuarioService.obtenerPorId(userDetails.getUsuario().getId())
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-        boolean isAdmin = "ADMIN".equals(usuario.getRole().name());
+        boolean isAdmin = usuario.getRole() == Role.ADMIN;
 
         AuditoriaResponse response = auditoriaService.obtenerAuditoriaPorId(
                 id, usuario.getId(), isAdmin, usuario, obtenerIp(httpRequest));
@@ -115,7 +116,7 @@ public ResponseEntity<PaginaResponse<AuditoriaResponse>> obtenerTodasLasAuditori
     Usuario usuario = usuarioService.obtenerPorId(userDetails.getUsuario().getId())
             .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-    boolean isAdmin = "ADMIN".equals(usuario.getRole().name());
+    boolean isAdmin = usuario.getRole() == Role.ADMIN;
 
     auditoriaService.registrarDescarga(
             id,

@@ -1,6 +1,5 @@
 package com.smartaudits.service;
 
-import com.smartaudits.model.Rol;
 import com.smartaudits.model.Role;
 import com.smartaudits.model.TipoAccionAdmin;
 import com.smartaudits.model.Usuario;
@@ -34,6 +33,7 @@ public class UsuarioService {
 
     private final UsuarioRepository usuarioRepository;
     private final RolRepository rolRepository;
+    private final RolUsuarioService rolUsuarioService;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final AuthenticationManager authenticationManager;
@@ -53,15 +53,12 @@ public class UsuarioService {
         usuario.setNombre(request.getNombre());
         usuario.setEmail(request.getEmail());
         usuario.setPassword(passwordEncoder.encode(request.getPassword()));
-        usuario.setRole(Role.CLIENTE);
         usuario.setActivo(true);
         usuario.setProtegido(false);
-
-        Usuario savedUser = usuarioRepository.save(usuario);
-        asignarRol(savedUser, "CLIENTE");
+        rolUsuarioService.sincronizar(usuario, Role.CLIENTE);
 
         // Confirmar la persistencia antes de firmar la versión de revocación.
-        savedUser = usuarioRepository.saveAndFlush(savedUser);
+        Usuario savedUser = usuarioRepository.saveAndFlush(usuario);
         String token = jwtUtil.generateToken(new CustomUserDetails(savedUser));
 
         return new AuthResponse(
@@ -92,18 +89,6 @@ public class UsuarioService {
                 usuario.getEmail(),
                 usuario.getRole().name(),
                 usuario.getId()
-        );
-    }
-
-    public void asignarRol(Usuario usuario, String nombreRol) {
-        rolRepository.findByNombre(nombreRol).ifPresentOrElse(
-            rol -> {
-                usuario.getRoles().add(rol);
-                usuarioRepository.save(usuario);
-                log.info("Rol {} asignado al usuario {}", nombreRol, usuario.getEmail());
-            },
-            () -> log.warn("Rol {} no encontrado en la tabla roles. " +
-                "Asegúrate de que el DataInitializer ha arrancado correctamente.", nombreRol)
         );
     }
 
@@ -291,6 +276,7 @@ public class UsuarioService {
         }
 
         if (objetivo.getRole() == rolDestino) {
+            rolUsuarioService.sincronizar(objetivo, rolDestino);
             return toListadoResponse(objetivo);
         }
 
@@ -303,13 +289,8 @@ public class UsuarioService {
         }
 
         Role rolAnterior = objetivo.getRole();
-        objetivo.setRole(rolDestino);
+        rolUsuarioService.sincronizar(objetivo, rolDestino);
         revocarTokens(objetivo);
-
-        rolRepository.findByNombre(rolAnterior.name())
-                .ifPresent(r -> objetivo.getRoles().remove(r));
-        rolRepository.findByNombre(rolDestino.name())
-                .ifPresent(r -> objetivo.getRoles().add(r));
 
         Usuario actualizado = usuarioRepository.save(objetivo);
 

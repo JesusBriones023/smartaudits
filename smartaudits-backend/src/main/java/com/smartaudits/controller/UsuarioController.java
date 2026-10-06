@@ -1,6 +1,7 @@
 package com.smartaudits.controller;
 
 import com.smartaudits.model.Usuario;
+import com.smartaudits.model.Role;
 import com.smartaudits.model.dto.ActualizarPerfilRequest;
 import com.smartaudits.model.dto.AuthResponse;
 import com.smartaudits.model.dto.CambiarRolRequest;
@@ -97,6 +98,6 @@ public class UsuarioController {
 
     private boolean esAdmin(CustomUserDetails userDetails) {
         Usuario solicitante = userDetails.getUsuario();
-        return userDetails.isEnabled() && "ADMIN".equals(solicitante.getRole().name());
+        return userDetails.isEnabled() && solicitante.getRole() == Role.ADMIN;
     }
 }

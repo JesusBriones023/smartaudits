@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import api from '../api/axios'
+import { ROLES } from '../utils/roles'
 
 const AuthContext = createContext(null)
 
@@ -29,7 +30,7 @@ export const AuthProvider = ({ children }) => {
         Number.isInteger(parsedUser.userId) &&
         typeof parsedUser.nombre === 'string' &&
         typeof parsedUser.email === 'string' &&
-        ['CLIENTE', 'ADMIN'].includes(parsedUser.role)
+        [ROLES.CLIENTE, ROLES.ADMIN].includes(parsedUser.role)
 
       if (!validUser) {
         throw new Error('Stored user is invalid')
@@ -110,7 +111,7 @@ export const AuthProvider = ({ children }) => {
     updateUser,
     loading,
     isAuthenticated: !!user,
-    isAdmin: user?.role === 'ADMIN'
+    isAdmin: user?.role === ROLES.ADMIN
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

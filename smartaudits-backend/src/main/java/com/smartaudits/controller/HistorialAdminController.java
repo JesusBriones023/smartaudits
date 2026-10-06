@@ -1,6 +1,7 @@
 package com.smartaudits.controller;
 
 import com.smartaudits.model.Usuario;
+import com.smartaudits.model.Role;
 import com.smartaudits.model.dto.HistorialAccionAdminResponse;
 import com.smartaudits.security.CustomUserDetails;
 import com.smartaudits.service.HistorialAdminService;
@@ -40,6 +41,6 @@ public class HistorialAdminController {
     private boolean esAdmin(CustomUserDetails userDetails) {
         Usuario solicitante = usuarioService.obtenerPorId(userDetails.getUsuario().getId())
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-        return "ADMIN".equals(solicitante.getRole().name());
+        return solicitante.getRole() == Role.ADMIN;
     }
 }

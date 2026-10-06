@@ -413,7 +413,7 @@ Aspectos funcionales y límites:
 - El cambio de email no exige contraseña actual cuando no se cambia contraseña y emite un nuevo token.
 - La autorización ADMIN se comprueba manualmente en controladores. El detalle comprueba propietario o ADMIN en el servicio.
 - El endpoint de descarga no comprueba propietario ni ADMIN.
-- Las acciones administrativas impiden modificar al usuario protegido y contienen controles sobre el último administrador activo. Estos controles no se aplican a la baja propia y el conteo no está protegido explícitamente frente a concurrencia.
+- Las acciones administrativas impiden modificar al usuario protegido. Las bajas (incluida la propia), reactivaciones y cambios de rol conservan el bloqueo pesimista de la fila `roles.nombre = ADMIN` durante la transacción; el último ADMIN activo se comprueba mediante `Usuario.role` después de adquirir ese bloqueo.
 
 `DataInitializer` crea los roles si faltan. Si el bootstrap está habilitado, no hay ningún ADMIN y se suministran credenciales explícitas válidas, crea un administrador protegido. No tiene credenciales de administrador predeterminadas. Su comprobación de existencia incluye administradores inactivos: no garantiza recuperar un sistema que haya quedado sin ADMIN activo.
 
@@ -506,7 +506,7 @@ Puntos positivos existentes: BCrypt, validación de firma y expiración, DTOs qu
 
 - `PrivateRoute.jsx` y `PrivateRoutes.jsx` duplican el mismo componente; se utiliza el primero.
 - Los umbrales 85/65/40 tienen una implementación activa por capa: `MotorAnalisisLegal.generarResumen` y `helpers.js`. El enum sin consumidores `NivelRiesgo` se eliminó en la fase 2.4C. Los tests de ambas capas verifican las mismas fronteras mediante `smartaudits-backend/src/test/resources/motor/risk-boundaries.json`, sin compartir configuración de producción.
-- Rol enum y relación N:M mantienen dos representaciones de autorización.
+- `Usuario.role` concede las authorities y determina el conteo del último ADMIN; la membresía N:M no autoriza. En la fase 2.4D, registro, bootstrap y cambio administrativo sincronizan ambas representaciones mediante `RolUsuarioService`, que exige la transacción del llamador y falla si falta el catálogo requerido. Solicitar el mismo rol repara solo la membresía del usuario objetivo, sin revocar tokens ni registrar un cambio de rol ficticio. No se reparan datos históricos en bloque. `roles`, `usuarios_roles` y el bloqueo ADMIN se conservan; el frontend centraliza los identificadores en `utils/roles.js` y mantiene `AuthContext.isAdmin` para sus consumidores.
 - Resultado JSON y tablas mantienen representaciones redundantes; el frontend depende del JSON.
 - Pantalla, copia e impresión tienen plantillas y contenidos distintos.
 - No hay versión del motor ni del esquema del resultado para interpretar informes históricos.

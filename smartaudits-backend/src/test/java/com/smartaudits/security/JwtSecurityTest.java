@@ -11,6 +11,7 @@ import com.smartaudits.service.HistorialService;
 import com.smartaudits.service.HistorialAdminService;
 import com.smartaudits.controller.UsuarioController;
 import com.smartaudits.model.Role;
+import com.smartaudits.model.Rol;
 import com.smartaudits.model.Usuario;
 import com.smartaudits.repository.UsuarioRepository;
 import com.smartaudits.service.UsuarioService;
@@ -22,6 +23,8 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Encoders;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -134,6 +137,28 @@ class JwtSecurityTest {
         mvc.perform(get("/usuarios").header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isForbidden());
         verify(service, never()).listarTodos();
+    }
+
+    @ParameterizedTest
+    @EnumSource(Role.class)
+    void authoritiesAndHttpPermissionsUseEnumDespiteOppositeMembershipAndJwtClaim(Role currentRole) throws Exception {
+        Role opposite = currentRole == Role.ADMIN ? Role.CLIENTE : Role.ADMIN;
+        user.setRole(opposite);
+        String previousToken = token();
+        Rol membership = new Rol();
+        membership.setNombre(opposite.name());
+        user.getRoles().add(membership);
+        user.setRole(currentRole);
+
+        assertThat(new CustomUserDetails(user).getAuthorities()).extracting("authority")
+                .containsExactly("ROLE_" + currentRole.name());
+        assertThat(Jwts.parser().verifyWith(KEY).build().parseSignedClaims(previousToken)
+                .getPayload().get("role", String.class)).isEqualTo(opposite.name());
+        mvc.perform(get("/usuarios").header("Authorization", "Bearer " + previousToken))
+                .andExpect(status().is(currentRole == Role.ADMIN ? 200 : 403));
+        verify(users).findById(user.getId());
+        if (currentRole == Role.ADMIN) verify(service).listarTodos();
+        else verify(service, never()).listarTodos();
     }
 
     @Test void identityRemainsStableWhenEmailIsReassigned() throws Exception {

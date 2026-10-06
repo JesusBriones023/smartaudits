@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/axios'
+import { ROLES } from '../utils/roles'
 import LoadingSpinner from '../components/LoadingSpinner'
 
 const GestionUsuarios = () => {
@@ -52,7 +53,7 @@ const GestionUsuarios = () => {
       await api.patch(`/usuarios/${confirmRol.usuario.id}/rol`, {
         nuevoRol: confirmRol.nuevoRol,
       })
-      const accion = confirmRol.nuevoRol === 'ADMIN' ? 'promovido a Administrador' : 'degradado a Cliente'
+      const accion = confirmRol.nuevoRol === ROLES.ADMIN ? 'promovido a Administrador' : 'degradado a Cliente'
       mostrarMensajeExito(`${confirmRol.usuario.nombre} ha sido ${accion}.`)
       setConfirmRol(null)
       await cargarUsuarios()
@@ -125,8 +126,8 @@ const GestionUsuarios = () => {
 
   const totales = {
     total: usuarios.length,
-    admins: usuarios.filter(u => u.role === 'ADMIN').length,
-    clientes: usuarios.filter(u => u.role === 'CLIENTE').length,
+    admins: usuarios.filter(u => u.role === ROLES.ADMIN).length,
+    clientes: usuarios.filter(u => u.role === ROLES.CLIENTE).length,
     desactivados: usuarios.filter(u => !u.activo).length,
   }
 
@@ -265,7 +266,7 @@ const GestionUsuarios = () => {
               ) : (
                 usuariosFiltrados.map((u) => {
                   const esEsteUsuario = u.id === user?.userId
-                  const esAdmin = u.role === 'ADMIN'
+                  const esAdmin = u.role === ROLES.ADMIN
                   return (
                     <tr key={u.id} className={!u.activo ? 'bg-red-50/40' : ''}>
                       {/* Usuario */}
@@ -355,7 +356,7 @@ const GestionUsuarios = () => {
                               {/* Promover */}
                               {!esAdmin && (
                                 <button
-                                  onClick={() => solicitarCambioRol(u, 'ADMIN')}
+                                  onClick={() => solicitarCambioRol(u, ROLES.ADMIN)}
                                   title="Promover a Administrador"
                                   className="px-3 py-1.5 rounded-lg text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 hover:border-purple-300 transition-colors"
                                 >
@@ -366,7 +367,7 @@ const GestionUsuarios = () => {
                               {/* Degradar */}
                               {esAdmin && (
                                 <button
-                                  onClick={() => solicitarCambioRol(u, 'CLIENTE')}
+                                  onClick={() => solicitarCambioRol(u, ROLES.CLIENTE)}
                                   title="Degradar a Cliente"
                                   className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-slate-300 transition-colors"
                                 >
@@ -422,20 +423,20 @@ const GestionUsuarios = () => {
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
             <div className="flex items-center space-x-3 mb-4">
               <div className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl
-                ${confirmRol.nuevoRol === 'ADMIN' ? 'bg-purple-100' : 'bg-slate-100'}`}>
-                {confirmRol.nuevoRol === 'ADMIN' ? '👑' : '↓'}
+                ${confirmRol.nuevoRol === ROLES.ADMIN ? 'bg-purple-100' : 'bg-slate-100'}`}>
+                {confirmRol.nuevoRol === ROLES.ADMIN ? '👑' : '↓'}
               </div>
               <h3 className="text-lg font-bold text-gray-900">
-                {confirmRol.nuevoRol === 'ADMIN' ? 'Promover a Administrador' : 'Degradar a Cliente'}
+                {confirmRol.nuevoRol === ROLES.ADMIN ? 'Promover a Administrador' : 'Degradar a Cliente'}
               </h3>
             </div>
 
             <div className="space-y-3 text-sm text-gray-700 mb-6">
               <p>
-                Vas a {confirmRol.nuevoRol === 'ADMIN' ? 'promover' : 'degradar'} a{' '}
+                Vas a {confirmRol.nuevoRol === ROLES.ADMIN ? 'promover' : 'degradar'} a{' '}
                 <strong>{confirmRol.usuario.nombre}</strong> ({confirmRol.usuario.email}).
               </p>
-              {confirmRol.nuevoRol === 'ADMIN' ? (
+              {confirmRol.nuevoRol === ROLES.ADMIN ? (
                 <p className="text-purple-800 bg-purple-50 px-3 py-2 rounded-lg">
                   Como administrador, podrá gestionar usuarios y ver todas las auditorías del sistema.
                 </p>
@@ -458,7 +459,7 @@ const GestionUsuarios = () => {
                 onClick={confirmarCambioRol}
                 disabled={accionLoading}
                 className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium text-white transition-colors disabled:opacity-50
-                  ${confirmRol.nuevoRol === 'ADMIN' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-slate-600 hover:bg-slate-700'}`}
+                  ${confirmRol.nuevoRol === ROLES.ADMIN ? 'bg-purple-600 hover:bg-purple-700' : 'bg-slate-600 hover:bg-slate-700'}`}
               >
                 {accionLoading ? 'Procesando…' : 'Confirmar'}
               </button>

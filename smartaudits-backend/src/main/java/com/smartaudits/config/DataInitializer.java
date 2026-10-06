@@ -5,6 +5,7 @@ import com.smartaudits.model.Role;
 import com.smartaudits.model.Usuario;
 import com.smartaudits.repository.RolRepository;
 import com.smartaudits.repository.UsuarioRepository;
+import com.smartaudits.service.RolUsuarioService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,8 +13,6 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Optional;
 
 /**
  * Inicializa los datos base de la aplicación al arrancar.
@@ -38,6 +37,7 @@ public class DataInitializer implements CommandLineRunner {
 
     private final RolRepository rolRepository;
     private final UsuarioRepository usuarioRepository;
+    private final RolUsuarioService rolUsuarioService;
     private final PasswordEncoder passwordEncoder;
 
     @Value("${app.admin.bootstrap.enabled:false}")
@@ -68,17 +68,17 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     private void inicializarRoles() {
-        if (rolRepository.findByNombre("CLIENTE").isEmpty()) {
+        if (rolRepository.findByNombre(Role.CLIENTE.name()).isEmpty()) {
             Rol rolCliente = new Rol();
-            rolCliente.setNombre("CLIENTE");
+            rolCliente.setNombre(Role.CLIENTE.name());
             rolCliente.setDescripcion("Usuario estándar de la plataforma SmartAudits");
             rolRepository.save(rolCliente);
             log.info("Rol CLIENTE creado automáticamente");
         }
 
-        if (rolRepository.findByNombre("ADMIN").isEmpty()) {
+        if (rolRepository.findByNombre(Role.ADMIN.name()).isEmpty()) {
             Rol rolAdmin = new Rol();
-            rolAdmin.setNombre("ADMIN");
+            rolAdmin.setNombre(Role.ADMIN.name());
             rolAdmin.setDescripcion("Administrador con acceso total al sistema");
             rolRepository.save(rolAdmin);
             log.info("Rol ADMIN creado automáticamente");
@@ -138,27 +138,17 @@ public class DataInitializer implements CommandLineRunner {
             return;
         }
 
-        // Recuperar el rol ADMIN antes de crear el usuario
-        Optional<Rol> rolAdminOpt = rolRepository.findByNombre("ADMIN");
-        if (rolAdminOpt.isEmpty()) {
-            log.error("No se encontró el rol ADMIN en la tabla roles. " +
-                    "El admin raíz no se ha creado.");
-            return;
-        }
-        Rol rolAdmin = rolAdminOpt.get();
-
         // Construir el usuario admin con el rol N:M ya asignado en memoria
         Usuario admin = new Usuario();
         admin.setNombre(bootstrapNombre != null && !bootstrapNombre.isBlank() ? bootstrapNombre : "Administrador");
         admin.setEmail(bootstrapEmail);
         admin.setPassword(passwordEncoder.encode(bootstrapPassword));
-        admin.setRole(Role.ADMIN);
         admin.setActivo(true);
         admin.setProtegido(true);   // ← admin raíz: blindado
 
         // Asignar la relación N:M ANTES del save() para que se persista
         // en la tabla intermedia usuarios_roles dentro de la misma transacción
-        admin.getRoles().add(rolAdmin);
+        rolUsuarioService.sincronizar(admin, Role.ADMIN);
 
         // saveAndFlush fuerza el INSERT inmediato en BD, garantizando que la
         // tabla usuarios_roles también se rellene en esta misma operación
