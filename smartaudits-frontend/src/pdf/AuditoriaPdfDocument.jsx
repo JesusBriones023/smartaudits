@@ -6,14 +6,11 @@ import {
   StyleSheet
 } from '@react-pdf/renderer'
 
-import { getNivelCumplimiento } from '../utils/helpers'
+import { REPORT_LABELS, REPORT_POLICIES, reportHeader, seccionesInforme } from '../report/reportPresentation'
 
-const texto = (valor) => {
-  if (valor === null || valor === undefined) return ''
-  return String(valor)
+const levelColors = {
+  BAJO: '#16a34a', MODERADO: '#ca8a04', ALTO: '#ea580c', MUY_ALTO: '#dc2626',
 }
-
-const lista = (valor) => Array.isArray(valor) ? valor : []
 
 const styles = StyleSheet.create({
   page: {
@@ -314,11 +311,13 @@ const paletas = {
 }
 
 const Section = ({
+  id,
   title,
   palette,
   children
 }) => (
   <View
+    data-report-section={id}
     style={[
       styles.section,
       {
@@ -337,6 +336,7 @@ const Section = ({
       ]}
     >
       <Text
+        data-report-field="heading"
         style={[
           styles.sectionTitle,
           { color: palette.title }
@@ -357,7 +357,7 @@ const Lista = ({
   color = '#374151'
 }) => (
   <View>
-    {lista(items).map((item, index) => (
+    {items.map((item, index) => (
       <View
         key={index}
         style={styles.listRow}
@@ -372,20 +372,20 @@ const Lista = ({
         </Text>
 
         <Text
+          data-report-field="item"
           style={[
             styles.listText,
             { color }
           ]}
         >
-          {texto(item)}
+          {item}
         </Text>
       </View>
     ))}
   </View>
 )
 
-const estiloSeveridad = (severidad) => {
-  const valor = texto(severidad).toUpperCase()
+const estiloSeveridad = (valor) => {
 
   if (valor === 'ALTA') {
     return {
@@ -401,13 +401,12 @@ const estiloSeveridad = (severidad) => {
     }
   }
 
-  return {
-    backgroundColor: '#DCFCE7',
-    color: '#15803D'
-  }
+  // Legacy visual fallback only: a null level does not mean BAJA.
+  return { backgroundColor: '#DCFCE7', color: '#15803D' }
 }
 
 const Campo = ({
+  field,
   label,
   value,
   variant
@@ -418,6 +417,7 @@ const Campo = ({
     </Text>
 
     <Text
+      data-report-field={field}
       style={
         variant === 'evidence'
           ? styles.evidence
@@ -426,33 +426,211 @@ const Campo = ({
             : styles.fieldText
       }
     >
-      {texto(value)}
+      {value}
     </Text>
   </View>
 )
 
-const AuditoriaPdfDocument = ({
-  auditoria
-}) => {
-  const resultado = auditoria?.resultado || {}
-  const puntuacion =
-    auditoria?.puntuacionRiesgo ?? 0
-
-  const nivel =
-    getNivelCumplimiento(puntuacion)
-
-  const fecha = auditoria?.fechaCreacion
-    ? new Date(
-      auditoria.fechaCreacion
-    ).toLocaleDateString('es-ES')
-    : ''
+const AuditoriaPdfDocument = ({ report }) => {
+  const header = reportHeader(report)
+  const nivel = report.score.level
+  const levelColor = nivel ? levelColors[nivel.nivel] : '#2563EB'
 
   const fechaGeneracion =
     new Date().toLocaleString('es-ES')
 
+  const renderSection = section => {
+    switch (section.id) {
+      case 'summary':
+        return (
+          <Section
+          key={section.id}
+          id={section.id}
+          title={section.title}
+          palette={paletas.resumen}
+        >
+          <Text data-report-field="text" style={styles.paragraph}>
+            {section.text}
+          </Text>
+        </Section>
+        )
+      case 'risks':
+        return (
+          <Section
+          key={section.id}
+          id={section.id}
+            title={`${section.title} (${section.items.length})`}
+            palette={paletas.riesgos}
+          >
+            <Lista
+              items={section.items}
+              color="#991B1B"
+            />
+          </Section>
+        )
+      case 'findings':
+        return (
+          <Section
+          key={section.id}
+          id={section.id}
+            title={`${section.title} (${section.items.length})`}
+            palette={paletas.errores}
+          >
+            {section.items.map(
+              (error, index) => (
+                <View
+                  key={index}
+                  data-report-field="finding"
+                  style={styles.errorCard}
+                >
+                  <View
+                    style={styles.errorHeader}
+                  >
+                    <Text
+                      data-report-field="title"
+                      style={styles.errorTitle}
+                    >
+                      {error.title}
+                    </Text>
+
+                    <Text
+                      data-report-field="severity"
+                      style={[
+                        styles.severity,
+                        estiloSeveridad(
+                          error.severityLevel
+                        )
+                      ]}
+                    >
+                      {error.severity}
+                    </Text>
+                  </View>
+
+                  <Campo
+                    field="description"
+                    label={REPORT_LABELS.description}
+                    value={error.description}
+                  />
+
+                  <Campo
+                    field="evidence"
+                    label={REPORT_LABELS.evidence}
+                    value={error.evidence}
+                    variant="evidence"
+                  />
+
+                  <Campo
+                    field="impact"
+                    label={REPORT_LABELS.impact}
+                    value={error.impact}
+                  />
+
+                  <Campo
+                    field="action"
+                    label={REPORT_LABELS.action}
+                    value={error.action}
+                    variant="action"
+                  />
+                </View>
+              )
+            )}
+          </Section>
+        )
+      case 'recommendations':
+        return (
+          <Section
+          key={section.id}
+          id={section.id}
+            title={section.title}
+            palette={
+              paletas.recomendaciones
+            }
+          >
+            <Lista
+              items={
+                section.items
+              }
+              color="#1D4ED8"
+            />
+          </Section>
+        )
+      case 'suggestedTexts':
+        return (
+          <Section
+          key={section.id}
+          id={section.id}
+            title={section.title}
+            palette={paletas.sugeridos}
+          >
+            {section.items.map(
+              (item, index) => (
+                <Text
+                  key={index}
+                  data-report-field="item"
+                  style={styles.suggestion}
+                >
+                  {item}
+                </Text>
+              )
+            )}
+          </Section>
+        )
+      case 'unverifiableItems':
+        return (
+          <Section
+          key={section.id}
+          id={section.id}
+            title={section.title}
+            palette={paletas.faltantes}
+          >
+            <Lista
+              items={section.items}
+              color="#92400E"
+            />
+          </Section>
+        )
+      case 'legalReferences':
+        return (
+          <Section
+          key={section.id}
+          id={section.id}
+            title={section.title}
+            palette={paletas.referencias}
+          >
+            {section.items.map(
+              (referencia, index) => (
+                <Text
+                  key={index}
+                  data-report-field="item"
+                  style={styles.reference}
+                >
+                  {referencia}
+                </Text>
+              )
+            )}
+          </Section>
+        )
+      case 'originalText':
+        return (
+          <Section
+          key={section.id}
+          id={section.id}
+          title={section.title}
+          palette={paletas.original}
+        >
+          <Text data-report-field="text" style={styles.original}>
+            {section.text}
+          </Text>
+        </Section>
+        )
+      default:
+        return null
+    }
+  }
+
   return (
     <Document
-      title={`Informe - ${texto(auditoria?.titulo)}`}
+      title={`Informe - ${header.title}`}
       author="SmartAudits"
       subject="Informe de auditoría legal"
       creator="SmartAudits"
@@ -467,220 +645,54 @@ const AuditoriaPdfDocument = ({
             styles.hero,
             {
               backgroundColor:
-                nivel?.hex || '#2563EB'
+                levelColor
             }
           ]}
         >
           <View style={styles.heroLeft}>
-            <Text style={styles.heroTitle}>
-              {texto(auditoria?.titulo)}
+            <Text data-report-field="title" style={styles.heroTitle}>
+              {header.title}
             </Text>
 
             <Text style={styles.heroSubtitle}>
-              {texto(auditoria?.tipoDocumento) ||
-                'Tipo no especificado'}
+              <Text data-report-field="documentType">{header.documentType}</Text>
               {'  ·  '}
-              {fecha}
+              <Text data-report-field="date">{header.date}</Text>
             </Text>
 
-            {auditoria?.urlOpcional && (
+            {header.referenceUrl && (
               <Text style={styles.heroUrl}>
-                URL de referencia:{' '}
-                {texto(auditoria.urlOpcional)}
+                {REPORT_LABELS.url}:{' '}
+                <Text data-report-field="referenceUrl">{header.referenceUrl}</Text>
               </Text>
             )}
           </View>
 
           <View style={styles.scoreBox}>
-            <Text style={styles.score}>
-              {puntuacion}
+            <Text data-report-field="score" style={styles.score}>
+              {header.score}
             </Text>
 
             <Text style={styles.scoreLabel}>
-              Puntuación de Cumplimiento
+              {REPORT_LABELS.score}
             </Text>
 
-            <Text
+            {nivel && <Text
+              data-report-field="level"
               style={[
                 styles.scoreBadge,
                 {
                   color:
-                    nivel?.hex || '#2563EB'
+                    levelColor
                 }
               ]}
             >
-              {texto(nivel?.etiqueta)}
-            </Text>
+              {header.level}
+            </Text>}
           </View>
         </View>
 
-        {/* Resumen */}
-        <Section
-          title="Resumen Ejecutivo"
-          palette={paletas.resumen}
-        >
-          <Text style={styles.paragraph}>
-            {texto(resultado.resumen) ||
-              'Sin resumen disponible.'}
-          </Text>
-        </Section>
-
-        {/* Incumplimientos */}
-        {lista(resultado.riesgos).length > 0 && (
-          <Section
-            title={`Incumplimientos Detectados (${resultado.riesgos.length})`}
-            palette={paletas.riesgos}
-          >
-            <Lista
-              items={resultado.riesgos}
-              color="#991B1B"
-            />
-          </Section>
-        )}
-
-        {/* Errores */}
-        {lista(resultado.errores).length > 0 && (
-          <Section
-            title={`Errores Detectados (${resultado.errores.length})`}
-            palette={paletas.errores}
-          >
-            {resultado.errores.map(
-              (error, index) => (
-                <View
-                  key={index}
-                  style={styles.errorCard}
-                >
-                  <View
-                    style={styles.errorHeader}
-                  >
-                    <Text
-                      style={styles.errorTitle}
-                    >
-                      {texto(error.titulo)}
-                    </Text>
-
-                    <Text
-                      style={[
-                        styles.severity,
-                        estiloSeveridad(
-                          error.severidad
-                        )
-                      ]}
-                    >
-                      {texto(error.severidad)}
-                    </Text>
-                  </View>
-
-                  <Campo
-                    label="Descripción"
-                    value={error.descripcion}
-                  />
-
-                  <Campo
-                    label="Evidencia"
-                    value={error.evidencia}
-                    variant="evidence"
-                  />
-
-                  <Campo
-                    label="Impacto"
-                    value={error.impacto}
-                  />
-
-                  <Campo
-                    label="Acción correctiva"
-                    value={error.accion}
-                    variant="action"
-                  />
-                </View>
-              )
-            )}
-          </Section>
-        )}
-
-        {/* Recomendaciones */}
-        {lista(resultado.recomendaciones)
-          .length > 0 && (
-          <Section
-            title="Recomendaciones"
-            palette={
-              paletas.recomendaciones
-            }
-          >
-            <Lista
-              items={
-                resultado.recomendaciones
-              }
-              color="#1D4ED8"
-            />
-          </Section>
-        )}
-
-        {/* Textos sugeridos */}
-        {lista(resultado.textosSugeridos)
-          .length > 0 && (
-          <Section
-            title="Textos Sugeridos"
-            palette={paletas.sugeridos}
-          >
-            {resultado.textosSugeridos.map(
-              (item, index) => (
-                <Text
-                  key={index}
-                  style={styles.suggestion}
-                >
-                  {texto(item)}
-                </Text>
-              )
-            )}
-          </Section>
-        )}
-
-        {/* Faltantes */}
-        {lista(resultado.faltantes).length >
-          0 && (
-          <Section
-            title="Elementos No Verificables"
-            palette={paletas.faltantes}
-          >
-            <Lista
-              items={resultado.faltantes}
-              color="#92400E"
-            />
-          </Section>
-        )}
-
-        {/* Referencias */}
-        {lista(resultado.referenciasLegales)
-          .length > 0 && (
-          <Section
-            title="Referencias Legales"
-            palette={paletas.referencias}
-          >
-            {resultado.referenciasLegales.map(
-              (referencia, index) => (
-                <Text
-                  key={index}
-                  style={styles.reference}
-                >
-                  {texto(referencia)}
-                </Text>
-              )
-            )}
-          </Section>
-        )}
-
-        {/* Texto original */}
-        <Section
-          title="Texto Original Auditado"
-          palette={paletas.original}
-        >
-          <Text style={styles.original}>
-            {texto(
-              auditoria?.textoOriginal
-            )}
-          </Text>
-        </Section>
+        {seccionesInforme(report, REPORT_POLICIES.pdf).map(renderSection)}
 
         {/* Pie propio del PDF */}
         <View

@@ -6,6 +6,9 @@ import { pdf } from '@react-pdf/renderer'
 import api from '../api/axios'
 import DetalleAuditoria from '../pages/DetalleAuditoria'
 import AuditoriaPdfDocument from '../pdf/AuditoriaPdfDocument'
+import { buildAuditReport } from '../report/auditReport'
+import { renderReportText } from '../report/reportPresentation'
+import { auditoriaCompleta as audit } from './fixtures/auditReportFixtures'
 
 vi.mock('../api/axios', () => ({ default: { get: vi.fn(), post: vi.fn() } }))
 // Keep the real PDF document; replace only the binary rendering boundary here.
@@ -13,19 +16,6 @@ vi.mock('../api/axios', () => ({ default: { get: vi.fn(), post: vi.fn() } }))
 vi.mock('@react-pdf/renderer', async importOriginal => ({
   ...await importOriginal(), pdf: vi.fn(),
 }))
-
-const audit = {
-  id: 42, titulo: 'Informe / privado', tipoDocumento: 'Aviso Legal',
-  fechaCreacion: '2026-01-02T12:00:00', puntuacionRiesgo: 62,
-  urlOpcional: 'https://example.invalid/legal', textoOriginal: '<script>alert("texto")</script>',
-  resultado: {
-    resumen: 'Resumen sintético', riesgos: ['Plazo ausente'],
-    errores: [{ titulo: 'Conservación', severidad: 'MEDIA', descripcion: 'Falta plazo',
-      evidencia: 'Sin duración', impacto: 'Conservación excesiva', accion: 'Indicar plazo' }],
-    recomendaciones: ['Definir duración'], textosSugeridos: ['Conservamos durante un año.'],
-    faltantes: ['Duración'], referenciasLegales: ['RGPD'],
-  },
-}
 
 beforeEach(() => {
   api.get.mockResolvedValue({ data: audit })
@@ -48,16 +38,29 @@ describe('Active audit exports', () => {
     await user.click(screen.getByRole('button', { name: /Copiar Informe Completo/ }))
     expect(writeText).toHaveBeenCalledTimes(1)
     const copied = writeText.mock.calls[0][0]
+    expect(copied).toBe(renderReportText(buildAuditReport(audit)))
+    expect(copied.endsWith(audit.textoOriginal)).toBe(true)
+    expect(copied).toContain('Clasificación: Cumplimiento Bajo')
     expect(copied).toContain(`AUDITORÍA LEGAL — ${audit.titulo}`)
     expect(copied).toContain('Puntuación de Cumplimiento: 62/100')
     expect(copied).toContain(`URL de referencia: ${audit.urlOpcional}`)
     for (const text of ['Resumen sintético', 'Plazo ausente', 'Conservación [MEDIA]', 'Falta plazo',
-      'Evidencia: Sin duración', 'Impacto: Conservación excesiva', 'Acción: Indicar plazo',
+      'Evidencia: Sin duración', 'Impacto: Conservación excesiva', 'Acción correctiva: Indicar plazo',
       'Definir duración', 'Conservamos durante un año.', 'Duración', 'RGPD', audit.textoOriginal]) {
       expect(copied).toContain(text)
     }
     expect(screen.getByRole('button', { name: /Copiado/ })).toBeVisible()
     expect(container.querySelector('script')).toBeNull()
+    expect(api.post).not.toHaveBeenCalled()
+  })
+
+  it('copies an individual suggested text exactly, without recording a download', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
+    await showDetail()
+    await user.click(screen.getAllByRole('button', { name: /Copiar texto/ })[1])
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(audit.resultado.textosSugeridos[1])
+    expect(api.post).not.toHaveBeenCalled()
   })
 
   it('generates a PDF through the active document, downloads it and records the successful download', async () => {
@@ -81,7 +84,8 @@ describe('Active audit exports', () => {
     expect(api.post).not.toHaveBeenCalled()
     const document = pdf.mock.calls[0][0]
     expect(document.type).toBe(AuditoriaPdfDocument)
-    expect(document.props.auditoria).toEqual(audit)
+    expect(document.props.report).toEqual(buildAuditReport(audit))
+    expect(document.props).not.toHaveProperty('auditoria')
     const blob = new Blob(['synthetic pdf'], { type: 'application/pdf' })
     await act(async () => finishPdf(blob))
     expect(createObjectURL).toHaveBeenCalledWith(blob)
@@ -108,6 +112,8 @@ describe('Active audit exports', () => {
     expect(link).toHaveAttribute('href', url)
     expect(link).toHaveAttribute('target', '_blank')
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
-    expect(screen.getByRole('link', { name: /RGPD/ })).toHaveAttribute('href', '/normativa/rgpd')
+    const references = screen.getAllByRole('link', { name: /RGPD/ })
+    expect(references).toHaveLength(2)
+    for (const reference of references) expect(reference).toHaveAttribute('href', '/normativa/rgpd')
   })
 })

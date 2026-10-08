@@ -2,6 +2,10 @@
 
 Fecha del análisis: 6 de septiembre de 2026.
 
+Actualización focalizada: Fase 2.5, modelo canónico de informe (8 de octubre de 2026).
+Las secciones de informe y sus pruebas reflejan esta implementación; los demás
+hallazgos del análisis inicial no constituyen una revisión nueva de toda la aplicación.
+
 ## 1. Alcance y método
 
 Este documento registra el estado actual del repositorio antes de comenzar SmartAudits 2.0. Se basa en la lectura inicial de `README.md` y la inspección estática de la estructura, los archivos relevantes de los 91 archivos versionados, las dependencias, la configuración y los flujos de código.
@@ -12,7 +16,7 @@ Los hallazgos distinguen comportamientos comprobables por inspección de código
 
 ## 2. Qué hace actualmente SmartAudits
 
-SmartAudits es una aplicación de análisis orientativo de textos legales introducidos manualmente. Permite registrar usuarios, iniciar sesión, analizar un documento, consultar el historial y visualizar, copiar o imprimir un informe. Incluye gestión administrativa de usuarios y trazabilidad de determinadas acciones.
+SmartAudits es una aplicación de análisis orientativo de textos legales introducidos manualmente. Permite registrar usuarios, iniciar sesión, analizar un documento, consultar el historial y visualizar, copiar o descargar un informe PDF. El PDF es el artefacto imprimible actual; no existe un flujo propio de impresión. Incluye gestión administrativa de usuarios y trazabilidad de determinadas acciones.
 
 El motor es propio y determinista: aplica reglas de palabras clave en Java. No utiliza IA, modelos de lenguaje ni APIs externas para analizar el contenido, aunque algunos nombres y textos de la aplicación incluyen «IA».
 
@@ -56,6 +60,8 @@ smartaudits/
         ├── context/               Estado de autenticación
         ├── components/            Layouts y navegación
         ├── pages/                 Pantallas y contenido normativo
+        ├── report/                Modelo canónico y política de presentación
+        ├── pdf/                   Renderer PDF del modelo común
         └── utils/                 Formato y clasificación visual
 ```
 
@@ -117,14 +123,15 @@ Usuario entra en /
                             Comprueba propietario o ADMIN
                             Registra CONSULTA y deserializa JSON guardado
                                     │
-                            Detalle del informe
+                            buildAuditReport(response.data)
+                                    │
+                            AuditReportModel → Detalle del informe
                                     ├── Copiar informe
                                     ├── Copiar textos sugeridos
                                     └── Descargar PDF
-                                            ├── POST /auditorias/{id}/descarga
-                                            └── HTML en ventana nueva
-                                                 → diálogo de impresión
-                                                 → guardar PDF en navegador
+                                            ├── React PDF → Blob
+                                            ├── Inicio de descarga del archivo
+                                            └── POST /auditorias/{id}/descarga
 
 Historial → GET /auditorias/mias para CLIENTE
          → GET /auditorias para ADMIN
@@ -222,7 +229,7 @@ Referencias: [App.jsx](smartaudits-frontend/src/App.jsx), [AuthContext.jsx](smar
 | `GET /auditorias/mias` | Listar auditorías propias | Autenticado |
 | `GET /auditorias` | Listar todas las auditorías | ADMIN |
 | `GET /auditorias/{id}` | Recuperar detalle | Propietario o ADMIN |
-| `POST /auditorias/{id}/descarga` | Registrar evento de descarga | Autenticado; falta autorización sobre la auditoría |
+| `POST /auditorias/{id}/descarga` | Registrar evento de descarga | Propietario o ADMIN |
 
 No hay endpoints de edición, eliminación o reanálisis de auditorías, descarga de PDF binario, refresh token o cierre de sesión en el servidor. El historial de auditorías de la interfaz es una lista de auditorías, no un visor de todos los eventos de acceso.
 
@@ -415,7 +422,7 @@ Aspectos funcionales y límites:
 - El cambio de contraseña exige la actual, pero no invalida tokens anteriores.
 - El cambio de email no exige contraseña actual cuando no se cambia contraseña y emite un nuevo token.
 - La autorización ADMIN se comprueba manualmente en controladores. El detalle comprueba propietario o ADMIN en el servicio.
-- El endpoint de descarga no comprueba propietario ni ADMIN.
+- El endpoint de descarga comprueba que el usuario sea propietario de la auditoría o ADMIN.
 - Las acciones administrativas impiden modificar al usuario protegido. Las bajas (incluida la propia), reactivaciones y cambios de rol conservan el bloqueo pesimista de la fila `roles.nombre = ADMIN` durante la transacción; el último ADMIN activo se comprueba mediante `Usuario.role` después de adquirir ese bloqueo.
 
 `DataInitializer` crea los roles si faltan. Si el bootstrap está habilitado, no hay ningún ADMIN y se suministran credenciales explícitas válidas, crea un administrador protegido. No tiene credenciales de administrador predeterminadas. Su comprobación de existencia incluye administradores inactivos: no garantiza recuperar un sistema que haya quedado sin ADMIN activo.
@@ -424,25 +431,73 @@ Referencias: [SecurityConfig.java](smartaudits-backend/src/main/java/com/smartau
 
 ## 12. Generación del informe
 
-El backend genera un resultado estructurado y lo persiste. La presentación y exportación se implementan en `DetalleAuditoria.jsx`.
+El backend conserva su contrato y persistencia. Al recibir el detalle, el frontend
+ejecuta `buildAuditReport(response.data)` y guarda únicamente `AuditReportModel`
+en el estado de `DetalleAuditoria`. Pantalla, copia completa/parcial y PDF consumen
+ese modelo; no vuelven a interpretar `AuditoriaResponse` ni su `resultado`.
 
-La pantalla muestra puntuación, resumen, riesgos, errores con evidencia/impacto/acción, recomendaciones, textos sugeridos, faltantes, referencias legales y texto original. Las referencias enlazan a páginas normativas internas.
+`report/auditReport.js` es puro: no usa reloj, efectos, API, DOM ni almacenamiento.
+Construye objetos y listas separados de la entrada y congelados, conservando orden,
+duplicados, espacios y saltos del texto original. Listas ausentes o no válidas se
+normalizan a vacías; se omiten elementos null/undefined y se convierten los valores
+textuales a cadenas. Los findings históricos conservan `ruleId/motor/version` null.
 
-«Copiar Informe Completo» compone texto para el portapapeles. Los textos sugeridos también pueden copiarse individualmente.
+El modelo incluye metadata, score, summary, risks, findings, recommendations,
+unverifiableItems, suggestedTexts, legalReferences, originalText y provenance.
+Excluye propietario y puntuación secundaria. `score.value` procede exclusivamente
+de `AuditoriaResponse.puntuacionRiesgo`: nunca usa el score del JSON como fallback.
+Un número finito entre 0 y 100 utiliza exactamente `getNivelCumplimiento`, sin
+alterar umbrales. `score.level` conserva sus campos semánticos (`nivel`, `etiqueta`,
+`etiquetaRiesgo`), sin estilos. Valores ausentes o no válidos quedan como null y se
+presentan como «No disponible», sin clasificación.
 
-«Descargar PDF»:
+La URL conserva el texto original y un href validado solo para HTTP/HTTPS. Los
+findings conservan la severidad original y un `severityLevel` calculado una vez
+con trim/mayúsculas: ALTA, MEDIA, BAJA o null. Los renderers solo eligen estilos
+desde ese nivel. La procedencia superior y por finding permanece en el modelo,
+pero no se expone en pantalla, copia ni PDF; no se reconstruyen datos históricos.
 
-1. Intenta registrar DESCARGA en el backend.
-2. Continúa aunque falle ese registro.
-3. Construye un documento HTML mediante interpolación de cadenas.
-4. Abre una ventana con `window.open`, escribe mediante `document.write` y llama a `print()` tras una espera fija.
-5. El usuario imprime o guarda como PDF desde el navegador.
+`report/reportPresentation.js` define etiquetas, fallbacks, formateo y el catálogo
+ordenado: resumen, incumplimientos detectados, errores detectados, recomendaciones,
+textos sugeridos, elementos no verificables, referencias legales y texto original.
+`seccionesInforme` decide centralmente qué secciones incluye cada salida: pantalla
+y PDF ocultan listas vacías; copia mantiene sus encabezados con «Ninguno/Ninguna».
+Tipo ausente: «No especificado»; resumen ausente: «Sin resumen disponible.»; fecha
+ausente/inválida: «Fecha no disponible». La fecha válida mantiene el formato es-ES
+sin hora. Todas las salidas usan «Acción correctiva» y la misma clasificación.
 
-No se genera un PDF binario en el servidor ni se almacena un archivo exportado. No hay firma del informe. El evento DESCARGA acredita el intento, no que la impresión o el guardado hayan terminado.
+Los rótulos unificados son decisiones deliberadas de 2.5: pantalla, copia y PDF
+comparten vocabulario para secciones y campos, incluidos «Resumen», «Errores
+detectados», la capitalización común y «Descripción:». También es deliberado que
+la copia no añada una línea vacía artificial cuando no existe URL. No son cambios
+accidentales de presentación.
 
-El informe copiado y el imprimible omiten textos sugeridos y texto original, presentes en pantalla. El HTML incluye la etiqueta «URL analizada» aunque la URL solo sea una referencia. Las plantillas no escapan los campos introducidos por el usuario. Tampoco se comprueba si la apertura de ventana devuelve `null` por bloqueo de popups.
+`renderReportText(report)` produce texto plano e incluye la clasificación, todos
+los campos descriptivos del finding, sugerencias y original. No aplica trim global.
+La copia parcial entrega exactamente `report.suggestedTexts[index]`. Los efectos
+del portapapeles siguen en el componente; el feedback anticipado «Copiado» queda
+fuera del alcance de 2.5. La pantalla conserva sus rutas normativas y estilos.
 
-Referencia: [DetalleAuditoria.jsx](smartaudits-frontend/src/pages/DetalleAuditoria.jsx).
+«Descargar PDF» importa diferidamente React PDF y `AuditoriaPdfDocument`, que recibe
+la prop `report`. Genera un Blob real, inicia la descarga mediante un enlace temporal
+y después intenta registrar `POST /auditorias/{id}/descarga`. Un fallo de generación
+no registra DESCARGA; un fallo del registro no invalida el archivo. El evento acredita
+generación e inicio de descarga, no confirmación de guardado. Copiar no registra DESCARGA.
+
+Layout, paletas, paginación, metadatos y fecha de generación pertenecen al PDF; su
+fecha de generación no entra en el modelo histórico. Filename, Blob y descarga
+siguen en el handler de exportación. No se almacena el PDF ni se firma el informe.
+React representa texto, React PDF usa `Text` y el portapapeles usa texto plano;
+no se construye HTML interpolado ni se abre una ventana temporal.
+
+No hay renderer propio de impresión, botón imprimir, `window.print` ni CSS para
+impresión. El PDF es el artefacto imprimible actual. Cualquier futura impresión
+propia deberá consumir `AuditReportModel` y entrar en el contrato de paridad.
+
+Referencias: [modelo](smartaudits-frontend/src/report/auditReport.js),
+[política](smartaudits-frontend/src/report/reportPresentation.js),
+[pantalla](smartaudits-frontend/src/pages/DetalleAuditoria.jsx),
+[PDF](smartaudits-frontend/src/pdf/AuditoriaPdfDocument.jsx).
 
 ## 13. Variables de entorno y servicios externos
 
@@ -467,11 +522,20 @@ La configuración base activa SQL visible y logging DEBUG de aplicación y Sprin
 
 ## 14. Tests y cobertura
 
-No existen tests fuente versionados de backend o frontend, suites end-to-end ni informes de cobertura. El directorio local de clases de test inspeccionado estaba vacío.
+Existen suites frontend con Vitest, tests backend y E2E con Playwright sobre
+MariaDB temporal aislada. Para el informe, fixtures compartidas completas,
+históricas y con puntuación null alimentan:
 
-El backend declara dependencias de pruebas; eso no equivale a disponer de casos de prueba. El frontend no define script de test ni framework específico de pruebas. No se identificó pipeline de CI versionado.
+- `auditReport.test.js`: modelo exacto, inmutabilidad, históricos, arrays, score,
+  severidad, URL segura, fallbacks y texto original intacto.
+- `reportParity.test.jsx`: proyección semántica del DOM, copia y árbol React PDF;
+  verifica cabecera, secciones, orden, campos y ausencia de metadata expuesta.
+- `auditExports.test.jsx`: efectos de copia completa/parcial, entrega del modelo
+  al PDF, filename, Blob y registro de descarga solo después de generar el PDF.
+- `auditPdf.test.jsx`: generación binaria real con una fixture histórica.
 
-La cobertura automatizada aportada por los tests del repositorio es, en términos prácticos, 0 %. No es una medición instrumental de cobertura de líneas. No se ejecutaron pruebas ni compilaciones durante esta revisión.
+Se mantienen los tests de detalle/XSS, clasificación y autorización existentes.
+Esta descripción no atribuye un porcentaje de cobertura de líneas.
 
 ## 15. Riesgos y problemas por criticidad
 
@@ -480,12 +544,12 @@ La criticidad es una priorización técnica, no una puntuación CVSS. «Confirma
 | ID | Criticidad | Hallazgo y evidencia | Impacto y condiciones |
 |---|---|---|---|
 | SEC-01 | Crítica condicionada | Respaldo de clave JWT versionado en `application.properties` | Si se utiliza, permite a quien conozca la clave falsificar tokens para cuentas existentes. Confirmada la configuración, no su uso real. |
-| SEC-02 | Alta | Interpolación sin escape en `DetalleAuditoria.jsx` y `document.write` | Ruta de XSS persistente al imprimir contenido introducido por usuarios. Puede afectar a un administrador que exporte una auditoría ajena y exponer la sesión accesible desde JavaScript. Sin explotación ejecutada. |
+| SEC-02 | Resuelto en el flujo actual | La exportación HTML antigua fue retirada; pantalla usa React, PDF usa React PDF y copia usa texto plano | 2.5 conserva estas protecciones y añade paridad semántica; no reintroduce HTML interpolado. |
 | SEC-03 | Alta | `isEnabled()` siempre verdadero; filtro JWT no comprueba `activo` | Las bajas no invalidan el acceso con tokens aún vigentes. Confirmado por código. |
 | SEC-04 | Alta | Cambio de contraseña sin revocación o versión de sesión | Un token robado sigue siendo válido hasta expirar aunque se cambie la contraseña. |
 | SEC-05 | Alta condicionada | Sujeto JWT basado en email mutable; `userId` no contrastado | Si se libera y reasigna un email antes de expirar un token antiguo, puede autenticarse contra la nueva cuenta. Escenario derivado del código, pendiente de reproducción. |
 | SEC-06 | Alta condicionada | Credenciales de BD versionadas; puertos MariaDB/Adminer publicados en Compose | Riesgo de acceso a datos si se usan esas credenciales y los servicios son alcanzables desde redes no confiables. La exposición efectiva depende del entorno. |
-| SEC-07 | Media | `POST /auditorias/{id}/descarga` sin control de propiedad | Permite registrar eventos sobre auditorías ajenas. El endpoint no devuelve el contenido de la auditoría. |
+| SEC-07 | Resuelto en el flujo actual | `POST /auditorias/{id}/descarga` comprueba propietario o ADMIN | 2.5 conserva el endpoint y su autorización sin cambios backend. |
 | SEC-08 | Media | Sin límites de intentos, cuotas ni máximo de texto en la aplicación | Posible abuso del registro, autenticación y análisis o consumo excesivo de recursos. Pueden existir límites externos no visibles en el repositorio. |
 | SEC-09 | Media | Confianza directa en `X-Forwarded-For` | IP de historial falsificable si el proxy no elimina o controla la cabecera. |
 | FUN-01 | Alta | Motor acepta subcadenas y aplica todas las reglas siempre | Falsos positivos y negativos; no permite interpretar la puntuación como verificación integral de cumplimiento. |
@@ -496,7 +560,7 @@ La criticidad es una priorización técnica, no una puntuación CVSS. «Confirma
 | FUN-06 | Media | Excepciones genéricas sin contrato de errores | Permisos, conflictos y recursos ausentes pueden producir respuestas HTTP inadecuadas o mensajes genéricos. |
 | FUN-07 | Media | Axios elimina sesión también ante 403 | Una denegación de permisos expulsa a un usuario correctamente autenticado. |
 | DAT-01 | Media | `ddl-auto=update` sin migraciones | Evolución del esquema difícil de revisar, reproducir y revertir. |
-| FUN-08 | Baja | `window.open` sin comprobación de resultado | Popups bloqueados pueden romper la exportación y dejar estado de carga inconsistente. |
+| FUN-08 | No aplica al flujo actual | La descarga PDF utiliza Blob y enlace temporal, sin popup | Se conserva el manejo de error de generación y el estado del botón. |
 | FUN-09 | Baja | `JSON.parse` de usuario local sin captura | Almacenamiento local corrupto puede impedir inicialización normal de la interfaz. |
 
 Otros aspectos a revisar: contraseñas con mínimo de seis caracteres, falta de reautenticación para cambiar email, logs con datos personales y ausencia de mecanismos implementados de retención o supresión. No se concluye que el despliegue carezca de todos los controles externos, ni que existan CVE concretas por la antigüedad de una versión.
@@ -511,7 +575,7 @@ Puntos positivos existentes: BCrypt, validación de firma y expiración, DTOs qu
 - Los umbrales 85/65/40 tienen una implementación activa por capa: `MotorAnalisisLegal.generarResumen` y `helpers.js`. El enum sin consumidores `NivelRiesgo` se eliminó en la fase 2.4C. Los tests de ambas capas verifican las mismas fronteras mediante `smartaudits-backend/src/test/resources/motor/risk-boundaries.json`, sin compartir configuración de producción.
 - `Usuario.role` concede las authorities y determina el conteo del último ADMIN; la membresía N:M no autoriza. En la fase 2.4D, registro, bootstrap y cambio administrativo sincronizan ambas representaciones mediante `RolUsuarioService`, que exige la transacción del llamador y falla si falta el catálogo requerido. Solicitar el mismo rol repara solo la membresía del usuario objetivo, sin revocar tokens ni registrar un cambio de rol ficticio. No se reparan datos históricos en bloque. `roles`, `usuarios_roles` y el bloqueo ADMIN se conservan; el frontend centraliza los identificadores en `utils/roles.js` y mantiene `AuthContext.isAdmin` para sus consumidores.
 - En 2.4E se retira la duplicación activa de `resultados`, conservando la tabla legacy y sus datos. El contenido del detalle procede del snapshot JSON y la puntuación presentada de `auditorias.puntuacion_riesgo`; incidencias conserva findings y procedencia histórica. Las pruebas cubren igualdad al crear, divergencias históricas sin reparación, JSON inválido sin fallback y ausencia de SQL JPA a `resultados`.
-- Pantalla, copia e impresión tienen plantillas y contenidos distintos.
+- En 2.5, pantalla, copia y PDF consumen `AuditReportModel` y una política común. Solo la maquetación, estilos y mecanismos de salida son específicos; no existe impresión propia.
 - La auditoría conserva versión de motor/reglas y las incidencias conservan procedencia; el JSON no tiene una versión propia de esquema. Los errores históricos sin los campos de procedencia siguen leyéndose sin inventarlos.
 - Estado de auditoría, tipo documental y algunas clasificaciones son cadenas sin un contrato cerrado uniforme.
 
@@ -536,7 +600,7 @@ Puntos positivos existentes: BCrypt, validación de firma y expiración, DTOs qu
 - Documentación pública indica BCrypt coste 10, pero el código usa 12; también declara propiedades de producción no demostradas por la configuración versionada.
 - Expirar el JWT no elimina automáticamente las entradas de `localStorage`, pese a descripciones de duración de la sesión en páginas públicas.
 - Denominaciones y fechas normativas difieren entre páginas y motor. Necesitan revisión editorial y jurídica separada.
-- El texto «URL analizada» y algunos usos de «IA» sobrestiman el alcance implementado.
+- El informe usa «URL de referencia» y no visita la URL. Algunos usos de «IA» en otras pantallas requieren revisión editorial separada.
 
 ## 17. Limitaciones actuales respecto a una auditoría automática
 
@@ -558,7 +622,7 @@ Estas son limitaciones del estado actual; este documento no diseña las funciona
 | Auditorías por usuario | Historial y asociación de resultados | Actualmente representan un texto, no un dominio |
 | Incidencias | Estructura descriptiva de hallazgos | Carecen de ID de regla persistido, contexto y evidencia técnica |
 | Historial administrativo con snapshots | Atribución de acciones | Completar garantías y alcance de trazabilidad |
-| Historial y detalle frontend | Navegación y visualización aprovechables | Unificar formatos y corregir exportación |
+| Historial y detalle frontend | Navegación y visualización aprovechables | Mantener el contrato de paridad del modelo común de informe |
 | Motor textual | Comprobación heurística complementaria | Explicitar alcance, aplicabilidad y validar reglas |
 | Contenido normativo | Material inicial de documentación | Revisar exactitud, consistencia y mantenimiento |
 | Compose local | Entorno de desarrollo | Revisar credenciales y exposición de servicios |
@@ -569,14 +633,14 @@ El modelo de auditoría textual debe seguir siendo reconocible al evolucionar el
 
 Estas recomendaciones son prioridades preparatorias, no cambios autorizados ni un diseño de las funciones futuras.
 
-1. Corregir exportación HTML, autorización de descargas, validación de cuentas activas y ciclo de vida de tokens, incluida identidad estable y revocación.
+1. Conservar las correcciones de exportación y autorización de descargas; evaluar por separado el estado de las recomendaciones iniciales sobre cuentas y tokens.
 2. Retirar respaldos sensibles y rotar los secretos que se hayan usado; revisar exposición de MariaDB y Adminer.
 3. Verificar el arranque reproducible, CORS y flujo completo; limpiar los archivos de configuración contaminados.
 4. Incorporar pruebas de regresión del motor, aislamiento entre usuarios, bajas, roles y generación de informes.
 5. Definir el significado de la puntuación y distinguir «no detectado» de «incumplimiento demostrado»; validar jurídicamente el catálogo.
 6. Establecer una fuente de verdad para roles y resultados, migraciones de esquema y criterios de compatibilidad histórica.
 7. Limitar entradas, paginar listados y normalizar errores y trazabilidad.
-8. Alinear pantalla, copia, impresión y documentación pública con el comportamiento real.
+8. Mantener alineadas pantalla, copia y PDF mediante el contrato de 2.5; incorporar cualquier futura impresión propia a ese contrato.
 9. Conservar esta descripción como referencia del estado inicial antes de ampliar el alcance del producto.
 
 ## 20. Referencias principales de implementación

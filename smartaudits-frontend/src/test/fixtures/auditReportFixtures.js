@@ -1,0 +1,62 @@
+export const auditoriaCompleta = {
+  id: 42,
+  titulo: 'Informe / privado',
+  tipoDocumento: 'Aviso Legal',
+  fechaCreacion: '2026-01-02T12:00:00',
+  puntuacionRiesgo: 62,
+  urlOpcional: 'https://example.invalid/legal',
+  textoOriginal: '<script>alert("texto")</script>\n \n',
+  usuarioId: 8,
+  usuarioNombre: 'Propietario reservado',
+  usuarioEmail: 'reservado@example.invalid',
+  versionMotor: 'motor-superior-2',
+  versionReglas: 'reglas-superiores-1',
+  fechaAnalisis: '2026-01-01T11:00:00',
+  tipoFuente: 'MANUAL',
+  resultado: {
+    resumen: 'Resumen sintético',
+    puntuacionRiesgo: 99,
+    riesgos: ['Plazo ausente', ' <script>riesgo</script> ', 'Plazo ausente'],
+    errores: [
+      { ruleId: 'R05', motor: 'LEGAL_TEXT', version: 'regla-1',
+        titulo: 'Conservación', severidad: 'MEDIA', descripcion: 'Falta plazo',
+        evidencia: 'Sin duración', impacto: 'Conservación excesiva', accion: 'Indicar plazo' },
+      { ruleId: 'R05', motor: 'LEGAL_TEXT', version: 'regla-2',
+        titulo: '<script>título</script>', severidad: ' alta ', descripcion: 'Descripción segunda',
+        evidencia: '<img src=x onerror="alert(1)">', impacto: 'Impacto segundo', accion: 'Acción segunda' },
+      { ruleId: 'R19', motor: 'LEGAL_TEXT', version: 'regla-1',
+        titulo: 'Tercer hallazgo', severidad: 'BAJA', descripcion: 'Descripción tercera',
+        evidencia: 'Evidencia tercera', impacto: 'Impacto tercero', accion: 'Acción tercera' },
+    ],
+    recomendaciones: ['Definir duración', '<script>recomendación</script>', 'Definir duración'],
+    textosSugeridos: ['Conservamos durante un año.', '  <img src=x onerror="alert(2)">\n'],
+    faltantes: ['Duración', 'Responsable'],
+    referenciasLegales: ['RGPD', 'Referencia sin ruta', 'RGPD'],
+  },
+}
+
+export const auditoriaLegado = {
+  id: 7,
+  titulo: 'Informe histórico',
+  tipoDocumento: null,
+  fechaCreacion: null,
+  puntuacionRiesgo: 17,
+  urlOpcional: 'javascript:alert(1)',
+  textoOriginal: '  Texto histórico\n\n ',
+  resultado: {
+    resumen: null,
+    puntuacionRiesgo: 23,
+    riesgos: [],
+    errores: [null, { titulo: 'Hallazgo histórico', descripcion: null, severidad: null,
+      evidencia: 'Evidencia histórica', impacto: null, accion: null }],
+    recomendaciones: null,
+    faltantes: [],
+    referenciasLegales: [],
+  },
+}
+
+export const auditoriaPuntuacionNull = {
+  ...auditoriaCompleta,
+  puntuacionRiesgo: null,
+  fechaCreacion: 'fecha inválida',
+}
