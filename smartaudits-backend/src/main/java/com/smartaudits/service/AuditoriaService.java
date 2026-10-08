@@ -3,7 +3,6 @@ package com.smartaudits.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartaudits.model.Auditoria;
 import com.smartaudits.model.Incidencia;
-import com.smartaudits.model.Resultado;
 import com.smartaudits.model.Usuario;
 import com.smartaudits.model.TipoFuente;
 import com.smartaudits.model.dto.AuditoriaRequest;
@@ -68,17 +67,7 @@ public class AuditoriaService {
         // 4. Guardar auditoría (necesaria antes de las FK de las tablas hijas)
         auditoria = auditoriaRepository.save(auditoria);
 
-        // 5. Crear Resultado en su tabla propia
-        Resultado resultado = new Resultado();
-        resultado.setAuditoria(auditoria);
-        resultado.setResumenGeneral(resultadoDto.getResumen());
-        resultado.setPuntuacionCumplimiento(resultadoDto.getPuntuacionRiesgo());
-        if (resultadoDto.getRecomendaciones() != null && !resultadoDto.getRecomendaciones().isEmpty()) {
-            resultado.setRecomendacionesGenerales(String.join(" | ", resultadoDto.getRecomendaciones()));
-        }
-        auditoria.setResultado(resultado);
-
-        // 6. Crear Incidencias (una fila por cada error detectado)
+        // 5. Crear Incidencias (una fila por cada error detectado)
         if (resultadoDto.getErrores() != null) {
             for (ResultadoAuditoria.ErrorAuditoria error : resultadoDto.getErrores()) {
                 Incidencia inc = new Incidencia();
@@ -94,10 +83,10 @@ public class AuditoriaService {
             }
         }
 
-        // 7. Guardar todo — cascade maneja resultado e incidencias
+        // 6. Guardar las incidencias mediante cascade
         auditoria = auditoriaRepository.save(auditoria);
 
-        // 8. Registrar CREACION en historial
+        // 7. Registrar CREACION en historial
         historialService.registrarCreacion(auditoria, usuario, ipAcceso);
 
         return toResponseComplete(auditoria, resultadoDto);

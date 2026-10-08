@@ -12,6 +12,13 @@ import com.smartaudits.service.HistorialService;
 import com.smartaudits.service.UsuarioService;
 import com.smartaudits.service.motor.AnalizadorLegal;
 import com.smartaudits.service.AuditQuotaService;
+import com.smartaudits.model.TipoFuente;
+import com.smartaudits.model.dto.ResultadoAuditoria;
+import com.smartaudits.service.motor.VersionAnalizador;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Encoders;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +33,12 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import javax.crypto.SecretKey;
 import java.util.Optional;
+import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
+import java.time.LocalDateTime;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -48,6 +61,7 @@ class AuditoriaAuthorizationTest {
 
     @Autowired MockMvc mvc;
     @Autowired JwtUtil jwt;
+    @Autowired ObjectMapper mapper;
 
     @MockBean UsuarioRepository users;
     @MockBean UsuarioService userService;
@@ -158,5 +172,79 @@ class AuditoriaAuthorizationTest {
             .andExpect(status().isUnauthorized());
 
         verifyNoInteractions(audits, userService, history, motor);
+    }
+
+    @Test
+    void creationDetailAndAllListingsKeepTheExternalAuditContract() throws Exception {
+        var analysis = new ResultadoAuditoria();
+        analysis.setResumen("Snapshot contract");
+        analysis.setPuntuacionRiesgo(62);
+        analysis.setRecomendaciones(List.of("First | intact", "Second"));
+        analysis.setErrores(List.of(new ResultadoAuditoria.ErrorAuditoria(
+                "R05", "LEGAL_TEXT", "1", "Title", "Description", "MEDIA", "Evidence", "Impact", "Action")));
+        when(motor.version()).thenReturn(new VersionAnalizador("2", "1"));
+        when(motor.analyze(any())).thenReturn(analysis);
+        Auditoria[] persisted = new Auditoria[1];
+        when(audits.save(any(Auditoria.class))).thenAnswer(invocation -> {
+            Auditoria value = invocation.getArgument(0);
+            value.setId(7L);
+            value.setFechaCreacion(LocalDateTime.of(2026, 1, 2, 12, 0));
+            persisted[0] = value;
+            return value;
+        });
+        var created = mapper.readTree(mvc.perform(post("/auditorias")
+                        .header("Authorization", bearer(1000L, Role.CLIENTE))
+                        .contentType("application/json")
+                        .content("""
+                                {"titulo":"Contract audit","tipoDocumento":"Aviso Legal",
+                                 "textoOriginal":"Original manual content","urlOpcional":"https://example.invalid/legal"}
+                                """))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString());
+        assertAuditFields(created);
+        assertThat(created.path("puntuacionRiesgo").intValue()).isEqualTo(62);
+        assertThat(created.path("versionMotor").asText()).isEqualTo("2");
+        assertThat(created.path("versionReglas").asText()).isEqualTo("1");
+        assertThat(created.path("tipoFuente").asText()).isEqualTo(TipoFuente.MANUAL.name());
+        assertThat(created.path("fechaAnalisis").isNull()).isFalse();
+        assertThat(created.path("usuarioId").longValue()).isEqualTo(1000L);
+        assertThat(created.path("resultado")).isEqualTo(mapper.valueToTree(analysis));
+        assertThat(fieldNames(created.path("resultado"))).containsExactlyInAnyOrder(
+                "resumen", "puntuacionRiesgo", "riesgos", "errores", "recomendaciones",
+                "textosSugeridos", "referenciasLegales", "faltantes");
+        when(audits.findById(7L)).thenReturn(Optional.of(persisted[0]));
+        var detail = mapper.readTree(mvc.perform(get("/auditorias/7")
+                        .header("Authorization", bearer(1000L, Role.CLIENTE)))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertThat(detail).isEqualTo(created);
+
+        var page = new PageImpl<>(List.of(persisted[0]));
+        when(audits.findByUsuarioId(eq(1000L), any(Pageable.class))).thenReturn(page);
+        when(audits.findAll(any(Pageable.class))).thenReturn(page);
+        when(audits.findByUsuarioNombreContainingIgnoreCase(eq("actor"), any(Pageable.class))).thenReturn(page);
+        for (String url : List.of("/auditorias/mias", "/auditorias", "/auditorias?usuario=actor")) {
+            var listing = mapper.readTree(mvc.perform(get(url)
+                            .header("Authorization", bearer(1000L, Role.ADMIN)))
+                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+            assertThat(fieldNames(listing)).containsExactlyInAnyOrder(
+                    "content", "page", "size", "totalElements", "totalPages", "first", "last");
+            var item = listing.path("content").get(0);
+            assertAuditFields(item);
+            var expected = created.deepCopy();
+            ((com.fasterxml.jackson.databind.node.ObjectNode) expected).putNull("resultado").putNull("textoOriginal");
+            assertThat(item).isEqualTo(expected);
+        }
+    }
+
+    private static void assertAuditFields(JsonNode response) {
+        assertThat(fieldNames(response)).containsExactlyInAnyOrder(
+                "id", "titulo", "tipoDocumento", "fechaCreacion", "versionMotor", "versionReglas",
+                "fechaAnalisis", "tipoFuente", "puntuacionRiesgo", "urlOpcional", "textoOriginal",
+                "resultado", "usuarioId", "usuarioNombre", "usuarioEmail");
+    }
+
+    private static Set<String> fieldNames(JsonNode node) {
+        Set<String> names = new HashSet<>();
+        node.fieldNames().forEachRemaining(names::add);
+        return names;
     }
 }

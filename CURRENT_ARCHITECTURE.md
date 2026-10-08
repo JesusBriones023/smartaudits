@@ -106,7 +106,7 @@ Usuario entra en /
                             ResultadoAuditoria
                                     │
                             Transacción de persistencia
-                            Auditoría + JSON + Resultado + Incidencias
+                            Auditoría + JSON + Incidencias
                             + registro de CREACION
                                     │
                             HTTP 201 con ID y resultado
@@ -243,7 +243,7 @@ Referencias: [controladores](smartaudits-backend/src/main/java/com/smartaudits/c
 
 ## 8. Base de datos, entidades y relaciones
 
-MariaDB se accede mediante JPA/Hibernate. `spring.jpa.hibernate.ddl-auto=update` delega la evolución del esquema en Hibernate. No hay migraciones versionadas. El esquema descrito se deriva de las anotaciones; no se inspeccionó una instancia real.
+MariaDB se accede mediante JPA/Hibernate con `ddl-auto=validate`. Flyway conserva las migraciones V1/V2/V3. En 2.4E no se modifica el esquema: `resultados` permanece como tabla legacy aunque ya no tiene entidad ni repositorio JPA activos. El validador aislado comprueba que esa tabla adicional no impide el arranque con `validate`.
 
 | Tabla | Información principal |
 |---|---|
@@ -251,8 +251,8 @@ MariaDB se accede mediante JPA/Hibernate. `spring.jpa.hibernate.ddl-auto=update`
 | `roles` | ID, nombre único y descripción |
 | `usuarios_roles` | Unión N:M entre usuarios y roles |
 | `auditorias` | Propietario, título, tipo, texto original, URL opcional, fecha, estado, puntuación y resultado JSON |
-| `resultados` | Auditoría única, resumen, recomendaciones concatenadas, puntuación y fecha |
-| `incidencias` | Auditoría, categoría, severidad, descripción, recomendación, evidencia e impacto |
+| `resultados` | Legacy sin mapeo JPA ni nuevas escrituras: conserva auditoría única, resumen, recomendaciones concatenadas, puntuación y fecha históricas |
+| `incidencias` | Hallazgos estructurados: auditoría, categoría, severidad, descripción, recomendación, evidencia, impacto y procedencia `rule_id`/`motor`/`version` |
 | `historial_auditorias` | Auditoría, usuario actor, fecha, acción e IP |
 | `historial_acciones_admin` | Administrador, objetivo, acción, detalles, fecha y snapshots de nombres/emails |
 
@@ -260,7 +260,7 @@ MariaDB se accede mediante JPA/Hibernate. `spring.jpa.hibernate.ddl-auto=update`
 Usuario 1 ───────── N Auditoría
 Usuario N ───────── M Rol          mediante usuarios_roles
 
-Auditoría 1 ─────── 1 Resultado
+Auditoría 1 ─────── 0..1 resultados (solo tabla legacy, sin relación JPA)
 Auditoría 1 ─────── N Incidencia
 Auditoría 1 ─────── N HistorialAuditoría
 Usuario   1 ─────── N HistorialAuditoría
@@ -271,12 +271,15 @@ Usuario objetivo      1 ── N HistorialAccionAdmin
 
 Detalles relevantes:
 
-- Hay siete entidades persistentes y una tabla de unión. `Role` y `TipoAccionAdmin` son enums, no tablas independientes. `NivelRiesgo` se eliminó en la fase 2.4C al no tener consumidores.
-- `Resultado.auditoria_id` es obligatorio y único.
-- Auditoría tiene cascada y `orphanRemoval` sobre resultado, incidencias e historial. Usuario los tiene sobre auditorías. La baja lógica no activa estas eliminaciones.
-- El resultado completo se guarda en `auditorias.resultado_json`, además de parte de su información en `resultados` e `incidencias`.
-- La lectura del detalle deserializa el JSON; no reconstruye el informe desde las tablas hijas.
-- Las recomendaciones de `resultados` se concatenan con un separador textual, perdiendo la estructura de lista de esa representación.
+- Hay seis entidades persistentes activas, una tabla de unión y la tabla legacy `resultados`. `Role` y `TipoAccionAdmin` son enums, no tablas independientes. `NivelRiesgo` se eliminó en 2.4C; `Resultado` y `ResultadoRepository` se retiran en 2.4E.
+- `resultados.auditoria_id` conserva NOT NULL, UNIQUE y su FK hacia `auditorias` con comportamiento RESTRICT. Una futura eliminación física de auditorías debe considerar esas filas aunque no estén mapeadas por JPA. Eliminar físicamente la tabla requiere una decisión posterior; 2.4E no crea V4.
+- Auditoría conserva cascada y `orphanRemoval` sobre incidencias e historial. Usuario los tiene sobre auditorías. La baja lógica no activa estas eliminaciones.
+- `auditorias.resultado_json` es el snapshot de la salida del motor y la fuente de `AuditoriaResponse.resultado` en el detalle. El contexto y la procedencia superior se conservan en `auditorias`.
+- Al crear, `auditorias.puntuacion_riesgo == resultado_json.puntuacionRiesgo`: ambos proceden del mismo `ResultadoAuditoria` en memoria y se persisten en la misma transacción. En lectura, la columna `auditorias.puntuacion_riesgo` es la puntuación canónica servida por API y utilizada por listado, detalle, copia y PDF. No hay reconciliación posterior ni corrección de históricos divergentes.
+- La lectura del detalle deserializa el JSON; no reconstruye el informe desde tablas. Un JSON NULL o corrupto sigue haciendo fallar la lectura, sin fallback a `resultados`.
+- `incidencias` conserva los findings estructurados. Aunque actualmente no tiene consumidores productivos de lectura, preserva la procedencia V3: las filas históricas pueden tener `ruleId`/`motor`/`version` ausentes del JSON original y no son regenerables de forma segura desde él.
+- `resultados` conserva todas sus filas históricas, `fecha_resultado` y posibles valores divergentes; las nuevas auditorías no crean filas. La concatenación histórica de recomendaciones perdió estructura de lista y no se intenta invertir. No se actualizan históricos, no se reanalizan y no se reserializa su JSON.
+- Compatibilidad de vuelta a `2be8a63`: una prueba aislada sobre sus fuentes exactas con H2 comprueba que el modelo anterior tolera `Resultado == null` y lee detalle/listados de una auditoría con snapshot, puntuación e incidencias sin fila legacy. No equivale a un rollback operativo de MariaDB. Una versión anterior volvería a crear filas `resultados` para nuevas auditorías; no se rellenan automáticamente las ausentes.
 - El enum `usuarios.role` es la autoridad efectiva de seguridad; la relación N:M duplica esa información.
 - Los textos originales y resultados JSON son columnas `TEXT`. El DTO no limita el texto de entrada conforme a la capacidad de almacenamiento.
 - Las fechas usan `LocalDateTime`, sin zona horaria explícita en el modelo.
@@ -310,7 +313,7 @@ Secuencia de procesamiento:
 4. El motor devuelve un `ResultadoAuditoria` en memoria.
 5. El servicio crea la auditoría con texto, metadatos, puntuación y estado `COMPLETADA`.
 6. Jackson serializa el resultado en JSON, y se guarda la auditoría.
-7. Se crea un `Resultado` y una `Incidencia` por error; se persisten mediante cascada.
+7. Se crea una `Incidencia` por error y se persiste mediante cascada. No se crea ninguna fila en `resultados`; se mantienen los dos `save` y la transacción existente.
 8. Se intenta registrar CREACION con usuario e IP.
 9. Se devuelve `AuditoriaResponse` completo con HTTP 201.
 
@@ -507,9 +510,9 @@ Puntos positivos existentes: BCrypt, validación de firma y expiración, DTOs qu
 - `PrivateRoute.jsx` y `PrivateRoutes.jsx` duplican el mismo componente; se utiliza el primero.
 - Los umbrales 85/65/40 tienen una implementación activa por capa: `MotorAnalisisLegal.generarResumen` y `helpers.js`. El enum sin consumidores `NivelRiesgo` se eliminó en la fase 2.4C. Los tests de ambas capas verifican las mismas fronteras mediante `smartaudits-backend/src/test/resources/motor/risk-boundaries.json`, sin compartir configuración de producción.
 - `Usuario.role` concede las authorities y determina el conteo del último ADMIN; la membresía N:M no autoriza. En la fase 2.4D, registro, bootstrap y cambio administrativo sincronizan ambas representaciones mediante `RolUsuarioService`, que exige la transacción del llamador y falla si falta el catálogo requerido. Solicitar el mismo rol repara solo la membresía del usuario objetivo, sin revocar tokens ni registrar un cambio de rol ficticio. No se reparan datos históricos en bloque. `roles`, `usuarios_roles` y el bloqueo ADMIN se conservan; el frontend centraliza los identificadores en `utils/roles.js` y mantiene `AuthContext.isAdmin` para sus consumidores.
-- Resultado JSON y tablas mantienen representaciones redundantes; el frontend depende del JSON.
+- En 2.4E se retira la duplicación activa de `resultados`, conservando la tabla legacy y sus datos. El contenido del detalle procede del snapshot JSON y la puntuación presentada de `auditorias.puntuacion_riesgo`; incidencias conserva findings y procedencia histórica. Las pruebas cubren igualdad al crear, divergencias históricas sin reparación, JSON inválido sin fallback y ausencia de SQL JPA a `resultados`.
 - Pantalla, copia e impresión tienen plantillas y contenidos distintos.
-- No hay versión del motor ni del esquema del resultado para interpretar informes históricos.
+- La auditoría conserva versión de motor/reglas y las incidencias conservan procedencia; el JSON no tiene una versión propia de esquema. Los errores históricos sin los campos de procedencia siguen leyéndose sin inventarlos.
 - Estado de auditoría, tipo documental y algunas clasificaciones son cadenas sin un contrato cerrado uniforme.
 
 ### Organización y persistencia

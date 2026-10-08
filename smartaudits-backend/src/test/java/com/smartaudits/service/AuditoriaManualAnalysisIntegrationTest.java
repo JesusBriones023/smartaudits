@@ -70,7 +70,7 @@ class AuditoriaManualAnalysisIntegrationTest {
         assertThat(stored.getUrlOpcional()).isEqualTo(request.getUrlOpcional());
         assertThat(mapper.readValue(stored.getResultadoJson(), ResultadoAuditoria.class)).isEqualTo(expected);
         assertThat(stored.getIncidencias()).hasSize(expected.getErrores().size());
-        assertThat(stored.getResultado().getPuntuacionCumplimiento()).isEqualTo(expected.getPuntuacionRiesgo());
+        assertThat(stored.getPuntuacionRiesgo()).isEqualTo(expected.getPuntuacionRiesgo());
 
         var read = service.obtenerAuditoriaPorId(created.getId(), owner.getId(), false, owner, "192.0.2.11");
         assertThat(read.getResultado()).isEqualTo(expected);

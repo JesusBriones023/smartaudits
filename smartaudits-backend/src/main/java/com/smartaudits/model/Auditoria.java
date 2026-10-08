@@ -90,10 +90,6 @@ public class Auditoria {
     @Column(nullable = false, length = 20)
     private String estado = "COMPLETADA";
 
-    // Relación 1:1 con tabla resultados
-    @OneToOne(mappedBy = "auditoria", cascade = CascadeType.ALL, orphanRemoval = true)
-    private Resultado resultado;
-
     // Relación 1:N con tabla incidencias
     @OneToMany(mappedBy = "auditoria", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Incidencia> incidencias = new ArrayList<>();

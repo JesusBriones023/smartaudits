@@ -109,14 +109,8 @@ class AuditoriaServicePersistenceTest {
         assertThat(stored.getPuntuacionRiesgo()).isEqualTo(62);
         assertThat(stored.getFechaCreacion()).isBetween(before, LocalDateTime.now().plusSeconds(1));
         assertThat(mapper.readValue(stored.getResultadoJson(), ResultadoAuditoria.class)).isEqualTo(analysis);
-        assertThat(stored.getResultado()).satisfies(result -> {
-            assertThat(result.getId()).isNotNull();
-            assertThat(result.getAuditoria().getId()).isEqualTo(stored.getId());
-            assertThat(result.getResumenGeneral()).isEqualTo(analysis.getResumen());
-            assertThat(result.getPuntuacionCumplimiento()).isEqualTo(62);
-            assertThat(result.getRecomendacionesGenerales()).isEqualTo("Definir el plazo | Explicar los derechos");
-            assertThat(result.getFechaResultado()).isBetween(before, LocalDateTime.now().plusSeconds(1));
-        });
+        assertThat(mapper.readTree(stored.getResultadoJson()).path("puntuacionRiesgo").intValue())
+                .isEqualTo(stored.getPuntuacionRiesgo());
         assertThat(stored.getIncidencias()).singleElement().satisfies(incident -> {
             assertThat(incident.getRuleId()).isEqualTo(error.getRuleId());
             assertThat(incident.getMotor()).isEqualTo(error.getMotor());

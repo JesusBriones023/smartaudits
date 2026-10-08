@@ -1162,6 +1162,14 @@ function ConvertTo-Base64Url {
 function Assert-NewAuditViaApi {
     param([string]$ContainerId, [int]$ApiPort, [string]$JwtSecret)
 
+    # Capture every legacy row, including its independent timestamp and divergent data.
+    # Derive the baseline instead of assuming the fixture contains one result.
+    $legacyResultsSql = @'
+SELECT COUNT(*) FROM resultados;
+SELECT CONCAT(id,'|',SHA2(JSON_ARRAY(id,fecha_resultado,puntuacion_cumplimiento,recomendaciones_generales,resumen_general,auditoria_id),256)) FROM resultados ORDER BY id;
+'@
+    $legacyResultsBefore = @(Invoke-DockerSql -ContainerId $ContainerId -Sql $legacyResultsSql)
+
     # Authenticate only the synthetic sentinel against this run's loopback backend.
     # The signing key was generated for this temporary DB; no real credentials.
     $now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
@@ -1189,6 +1197,17 @@ function Assert-NewAuditViaApi {
         $audit.tipoFuente -ceq 'MANUAL' -and $audit.fechaAnalisis) `
         -Message 'New API audit did not return the current analysis provenance.'
     $id = [long]$audit.id
+    $newResultCount = @(Invoke-DockerSql -ContainerId $ContainerId -Sql "SELECT COUNT(*) FROM resultados WHERE auditoria_id=$id;")
+    Assert-Condition -Condition ($newResultCount.Count -eq 1 -and $newResultCount[0] -ceq '0') `
+        -Message 'New audits must not create rows in legacy resultados.'
+    $legacyResultsAfter = @(Invoke-DockerSql -ContainerId $ContainerId -Sql $legacyResultsSql)
+    Assert-Condition -Condition (($legacyResultsAfter -join "`n") -ceq ($legacyResultsBefore -join "`n")) `
+        -Message 'Legacy resultados count, timestamps or row hashes changed during audit creation.'
+    $score = @(Invoke-DockerSql -ContainerId $ContainerId -Sql "SELECT puntuacion_riesgo FROM auditorias WHERE id=$id AND puntuacion_riesgo = JSON_VALUE(resultado_json, '$.puntuacionRiesgo');")
+    Assert-Condition -Condition ($score.Count -eq 1 -and [int]$score[0] -eq $audit.puntuacionRiesgo -and
+        $audit.puntuacionRiesgo -eq $audit.resultado.puntuacionRiesgo) `
+        -Message 'New audit score must agree across the snapshot, canonical column and API.'
+    Write-Host 'LEGACY RESULTADOS PRESERVED (COUNT + ROW HASHES); NEW AUDIT RESULTADOS=0; SCORE CONSISTENT'
     $stored = @(Invoke-DockerSql -ContainerId $ContainerId -Sql "SELECT CONCAT(version_motor,'|',version_reglas,'|',tipo_fuente,'|',usuario_id,'|',url_opcional,'|',IF(fecha_analisis <= fecha_creacion AND fecha_analisis >= fecha_creacion - INTERVAL 1 MINUTE,1,0),'|',IF(JSON_VALID(resultado_json),1,0)) FROM auditorias WHERE id=$id;")
     Assert-Condition -Condition ($stored.Count -eq 1 -and $stored[0] -ceq '2|1|MANUAL|900001|https://example.invalid/reference-only|1|1') `
         -Message 'New API audit provenance or result was not persisted correctly.'
@@ -1489,6 +1508,11 @@ try {
         throw 'Unable to inspect backend JAR.'
     }
 
+    Assert-Condition -Condition (
+        $jarEntries -cnotcontains 'BOOT-INF/classes/com/smartaudits/model/Resultado.class' -and
+        $jarEntries -cnotcontains 'BOOT-INF/classes/com/smartaudits/repository/ResultadoRepository.class'
+    ) -Message 'Legacy Resultado entity/repository must not remain in the application artifact.'
+
     $jarMigrations = @(
         $jarEntries |
             Where-Object {
@@ -1594,6 +1618,7 @@ try {
     Assert-ProvenanceSchema -ContainerId $emptyContainerId
     Assert-IncidentProvenance -ContainerId $emptyContainerId
     Write-Host 'FRESH V1 -> V2 -> V3 OK'
+    Write-Host 'HIBERNATE VALIDATE OK WITH UNMAPPED LEGACY RESULTADOS TABLE'
 
     $emptyHttp = Get-HttpStatus `
         -Uri "http://127.0.0.1:${emptyApiPort}/auditorias/mias"
