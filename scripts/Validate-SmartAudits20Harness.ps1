@@ -1,8 +1,29 @@
-# F3.2 only. No target/database/credential parameters: all resources are owned and ephemeral.
+<#
+.SYNOPSIS
+Validates F3 rollback and the UTC microsecond contract on owned, isolated MariaDB.
+.DESCRIPTION
+Requires Windows/PowerShell, Git, JDK 17 with jdk.attach, Maven and dependencies
+already cached for offline (-o) builds. Requires a running Docker daemon and the
+local mariadb:11.2 image; nothing is downloaded automatically.
+Full runs also require Node/npm, frontend node_modules, resolvable Playwright and
+its installed Chromium, plus available loopback ports. The tracked frontend must
+equal cc78d6b and have no tracked/untracked source changes.
+Vite .vite is moved to this run's temporary directory and restored byte-for-byte.
+Do not run another frontend/Vite process concurrently. Restoration failure retains
+the saved cache and reports cleanup failure instead of deleting the recovery copy.
+Only V1/V2/V3 plus numeric, guarded V4+ from HEAD and temporary V9000 are used.
+Future V4 entities must prove they call UtcMicros before persisting timestamps;
+driver handling of an unnormalized Instant is not the domain contract.
+.PARAMETER TimestampOnly
+Runs the two separate JVM timestamp probes without backend startup or E2E.
+.PARAMETER SelfTestOnly
+Runs finite-output and SQL-guard self-tests without Docker or application startup.
+#>
+# No target/database/credential parameters: all resources are owned and ephemeral.
 # Reuses the unchanged E2E server/config/flows directly (explicitly authorized).
 # Does not invoke run.mjs, the legacy validator entrypoint, Compose or Flyway repair.
 [CmdletBinding()]
-param([switch]$TimestampOnly)
+param([switch]$TimestampOnly, [switch]$SelfTestOnly)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -36,6 +57,14 @@ $backend = $null
 $newBackend = $null
 $dbEnv = @{}
 $migrationHashes = @{}
+$frontend = Join-Path $repo 'smartaudits-frontend'
+$viteCache = Join-Path $frontend 'node_modules/.vite'
+$viteSaved = Join-Path $tempRoot 'vite-cache-original'
+$cacheManaged = $false
+$cacheExisted = $false
+$cacheBefore = $null
+$preserveTemp = $false
+$expectedVersions = @()
 
 function Assert-That([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
@@ -89,9 +118,15 @@ function Start-Owned([string]$Name, [string]$Exe, [string[]]$Arguments, [string]
     $children.Add($record)
     return $record
 }
+function Await-Output([Threading.Tasks.Task[string]]$Task, [string]$Name, [int]$TimeoutMs = 10000) {
+    Assert-That ($TimeoutMs -gt 0) 'Output timeout must be finite and positive'
+    if (-not $Task.Wait($TimeoutMs)) { throw "Output capture timed out: $Name (pipe may still be open)" }
+    # The task is complete; this retrieval cannot wait on an inherited pipe.
+    return $Task.GetAwaiter().GetResult()
+}
 function Output-Of($Record) {
     Assert-That ($Record.Process.HasExited) 'Cannot collect output from a running child'
-    return $Record.Out.Result + $Record.Err.Result
+    return (Await-Output $Record.Out "$($Record.Name) stdout") + (Await-Output $Record.Err "$($Record.Name) stderr")
 }
 function Native([string]$Name, [string]$Exe, [string[]]$Arguments, [string]$Cwd = $repo, [hashtable]$Extra = @{}, [int]$Timeout = 60) {
     $record = Start-Owned $Name $Exe $Arguments $Cwd $Extra
@@ -99,7 +134,7 @@ function Native([string]$Name, [string]$Exe, [string[]]$Arguments, [string]$Cwd 
     $output = Output-Of $record
     if ($record.Process.ExitCode -ne 0) {
         $tail = $output.Substring([Math]::Max(0, $output.Length - 5000))
-        throw "$Name failed (exit $($record.Process.ExitCode)): $(Protect $tail)"
+        throw "$Name failed (exit $($record.Process.ExitCode)); final $($tail.Length) of $($output.Length) log characters: $(Protect $tail)"
     }
     return $output.Trim()
 }
@@ -216,17 +251,202 @@ function Legacy-Access([int]$Port) {
     finally { $response.Dispose() }
     Pass 'Legacy functional access: real login + authenticated GET /usuarios HTTP 200'
 }
-function Assert-Expansion([string]$Text, [string]$Table) {
-    # Conservative allowlist for additive single-table migrations. Reusable for real V4+.
-    # Reject comments too, avoiding keyword hiding; future supported syntax needs review.
-    Assert-That ($Table -cmatch '^[a-z][a-z0-9_]+$') 'Unsafe table name'
-    Assert-That ($Text -notmatch '(?s)--|/\*|\*/|#') 'Migration comments are not accepted by this conservative guard'
-    Assert-That ($Text.Trim() -match "(?is)^CREATE\s+TABLE\s+$Table\s*\(.+\)\s*ENGINE=InnoDB\s*;\s*$") 'Expected one CREATE TABLE'
-    Assert-That (([regex]::Matches($Text,'(?i)\bCREATE\s+TABLE\b')).Count -eq 1) 'Multiple CREATE TABLE statements'
-    Assert-That (([regex]::Matches($Text,';')).Count -eq 1) 'Multiple SQL statements'
-    Assert-That ($Text -notmatch '(?i)\b(ALTER|DROP|RENAME|INSERT|UPDATE|DELETE|REPLACE|TRUNCATE|CALL|GRANT|LOAD|SELECT)\b') 'Forbidden SQL operation'
-    Assert-That ($Table -notin @('usuarios','roles','usuarios_roles','auditorias','incidencias','resultados','historial_auditorias','historial_acciones_admin')) 'Legacy target forbidden'
-    # REFERENCES usuarios is legitimate for future v2 identity FKs; legacy DDL/DML targets are not.
+function Assert-Expansion([string]$Path) {
+    # Conservative lexical subset, not a universal SQL parser. Strings and quoted
+    # identifiers cannot hide statement delimiters/keywords from this analysis.
+    $sql = [IO.File]::ReadAllText($Path)
+    $lexer = [regex]'\G(?:(?<space>\s+)|(?<string>''(?:[^''\\]|'''')*'')|(?<quoted>`[A-Za-z_][A-Za-z0-9_]*`)|(?<word>[A-Za-z_][A-Za-z0-9_]*)|(?<number>\d+(?:\.\d+)?)|(?<symbol>[(),;=<>!+*.-]))'
+    $tokens = New-Object 'System.Collections.Generic.List[object]'
+    $offset = 0
+    while ($offset -lt $sql.Length) {
+        Assert-That (-not $sql.Substring($offset).StartsWith('--')) 'SQL comments forbidden'
+        $match = $lexer.Match($sql, $offset)
+        Assert-That ($match.Success -and $match.Index -eq $offset) 'Unsupported SQL token/comment/escape'
+        $offset += $match.Length
+        if ($match.Groups['space'].Success) { continue }
+        foreach ($kind in @('string','quoted','word','number','symbol')) {
+            if ($match.Groups[$kind].Success) {
+                $tokens.Add(@{Kind=$kind; Text=$match.Value.ToUpperInvariant()})
+                break
+            }
+        }
+    }
+    Assert-That ($tokens.Count -ge 8) 'Incomplete CREATE TABLE'
+    Assert-That ($tokens[0].Kind -eq 'word' -and $tokens[0].Text -eq 'CREATE' -and
+        $tokens[1].Kind -eq 'word' -and $tokens[1].Text -eq 'TABLE') 'Expected CREATE TABLE only'
+    Assert-That ($tokens[2].Kind -in @('word','quoted') -and $tokens[3].Text -eq '(') 'Expected unqualified target table'
+    $table = $tokens[2].Text.Trim([char]96)
+    Assert-That ($table -notin @('USUARIOS','ROLES','USUARIOS_ROLES','AUDITORIAS','INCIDENCIAS','RESULTADOS',
+        'HISTORIAL_AUDITORIAS','HISTORIAL_ACCIONES_ADMIN','FLYWAY_SCHEMA_HISTORY')) 'Legacy target forbidden'
+    $depth = 0
+    $close = -1
+    for ($i=3; $i -lt $tokens.Count; $i++) {
+        $token = $tokens[$i]
+        if ($token.Kind -eq 'symbol') {
+            if ($token.Text -eq '(') { $depth++ }
+            if ($token.Text -eq ')') { $depth--; if ($depth -eq 0) { $close=$i; break } }
+            Assert-That ($token.Text -ne ';' -and $depth -ge 0) 'Unexpected statement delimiter'
+        }
+        if ($token.Kind -ne 'word') { continue }
+        Assert-That ($token.Text -notin @('CREATE','ALTER','DROP','RENAME','TRUNCATE','INSERT','REPLACE','CALL',
+            'LOAD','SELECT','GRANT','REVOKE','SET','CASCADE','CURRENT_TIMESTAMP')) 'Forbidden SQL operation/default'
+        if ($token.Text -in @('DELETE','UPDATE')) {
+            Assert-That ($tokens[$i-1].Kind -eq 'word' -and $tokens[$i-1].Text -eq 'ON') 'DML forbidden'
+            $restrict = $i+1 -lt $tokens.Count -and $tokens[$i+1].Kind -eq 'word' -and $tokens[$i+1].Text -eq 'RESTRICT'
+            $noAction = $i+2 -lt $tokens.Count -and $tokens[$i+1].Kind -eq 'word' -and $tokens[$i+1].Text -eq 'NO' -and
+                $tokens[$i+2].Kind -eq 'word' -and $tokens[$i+2].Text -eq 'ACTION'
+            Assert-That ($restrict -or $noAction) 'Only FK RESTRICT/NO ACTION is allowed'
+        }
+    }
+    Assert-That ($close -gt 4 -and $depth -eq 0) 'Unbalanced or empty CREATE TABLE'
+    # No AS SELECT, LIKE, extra DDL, table directories, executable comments or second statement.
+    $tail = @($tokens | Select-Object -Skip ($close+1))
+    $bare = $tail.Count -eq 1 -and $tail[0].Text -eq ';'
+    $engine = $tail.Count -eq 4 -and $tail[0].Kind -eq 'word' -and $tail[0].Text -eq 'ENGINE' -and
+        $tail[1].Text -eq '=' -and $tail[2].Kind -eq 'word' -and $tail[2].Text -eq 'INNODB' -and $tail[3].Text -eq ';'
+    Assert-That ($bare -or $engine) 'Only optional ENGINE=InnoDB and final semicolon allowed after CREATE'
+}
+function Self-Tests {
+    $done = New-Object 'System.Threading.Tasks.TaskCompletionSource[string]'
+    $done.SetResult('complete log')
+    Assert-That ((Await-Output $done.Task 'completed fixture' 100) -ceq 'complete log') 'Output content changed'
+    $pending = New-Object 'System.Threading.Tasks.TaskCompletionSource[string]'
+    $timedOut = $false
+    try { $null = Await-Output $pending.Task 'open pipe fixture' 50 } catch {
+        $timedOut = $_.Exception.Message -like 'Output capture timed out:*'
+    }
+    Assert-That $timedOut 'Pending output did not fail with finite timeout'
+    Pass 'Output self-test: completed log intact; pending pipe task rejected with finite timeout'
+    $simple = 'CREATE TABLE f3_example (id BIGINT PRIMARY KEY) ENGINE=InnoDB;'
+    $good = @(
+        $simple,
+        'create table `f3_example` (`id` BIGINT PRIMARY KEY);',
+        "CREATE TABLE f3_example (status VARCHAR(20) CHECK (status IN ('ACTIVE','REVOKED')));",
+        'CREATE TABLE f3_example (id BIGINT, FOREIGN KEY (id) REFERENCES usuarios(id));',
+        'CREATE TABLE f3_example (id BIGINT, CONSTRAINT fk FOREIGN KEY (id) REFERENCES `usuarios` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT);',
+        "CREATE`nTABLE f3_example (id BIGINT, FOREIGN KEY (id) REFERENCES usuarios(id) ON DELETE NO ACTION ON UPDATE NO ACTION);",
+        'CREATE TABLE f3_example (id BIGINT, INDEX ix (id), UNIQUE KEY uq (id));',
+        "CREATE TABLE f3_example (status VARCHAR(60) CHECK (status IN ('DELETE FROM; --','it''s ACTIVE')));"
+    )
+    $bad = @(
+        "$simple CREATE TABLE extra (id INT);", "$simple CREATE INDEX ix ON f3_example(id);",
+        'ALTER TABLE usuarios ADD x INT;', 'DROP TABLE usuarios;', 'INSERT INTO usuarios VALUES (1);',
+        'UPDATE usuarios SET id=1;', 'DELETE FROM usuarios;', 'TRUNCATE TABLE usuarios;',
+        'RENAME TABLE usuarios TO stolen;', 'REPLACE INTO usuarios VALUES (1);', 'CALL anything();',
+        "LOAD DATA INFILE 'anything' INTO TABLE usuarios;", "$simple SELECT 1;",
+        'CREATE TABLE f3_example (id INT, FOREIGN KEY (id) REFERENCES usuarios(id) ON DELETE CASCADE);',
+        'CREATE TABLE f3_example (id INT, FOREIGN KEY (id) REFERENCES usuarios(id) ON DELETE SET NULL);',
+        'CREATE TABLE f3_example (id INT); -- comment', 'CREATE /* hidden */ TABLE f3_example (id INT);',
+        'CREATE TABLE f3_example (id INT) /*! INSERT INTO usuarios VALUES (1) */;',
+        'CREATE TABLE f3_example (id INT); # comment',
+        'CREATE TABLE f3_example (id INT) AS SELECT id FROM usuarios;',
+        'CREATE TABLE f3_example (id INT, CHECK (id IN (SELECT id FROM usuarios)));'
+    )
+    foreach ($legacy in @('usuarios','roles','usuarios_roles','auditorias','incidencias','resultados',
+        'historial_auditorias','historial_acciones_admin','flyway_schema_history')) {
+        $bad += ('CREATE TABLE `' + $legacy.ToUpperInvariant() + '` (id INT);')
+    }
+    $fixture = Join-Path $tempRoot 'guard-fixture.sql'
+    try {
+        foreach ($sql in $good) { [IO.File]::WriteAllText($fixture,$sql,$utf8); Assert-Expansion $fixture }
+        foreach ($sql in $bad) {
+            [IO.File]::WriteAllText($fixture,$sql,$utf8)
+            $rejected=$false
+            try { Assert-Expansion $fixture } catch { $rejected=$true }
+            Assert-That $rejected 'Static migration guard accepted a rejection fixture'
+        }
+    } finally { if (Test-Path -LiteralPath $fixture) { Remove-Item -LiteralPath $fixture } }
+    Pass "Migration guard self-tests: $($good.Count) accepted; $($bad.Count) rejected; before Docker"
+}
+function Real-Migrations {
+    $relative = 'smartaudits-backend/src/main/resources/db/migration'
+    Assert-That (-not (Native 'Git migration status' 'git' @('status','--porcelain','--untracked-files=all','--',$relative))) 'Migrations must match HEAD'
+    $files = (Native 'Git migration inventory' 'git' @('ls-tree','-r','--name-only',$head,'--',$relative)) -split '\r?\n'
+    $versions = @{}
+    foreach ($file in $files) {
+        Assert-That ((Split-Path $file -Leaf) -cmatch '^V([0-9]+)__.+\.sql$') 'Unsupported migration filename/version'
+        $version = [long]$Matches[1]
+        Assert-That ($version -gt 0 -and $version -lt 9000 -and -not $versions.ContainsKey($version)) 'Duplicate/reserved migration version'
+        $versions[$version] = $file
+        if ($version -ge 4) { Assert-Expansion (Join-Path $repo $file) }
+    }
+    foreach ($frozen in @(1L,2L,3L)) { Assert-That ($versions.ContainsKey($frozen)) 'Missing frozen migration' }
+    $real = @($versions.Keys | Where-Object { $_ -ge 4 } | Sort-Object)
+    $script:expectedVersions = @(1,2,3) + $real + @(9000)
+    $found = if ($real.Count) { $real -join ',' } else { 'none' }
+    Pass "Real V4+ from HEAD: $found; expected Flyway versions=$($expectedVersions -join ','); count=$($expectedVersions.Count)"
+}
+function Assert-History {
+    Assert-That ((Sql 'SELECT GROUP_CONCAT(version ORDER BY installed_rank) FROM flyway_schema_history') -ceq ($expectedVersions -join ',')) 'Unexpected Flyway version set/order'
+    Assert-That ((Sql "SELECT COUNT(*) FROM flyway_schema_history WHERE type='SQL' AND success=1") -eq [string]$expectedVersions.Count) 'Unexpected migration results'
+}
+function Assert-Frontend {
+    $message = 'Rollback harness needs an explicit decision about which frontend/E2E to use: frontend diverges from cc78d6b'
+    Assert-That (-not (Native 'Git frontend status' 'git' @('status','--porcelain','--untracked-files=all','--','smartaudits-frontend'))) $message
+    try { $null = Native 'Git frontend baseline diff' 'git' @('diff','--quiet',$baseline,$head,'--','smartaudits-frontend') }
+    catch { throw $message }
+    Pass 'Frontend tracked HEAD equals exact baseline; working tree source clean (including untracked)'
+}
+function Preflight {
+    $java = Native 'Java version' 'java' @('-version')
+    Assert-That ($java -match 'version "17\.') 'JDK 17 required'
+    Assert-That ((Native 'JDK modules' 'java' @('--list-modules')) -match '(?m)^jdk\.attach@') 'jdk.attach required'
+    $null = Native 'Maven version' $baseEnv.ComSpec @('/d','/s','/c','mvn -version')
+    if (-not $TimestampOnly) {
+        Assert-Frontend
+        $null = Native 'Node version' 'node' @('--version')
+        $null = Native 'npm version' $baseEnv.ComSpec @('/d','/s','/c','npm --version')
+        Assert-That (Test-Path -LiteralPath (Join-Path $frontend 'node_modules') -PathType Container) 'Frontend node_modules required'
+        $null = Native 'Playwright Chromium preflight' 'node' @('-e',
+            'const fs=require("node:fs"); const {chromium}=require("@playwright/test"); if(!fs.existsSync(chromium.executablePath())) throw new Error("Install Playwright Chromium before running the harness");') $frontend
+    }
+    $null = Free-Port
+    $null = Docker @('version','--format','{{.Server.Version}}')
+    $null = Docker @('image','inspect','--format','{{.Id}}','mariadb:11.2')
+    Pass 'Prerequisites available; Maven execution remains strictly offline'
+}
+function Cache-State([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) { return 'ABSENT' }
+    $root = Get-Item -LiteralPath $Path -Force
+    Assert-That ($root.PSIsContainer -and -not ($root.Attributes -band [IO.FileAttributes]::ReparsePoint)) 'Unsafe Vite cache directory'
+    $entries = New-Object 'System.Collections.Generic.List[string]'
+    $queue = New-Object 'System.Collections.Generic.Queue[IO.DirectoryInfo]'
+    $queue.Enqueue($root)
+    while ($queue.Count) {
+        $dir = $queue.Dequeue()
+        $entries.Add("D|$($dir.FullName.Substring($root.FullName.Length))|$($dir.LastWriteTimeUtc.Ticks)|$($dir.Attributes)")
+        foreach ($item in (Get-ChildItem -LiteralPath $dir.FullName -Force)) {
+            Assert-That (-not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) 'Vite cache reparse point forbidden'
+            if ($item.PSIsContainer) { $queue.Enqueue($item) }
+            else { $entries.Add("F|$($item.FullName.Substring($root.FullName.Length))|$($item.Length)|$($item.LastWriteTimeUtc.Ticks)|$($item.Attributes)|$((Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash)") }
+        }
+    }
+    return Digest (($entries | Sort-Object) -join "`n")
+}
+function Preserve-Vite {
+    # Both exact paths are on the same volume; Directory.Move is an atomic rename.
+    Assert-That ([IO.Path]::GetFullPath($viteCache) -ceq [IO.Path]::GetFullPath((Join-Path $repo 'smartaudits-frontend/node_modules/.vite'))) 'Unexpected Vite path'
+    Assert-That (-not ((Get-Item -LiteralPath (Split-Path $viteCache) -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) 'node_modules reparse point forbidden'
+    Assert-That ([IO.Path]::GetPathRoot($viteCache) -eq [IO.Path]::GetPathRoot($viteSaved)) 'Cache preservation requires same volume'
+    $script:cacheBefore = Cache-State $viteCache
+    $script:cacheExisted = $cacheBefore -ne 'ABSENT'
+    if ($cacheExisted) { [IO.Directory]::Move($viteCache,$viteSaved) }
+    $script:cacheManaged=$true
+    Pass "Vite cache preserved; existed=$cacheExisted"
+}
+function Restore-Vite {
+    if (-not $cacheManaged) { return }
+    Assert-That (@($children | Where-Object { -not $_.Process.HasExited }).Count -eq 0) 'Owned process still running: cannot restore Vite cache'
+    if ($cacheExisted) { Assert-That ((Cache-State $viteSaved) -ceq $cacheBefore) 'Saved Vite cache changed' }
+    if (Test-Path -LiteralPath $viteCache) {
+        $null = Cache-State $viteCache # Reject reparse points before recursive deletion.
+        Assert-That ([IO.Path]::GetFullPath($viteCache) -ceq [IO.Path]::GetFullPath((Join-Path $repo 'smartaudits-frontend/node_modules/.vite'))) 'Unsafe cache cleanup path'
+        Remove-Item -LiteralPath $viteCache -Recurse -Force
+    }
+    if ($cacheExisted) { [IO.Directory]::Move($viteSaved,$viteCache) }
+    Assert-That ((Cache-State $viteCache) -ceq $cacheBefore) 'Vite cache PRE/POST mismatch'
+    $script:cacheManaged=$false
+    Pass 'Vite cache PRE == POST (content, structure, attributes, modification times)'
 }
 function Snapshot {
     $filters = [ordered]@{
@@ -303,7 +523,7 @@ function Stop-Backend($Record) {
     Assert-That ($Record.Process.ExitCode -eq 0) 'Backend shutdown returned nonzero'
     # Inspect this process's complete log only; do not confuse startup with Flyway validation.
     $validationPattern = if ($Record.Flyway) {
-        '(?m)\bDbValidate\s*:\s*(Successfully validated 4 migrations)\b'
+        '(?m)\bDbValidate\s*:\s*(Successfully validated ' + $expectedVersions.Count + ' migrations)\b'
     } else {
         '(?m)\bDbValidate\s*:\s*(Successfully validated \d+ migrations?)\b'
     }
@@ -315,7 +535,7 @@ function Stop-Backend($Record) {
         Assert-That ($validation.Count -eq 0) "$($Record.Name): unexpected Flyway validation while OFF"
         Pass "$($Record.Name) Flyway OFF log: DbValidate success marker absent"
     }
-    Assert-That ((Sql 'SELECT GROUP_CONCAT(version ORDER BY installed_rank) FROM flyway_schema_history') -ceq '1,2,3,9000') 'Flyway versions changed after backend execution'
+    Assert-History
     Pass "$($Record.Name) graceful shutdown"
 }
 function Force-Stop($Record) {
@@ -327,22 +547,25 @@ function Force-Stop($Record) {
 }
 
 try {
+    Assert-That (-not ($TimestampOnly -and $SelfTestOnly)) 'Choose only one directed mode'
     Assert-That ($env:OS -eq 'Windows_NT') 'This harness uses the existing Windows PowerShell/JDK infrastructure'
     Assert-That ($resource -cmatch '^smartaudits-f3-harness-[a-f0-9]{32}$') 'Unsafe run name'
     Assert-Migrations
     $head = Native 'Git HEAD' 'git' @('rev-parse','HEAD')
     $baseline = Native 'Git baseline' 'git' @('rev-parse','cc78d6b^{commit}')
     Assert-That ($baseline -eq 'cc78d6b355ff95042cdb9d47e38ae5d33dc17eb5') 'Unexpected rollback baseline'
-    $null = Docker @('version','--format','{{.Server.Version}}')
+    Assert-That (-not (Test-Path -LiteralPath $tempRoot)) 'Temporary directory already exists'
+    $null = New-Item -ItemType Directory -Path $tempRoot
+    $tempCreated=$true
+    Self-Tests
+    Real-Migrations
+    if (-not $SelfTestOnly) {
+    Preflight
     $dockerReady=$true
     $left = Leftovers
     Assert-That (-not $left) "Pre-existing harness resources: $left (not removed)"
     $habitualBefore = Habitual-State
     Pass 'Habitual container/volume identity captured read-only (no connection)'
-    $null = Docker @('image','inspect','--format','{{.Id}}','mariadb:11.2')
-    Assert-That (-not (Test-Path -LiteralPath $tempRoot)) 'Temporary directory already exists'
-    $null = New-Item -ItemType Directory -Path $tempRoot
-    $tempCreated=$true
     $rootPassword=New-Secret
     $dbPassword=New-Secret
     $jwt=New-Secret
@@ -364,6 +587,12 @@ try {
     $probeDestination=Join-Path $tempRoot "new/$probeRelative"
     $null = New-Item -ItemType Directory -Force -Path (Split-Path $probeDestination)
     Copy-Item -LiteralPath (Join-Path $repo $probeRelative) -Destination $probeDestination
+    # Deliberate working-tree overlay: the only new production helper under test.
+    # All migration SQL and the rollback JAR still come exclusively from Git HEAD/baseline.
+    $timeRelative='src/main/java/com/smartaudits/v2/time/UtcMicros.java'
+    $timeDestination=Join-Path $newBackend $timeRelative
+    $null = New-Item -ItemType Directory -Force -Path (Split-Path $timeDestination)
+    Copy-Item -LiteralPath (Join-Path $repo "smartaudits-backend/$timeRelative") -Destination $timeDestination
     if (-not $TimestampOnly) {
     $futureSql=@'
 CREATE TABLE f3_harness_future_probe (
@@ -375,19 +604,14 @@ CREATE TABLE f3_harness_future_probe (
     CONSTRAINT ck_f3_harness_id CHECK (id > 0)
 ) ENGINE=InnoDB;
 '@
-    Assert-Expansion $futureSql 'f3_harness_future_probe'
-    # Guard self-checks: bad statements must be rejected, not merely the good fixture accepted.
-    foreach ($bad in @("$futureSql CREATE TABLE extra (id INT);", "$futureSql ALTER TABLE extra ADD x INT;", "$futureSql INSERT INTO extra VALUES (1);")) {
-        $rejected=$false
-        try { Assert-Expansion $bad 'f3_harness_future_probe' } catch { $rejected=$true }
-        Assert-That $rejected 'Static expansion guard accepted unsafe SQL'
-    }
-    [IO.File]::WriteAllText((Join-Path $newBackend 'src/main/resources/db/migration/V9000__f3_harness_future_probe.sql'),$futureSql,$utf8)
+    $futurePath=Join-Path $newBackend 'src/main/resources/db/migration/V9000__f3_harness_future_probe.sql'
+    [IO.File]::WriteAllText($futurePath,$futureSql,$utf8)
+    Assert-Expansion $futurePath
     Pass 'Synthetic migration V9000: one CREATE TABLE; no DML or legacy targets (temporary copy only)'
     $null = Maven $oldBackend '-DskipTests package'
     Pass "Exact baseline built from Git archive: $baseline"
     $null = Maven $newBackend '-DskipTests package'
-    Pass "Synthetic new JAR built from HEAD $head + V9000"
+    Pass "Synthetic new JAR built from HEAD $head + V9000 + UtcMicros working-tree helper"
     $oldJar=Join-Path $oldBackend 'target/smartaudits-backend-1.0.0.jar'
     $newJar=Join-Path $newBackend 'target/smartaudits-backend-1.0.0.jar'
     }
@@ -413,15 +637,15 @@ CREATE TABLE f3_harness_future_probe (
         Pass 'Directed timestamp validation only; no backend, Flyway or E2E started'
     } else {
     $backend=Start-Backend $newJar $true 'NEW initial'
-    Assert-That ((Sql 'SELECT GROUP_CONCAT(version ORDER BY installed_rank) FROM flyway_schema_history') -ceq '1,2,3,9000') 'Unexpected migration versions'
-    Assert-That ((Sql "SELECT COUNT(*) FROM flyway_schema_history WHERE type='SQL' AND success=1") -eq '4') 'Unexpected migration results'
+    Assert-History
     Stop-Backend $backend
     Probe 'seed'
     $before=Snapshot
     foreach ($table in $before.Keys) { Pass "PRE $table count|data SHA256|structure SHA256=$($before[$table])" }
     $backend=Start-Backend $oldJar $true 'OLD exact cc78d6b Flyway ON'
     Assert-Snapshot $before 'OLD ON startup'
-    $frontend=Join-Path $repo 'smartaudits-frontend'
+    Assert-Frontend
+    Preserve-Vite
     $webPort=Free-Port
     $web=Start-Owned 'existing E2E server' 'node' @((Join-Path $frontend 'e2e/server.mjs')) $frontend @{
         E2E_BACKEND_URL="http://127.0.0.1:$($backend.Port)";E2E_FRONTEND_PORT=[string]$webPort
@@ -432,7 +656,7 @@ CREATE TABLE f3_harness_future_probe (
             E2E_RUN_ID=$runId;E2E_BASE_URL="http://127.0.0.1:$webPort";E2E_ADMIN_EMAIL=$adminEmail;E2E_PASSWORD=$e2ePassword
         } 240
     Assert-That ($e2e -match 'Running 4 tests' -and $e2e -match '\b4 passed\b') 'Expected exactly four passing legacy scenarios'
-    Pass 'LEGACY E2E: 4/4 PASS (exact cc78d6b; V1/V2/V3/V9000; isolated MariaDB 11.2)'
+    Pass "LEGACY E2E: 4/4 PASS (exact cc78d6b; versions=$($expectedVersions -join ','); isolated MariaDB 11.2)"
     Force-Stop $web
     Assert-Snapshot $before 'POST rollback ON + E2E'
     # Verify the actual E2E-created rows separately, not by weakening sentinel comparisons.
@@ -449,6 +673,7 @@ CREATE TABLE f3_harness_future_probe (
     Timestamp-Matrix
     Assert-Snapshot $before 'POST timestamp'
     }
+    }
     Assert-Migrations
     Assert-That ((Native 'Git HEAD verification' 'git' @('rev-parse','HEAD')) -ceq $head) 'Main checkout moved'
     Pass 'V1/V2/V3 bytes and normalized hashes intact'
@@ -460,7 +685,14 @@ CREATE TABLE f3_harness_future_probe (
         try { Stop-Backend $backend } catch { $cleanupErrors.Add('Graceful backend shutdown failed; attempting owned PID teardown') }
     }
     foreach ($child in @($children.ToArray())) {
-        try { Force-Stop $child } catch { $cleanupErrors.Add("Could not stop owned process: $($child.Name)") }
+        try {
+            Force-Stop $child
+            $null = Output-Of $child # Also bound drains of long-lived server output.
+        } catch { $cleanupErrors.Add("Owned process/output cleanup failed: $($child.Name): $($_.Exception.Message)") }
+    }
+    try { Restore-Vite } catch {
+        $preserveTemp=$true
+        $cleanupErrors.Add("Vite restoration failed; recovery directory retained: $tempRoot; $($_.Exception.Message)")
     }
     if ($dockerReady) {
         foreach ($kind in @('container','volume')) {
@@ -489,7 +721,7 @@ CREATE TABLE f3_harness_future_probe (
         } catch { $cleanupErrors.Add((Protect $_.Exception.Message)) }
     }
     foreach ($port in $ports) { if (Listening $port) { $cleanupErrors.Add("Owned port still listening: $port") } }
-    if ($tempCreated) {
+    if ($tempCreated -and -not $preserveTemp) {
         try {
             $resolved=[IO.Path]::GetFullPath($tempRoot)
             Assert-That ($resolved -ceq (Join-Path $tempParent $resource)) 'Unexpected cleanup path'
@@ -505,6 +737,7 @@ CREATE TABLE f3_harness_future_probe (
     else { foreach ($problem in $cleanupErrors) { Write-Host "FAIL $problem" } }
 }
 if ($null -ne $failure -or $cleanupErrors.Count -gt 0) { exit 1 }
-if ($TimestampOnly) { Write-Host 'SMARTAUDITS F3.2 TIMESTAMP-ONLY PASS' }
-else { Write-Host 'SMARTAUDITS F3.2 HARNESS PASS' }
+if ($SelfTestOnly) { Write-Host 'SMARTAUDITS F3.3 SELF-TESTS PASS' }
+elseif ($TimestampOnly) { Write-Host 'SMARTAUDITS F3.3 TIMESTAMP-ONLY PASS' }
+else { Write-Host 'SMARTAUDITS F3.3 HARNESS PASS' }
 exit 0

@@ -1,6 +1,7 @@
 package harness.smartaudits.v2;
 
 import com.sun.tools.attach.VirtualMachine;
+import com.smartaudits.v2.time.UtcMicros;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -19,7 +20,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.time.temporal.ChronoUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -136,7 +136,11 @@ class MariaDb20HarnessProbe {
             try (var factory = configuration.buildSessionFactory()) {
                 for (int i = 0; i < inputs.length; i++) {
                 long id = i + 1L;
-                Instant expected = inputs[i].truncatedTo(ChronoUnit.MICROS);
+                Instant expected = UtcMicros.truncate(inputs[i]);
+                assertNotEquals(0, inputs[i].getNano() % 1000, "Fixture must exercise nanosecond input");
+                assertEquals(0, expected.getNano() % 1000, "Normalize before persistence");
+                assertEquals(i == 0 ? Instant.parse("2024-02-29T23:58:57.987654Z")
+                        : Instant.parse("2024-03-31T02:30:00.123456Z"), expected);
                 try (var session = factory.openSession()) {
                     var transaction = session.beginTransaction();
                     TimeRow row = new TimeRow();
