@@ -382,10 +382,12 @@ producción**, anterior al despliegue que se revierte, **manteniendo el esquema
 y los datos nuevos**. No significa DROP automático ni rollback transaccional de
 toda una secuencia DDL.
 
-En el estado actual, antes de publicar cualquier release con SmartAudits 2.0,
-el baseline operativo es `cc78d6b`. Si posteriormente se publica un release 2.0
-y después se despliega otro, el baseline de rollback de ese nuevo despliegue
-pasará a ser el último release efectivamente desplegado y validado en producción.
+Al redactar este ADR, el baseline operativo era `cc78d6b`, que se conserva como
+referencia histórica. Para Fase 3.4A, el último release desplegado y validado es
+`a201582`: este es el baseline operativo utilizado para el rollback contractual
+de V4, no `cc78d6b`.
+En despliegues posteriores, el baseline de rollback será el último release
+efectivamente desplegado y validado en producción, anterior al que se revierte.
 No se asume que cada migración individual tenga su propio release de producción.
 La validación de cada migración utilizará el baseline operativo aplicable.
 

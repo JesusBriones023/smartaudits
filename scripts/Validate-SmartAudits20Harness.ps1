@@ -7,11 +7,18 @@ already cached for offline (-o) builds. Requires a running Docker daemon and the
 local mariadb:11.2 image; nothing is downloaded automatically.
 Full runs also require Node/npm, frontend node_modules, resolvable Playwright and
 its installed Chromium, plus available loopback ports. The tracked frontend must
-equal cc78d6b and have no tracked/untracked source changes.
+equal the approved rollback release and have no tracked/untracked source changes.
 Vite .vite is moved to this run's temporary directory and restored byte-for-byte.
 Do not run another frontend/Vite process concurrently. Restoration failure retains
 the saved cache and reports cleanup failure instead of deleting the recovery copy.
-Only V1/V2/V3 plus numeric, guarded V4+ from HEAD and temporary V9000 are used.
+Only frozen migrations, guarded numeric V4+ and temporary V9000 are used.
+Protected UtcMicros/probe sources must equal HEAD and come from Git archive.
+.PARAMETER RollbackRelease
+Release from the reviewed catalogue below. Updating this catalogue requires an
+explicit deployment decision; arbitrary commits/refs are not accepted.
+.PARAMETER IncludePendingOrganization
+Pre-commit validation only: overlay the three explicitly named Organization
+candidate files, record their hashes and verify them throughout the run.
 Future V4 entities must prove they call UtcMicros before persisting timestamps;
 driver handling of an unnormalized Instant is not the domain contract.
 .PARAMETER TimestampOnly
@@ -23,7 +30,9 @@ Runs finite-output and SQL-guard self-tests without Docker or application startu
 # Reuses the unchanged E2E server/config/flows directly (explicitly authorized).
 # Does not invoke run.mjs, the legacy validator entrypoint, Compose or Flyway repair.
 [CmdletBinding()]
-param([switch]$TimestampOnly, [switch]$SelfTestOnly)
+param([switch]$TimestampOnly, [switch]$SelfTestOnly,
+    [ValidateSet('a201582','cc78d6b')][string]$RollbackRelease = 'a201582',
+    [switch]$IncludePendingOrganization)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -65,6 +74,16 @@ $cacheExisted = $false
 $cacheBefore = $null
 $preserveTemp = $false
 $expectedVersions = @()
+$approvedReleases = @{
+    a201582='a20158268666d4d43bc16844bfaedfa9f00e786d'
+    cc78d6b='cc78d6b355ff95042cdb9d47e38ae5d33dc17eb5'
+}
+$candidatePaths = @(
+    'smartaudits-backend/src/main/resources/db/migration/V4__create_organizations.sql',
+    'smartaudits-backend/src/main/java/com/smartaudits/v2/model/Organization.java',
+    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/OrganizationTest.java'
+)
+$candidateHashes = @{}
 
 function Assert-That([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
@@ -251,7 +270,7 @@ function Legacy-Access([int]$Port) {
     finally { $response.Dispose() }
     Pass 'Legacy functional access: real login + authenticated GET /usuarios HTTP 200'
 }
-function Assert-Expansion([string]$Path) {
+function Assert-Expansion([string]$Path, [switch]$RequireTableOptions) {
     # Conservative lexical subset, not a universal SQL parser. Strings and quoted
     # identifiers cannot hide statement delimiters/keywords from this analysis.
     $sql = [IO.File]::ReadAllText($Path)
@@ -288,6 +307,13 @@ function Assert-Expansion([string]$Path) {
             Assert-That ($token.Text -ne ';' -and $depth -ge 0) 'Unexpected statement delimiter'
         }
         if ($token.Kind -ne 'word') { continue }
+        if ($token.Text -eq 'REFERENCES') {
+            Assert-That ($i+2 -lt $tokens.Count -and $tokens[$i+1].Kind -in @('word','quoted') -and
+                $tokens[$i+2].Text -eq '(') 'Expected unqualified FK reference'
+            $reference = $tokens[$i+1].Text.Trim([char]96)
+            Assert-That ($reference -notin @('ROLES','USUARIOS_ROLES','AUDITORIAS','INCIDENCIAS','RESULTADOS',
+                'HISTORIAL_AUDITORIAS','HISTORIAL_ACCIONES_ADMIN','FLYWAY_SCHEMA_HISTORY')) 'Only usuarios may be referenced from legacy'
+        }
         Assert-That ($token.Text -notin @('CREATE','ALTER','DROP','RENAME','TRUNCATE','INSERT','REPLACE','CALL',
             'LOAD','SELECT','GRANT','REVOKE','SET','CASCADE','CURRENT_TIMESTAMP')) 'Forbidden SQL operation/default'
         if ($token.Text -in @('DELETE','UPDATE')) {
@@ -302,9 +328,12 @@ function Assert-Expansion([string]$Path) {
     # No AS SELECT, LIKE, extra DDL, table directories, executable comments or second statement.
     $tail = @($tokens | Select-Object -Skip ($close+1))
     $bare = $tail.Count -eq 1 -and $tail[0].Text -eq ';'
-    $engine = $tail.Count -eq 4 -and $tail[0].Kind -eq 'word' -and $tail[0].Text -eq 'ENGINE' -and
-        $tail[1].Text -eq '=' -and $tail[2].Kind -eq 'word' -and $tail[2].Text -eq 'INNODB' -and $tail[3].Text -eq ';'
-    Assert-That ($bare -or $engine) 'Only optional ENGINE=InnoDB and final semicolon allowed after CREATE'
+    $plainTail = @($tail | Where-Object { $_.Kind -notin @('word','symbol') }).Count -eq 0
+    $options = ($tail | ForEach-Object { $_.Text }) -join ' '
+    $explicitOptions = $plainTail -and $options -cmatch '^ENGINE = INNODB DEFAULT (?:CHARACTER SET|CHARSET) = UTF8MB4 COLLATE = UTF8MB4_UNICODE_520_CI ;$'
+    $engineOnly = $plainTail -and $options -ceq 'ENGINE = INNODB ;'
+    # Real V4+ must declare all three; synthetic fixtures retain the original subset.
+    Assert-That ($explicitOptions -or (-not $RequireTableOptions -and ($bare -or $engineOnly))) 'Unsupported/missing table options; real V4+ requires InnoDB, utf8mb4 and utf8mb4_unicode_520_ci'
 }
 function Self-Tests {
     $done = New-Object 'System.Threading.Tasks.TaskCompletionSource[string]'
@@ -345,7 +374,28 @@ function Self-Tests {
     foreach ($legacy in @('usuarios','roles','usuarios_roles','auditorias','incidencias','resultados',
         'historial_auditorias','historial_acciones_admin','flyway_schema_history')) {
         $bad += ('CREATE TABLE `' + $legacy.ToUpperInvariant() + '` (id INT);')
+        if ($legacy -ne 'usuarios') {
+            $bad += ('CREATE TABLE f3_example (id BIGINT, FOREIGN KEY(id) REFERENCES `' + $legacy.ToUpperInvariant() + '` (id));')
+            $bad += ("CREATE TABLE f3_example (id BIGINT REFERENCES`n" + $legacy + "`n(id));")
+        }
     }
+    $good += 'CREATE TABLE f3_example (id BIGINT REFERENCES `UsUaRiOs` (id)) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;'
+    $good += 'CREATE TABLE f3_example (id BIGINT) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;'
+    foreach ($suffix in @('ENGINE=MyISAM;', 'ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=utf8mb4_unicode_520_ci;',
+        'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;', 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;',
+        'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci; DROP TABLE usuarios;',
+        'ENGINE=InnoDB DATA DIRECTORY=''elsewhere'';')) { $bad += "CREATE TABLE f3_example (id BIGINT) $suffix" }
+    $bad += 'CREATE TABLE f3_example (id BIGINT REFERENCES other.`usuarios` (id));'
+    $realGood = @(
+        'CREATE TABLE f3_example (id BIGINT REFERENCES usuarios(id)) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;',
+        "create`ntable ``f3_example`` (id BIGINT)`nengine = InnoDB`ndefault charset = utf8mb4`ncollate = utf8mb4_unicode_520_ci;"
+    )
+    # Every incomplete subset of ENGINE / charset / collation must fail for real V4+.
+    $realBad = @(';', 'ENGINE=InnoDB;', 'DEFAULT CHARACTER SET=utf8mb4;',
+        'COLLATE=utf8mb4_unicode_520_ci;', 'ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4;',
+        'ENGINE=InnoDB COLLATE=utf8mb4_unicode_520_ci;',
+        'DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;') |
+        ForEach-Object { "CREATE TABLE f3_example (id BIGINT) $_" }
     $fixture = Join-Path $tempRoot 'guard-fixture.sql'
     try {
         foreach ($sql in $good) { [IO.File]::WriteAllText($fixture,$sql,$utf8); Assert-Expansion $fixture }
@@ -355,43 +405,90 @@ function Self-Tests {
             try { Assert-Expansion $fixture } catch { $rejected=$true }
             Assert-That $rejected 'Static migration guard accepted a rejection fixture'
         }
+        foreach ($sql in $realGood) {
+            [IO.File]::WriteAllText($fixture,$sql,$utf8)
+            Assert-Expansion $fixture -RequireTableOptions
+        }
+        foreach ($sql in $realBad) {
+            [IO.File]::WriteAllText($fixture,$sql,$utf8)
+            $rejected=$false
+            try { Assert-Expansion $fixture -RequireTableOptions } catch { $rejected=$true }
+            Assert-That $rejected 'Real V4+ guard accepted incomplete table options'
+        }
     } finally { if (Test-Path -LiteralPath $fixture) { Remove-Item -LiteralPath $fixture } }
     Pass "Migration guard self-tests: $($good.Count) accepted; $($bad.Count) rejected; before Docker"
+    Pass "Real V4+ table options self-tests: $($realGood.Count) accepted; $($realBad.Count) rejected; before Docker"
 }
 function Real-Migrations {
     $relative = 'smartaudits-backend/src/main/resources/db/migration'
-    Assert-That (-not (Native 'Git migration status' 'git' @('status','--porcelain','--untracked-files=all','--',$relative))) 'Migrations must match HEAD'
-    $files = (Native 'Git migration inventory' 'git' @('ls-tree','-r','--name-only',$head,'--',$relative)) -split '\r?\n'
+    $status = Native 'Git migration status' 'git' @('status','--porcelain','--untracked-files=all','--',$relative)
+    if ($status) {
+        Assert-That ($IncludePendingOrganization -and $status -ceq "?? $($candidatePaths[0])") 'Only explicit new Organization migration candidate may differ from HEAD'
+    }
+    $files = @((Native 'Git migration inventory' 'git' @('ls-tree','-r','--name-only',$head,'--',$relative)) -split '\r?\n')
+    if ($IncludePendingOrganization -and $files -notcontains $candidatePaths[0]) { $files += $candidatePaths[0] }
     $versions = @{}
     foreach ($file in $files) {
         Assert-That ((Split-Path $file -Leaf) -cmatch '^V([0-9]+)__.+\.sql$') 'Unsupported migration filename/version'
         $version = [long]$Matches[1]
         Assert-That ($version -gt 0 -and $version -lt 9000 -and -not $versions.ContainsKey($version)) 'Duplicate/reserved migration version'
         $versions[$version] = $file
-        if ($version -ge 4) { Assert-Expansion (Join-Path $repo $file) }
+        if ($version -ge 4) { Assert-Expansion (Join-Path $repo $file) -RequireTableOptions }
     }
     foreach ($frozen in @(1L,2L,3L)) { Assert-That ($versions.ContainsKey($frozen)) 'Missing frozen migration' }
     $real = @($versions.Keys | Where-Object { $_ -ge 4 } | Sort-Object)
     $script:expectedVersions = @(1,2,3) + $real + @(9000)
     $found = if ($real.Count) { $real -join ',' } else { 'none' }
-    Pass "Real V4+ from HEAD: $found; expected Flyway versions=$($expectedVersions -join ','); count=$($expectedVersions.Count)"
+    Pass "Real V4+: $found; pending candidates=$IncludePendingOrganization; expected Flyway versions=$($expectedVersions -join ','); count=$($expectedVersions.Count)"
+}
+function Assert-VersionedSources {
+    foreach ($path in @('smartaudits-backend/src/main/java/com/smartaudits/v2/time/UtcMicros.java',
+        'smartaudits-backend/src/test/java/harness/smartaudits/v2/MariaDb20HarnessProbe.java')) {
+        Assert-That (-not (Native 'Protected source status' 'git' @('status','--porcelain','--untracked-files=all','--',(Split-Path $path)))) 'Protected source directory diverges from HEAD'
+        $blob = Native 'Protected HEAD blob' 'git' @('rev-parse',"${head}:$path")
+        Assert-That ((Native 'Protected source hash' 'git' @('hash-object',"--path=$path",$path)) -ceq $blob) 'Protected source differs from HEAD'
+    }
+    Pass 'UtcMicros and original probe equal HEAD; Git archive is the source of both'
+}
+function Assert-Candidates {
+    if (-not $IncludePendingOrganization) { return }
+    foreach ($path in $candidatePaths) {
+        $hash=(Get-FileHash -LiteralPath (Join-Path $repo $path) -Algorithm SHA256).Hash
+        if ($candidateHashes.ContainsKey($path)) { Assert-That ($candidateHashes[$path] -ceq $hash) 'Candidate changed during validation' }
+        else { $candidateHashes[$path]=$hash; Pass "Candidate $path SHA256=$hash" }
+    }
 }
 function Assert-History {
     Assert-That ((Sql 'SELECT GROUP_CONCAT(version ORDER BY installed_rank) FROM flyway_schema_history') -ceq ($expectedVersions -join ',')) 'Unexpected Flyway version set/order'
     Assert-That ((Sql "SELECT COUNT(*) FROM flyway_schema_history WHERE type='SQL' AND success=1") -eq [string]$expectedVersions.Count) 'Unexpected migration results'
 }
 function Assert-Frontend {
-    $message = 'Rollback harness needs an explicit decision about which frontend/E2E to use: frontend diverges from cc78d6b'
+    $message = "Rollback harness needs an explicit frontend/E2E decision: frontend diverges from $RollbackRelease"
     Assert-That (-not (Native 'Git frontend status' 'git' @('status','--porcelain','--untracked-files=all','--','smartaudits-frontend'))) $message
     try { $null = Native 'Git frontend baseline diff' 'git' @('diff','--quiet',$baseline,$head,'--','smartaudits-frontend') }
     catch { throw $message }
     Pass 'Frontend tracked HEAD equals exact baseline; working tree source clean (including untracked)'
 }
 function Preflight {
-    $java = Native 'Java version' 'java' @('-version')
-    Assert-That ($java -match 'version "17\.') 'JDK 17 required'
-    Assert-That ((Native 'JDK modules' 'java' @('--list-modules')) -match '(?m)^jdk\.attach@') 'jdk.attach required'
-    $null = Native 'Maven version' $baseEnv.ComSpec @('/d','/s','/c','mvn -version')
+    Assert-VersionedSources
+    $java = Native 'Java properties' 'java' @('-XshowSettings:properties','-version')
+    Assert-That ($java -match '(?m)^\s*java\.home = (.+)\r?$') 'Cannot identify PATH Java home'
+    $pathJdk=$Matches[1].Trim()
+    Assert-That ($java -match '(?m)^\s*java\.version = (17\.[^\s]+)') 'JDK 17 required'
+    $javaVersion=$Matches[1]
+    $maven = Native 'Maven runtime' $baseEnv.ComSpec @('/d','/s','/c','mvn -version')
+    Assert-That ($maven -match 'Java version: ([^,]+),[^\r\n]*runtime: ([^\r\n]+)') 'Cannot identify Maven runtime'
+    Assert-That ($Matches[1] -ceq $javaVersion) 'Maven and PATH Java versions differ'
+    $mavenJdk=$Matches[2].Trim()
+    $jdks=@($pathJdk,$mavenJdk)
+    if ($baseEnv.ContainsKey('JAVA_HOME')) { $jdks += $baseEnv.JAVA_HOME }
+    foreach ($jdk in $jdks) {
+        foreach ($file in @('release','bin/java.exe','jmods/jdk.attach.jmod','jmods/java.base.jmod')) {
+            Assert-That ((Get-FileHash -LiteralPath (Join-Path $jdk $file)).Hash -ceq (Get-FileHash -LiteralPath (Join-Path $pathJdk $file)).Hash) 'PATH Java, Maven or JAVA_HOME use different JDK builds'
+        }
+        Assert-That ((Native 'Verified JDK modules' (Join-Path $jdk 'bin/java.exe') @('--list-modules')) -match '(?m)^jdk\.attach@') 'Verified JDK lacks jdk.attach'
+    }
+    Pass "PATH Java / Maven / JAVA_HOME coherent: JDK $javaVersion; matching runtime, release and attach hashes"
     if (-not $TimestampOnly) {
         Assert-Frontend
         $null = Native 'Node version' 'node' @('--version')
@@ -455,6 +552,9 @@ function Snapshot {
         historial_auditorias='id=900001'; historial_acciones_admin='id=900001'
         f3_harness_future_probe='1=1'; flyway_schema_history='1=1'
     }
+    if ((Sql "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='organizations'") -eq '1') {
+        $filters['organizations']='1=1'
+    }
     $snapshot = [ordered]@{}
     foreach ($table in $filters.Keys) {
         $columns = (Sql "SELECT COLUMN_NAME FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='$table' ORDER BY ORDINAL_POSITION").Split("`n")
@@ -495,6 +595,30 @@ function Timestamp-Matrix {
         Assert-That ((Sql "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='f3_harness_timestamp_probe'") -eq '0') 'Timestamp probe table remains'
         Pass "Timestamp ${timezone}: normal + DST case + raw SQL -> Instant; auxiliary table removed"
     }
+}
+function Organization-Probe([string]$Mode, [hashtable]$DatabaseEnv = $dbEnv, [string]$Timezone = 'Europe/Madrid') {
+    Assert-That ($Mode -cin @('contracts','seed','historical')) 'Unexpected Organization probe mode'
+    Assert-That ($Timezone -cin @('Asia/Kathmandu','Europe/Madrid')) 'Unexpected Organization timezone'
+    $environment=@{} + $DatabaseEnv + @{F3_ORG_MODE=$Mode;F3_TIMEZONE=$Timezone}
+    $output=Maven $newBackend "-Dtest=com.smartaudits.v2.model.OrganizationMariaDbProbe -DargLine=-Duser.timezone=$Timezone test" $environment
+    Assert-That ($output -match 'Tests run: 1, Failures: 0, Errors: 0, Skipped: 0') 'Organization MariaDB probe did not pass'
+    foreach ($line in ($output -split '\r?\n')) {
+        if ($line -match '^(ORGANIZATION (CONTRACTS|SENTINEL) PASS:|HISTORICAL V4 PASS:)') { Pass $line }
+    }
+}
+function Historical-Organization {
+    # A second schema in the same owned container, never an external DB target.
+    $historyDb='f3_harness_' + [Guid]::NewGuid().ToString('N')
+    Assert-That ($historyDb -cmatch '^f3_harness_[a-f0-9]{32}$') 'Unsafe historical fixture name'
+    $owner=Docker @('container','inspect','--format','{{index .Config.Labels "smartaudits.f3-harness"}}',$resource)
+    Assert-That ($owner -ceq $runId) 'Historical schema requires exact owned container label'
+    $null=Docker @('exec','-e','MYSQL_PWD',$resource,'mariadb','--host=127.0.0.1','-uroot','-e',
+        "CREATE DATABASE $historyDb; GRANT ALL ON $historyDb.* TO 'f3_harness_user'@'%';") @{MYSQL_PWD=$rootPassword}
+    $historyEnv=@{} + $dbEnv
+    $historyEnv.F3_DB_NAME=$historyDb
+    $historyEnv.F3_DB_URL="jdbc:mariadb://127.0.0.1:$dbPort/$historyDb"
+    Organization-Probe 'historical' $historyEnv
+    Pass 'Historical schema is owned by this run and will be removed with its container/volume'
 }
 function Start-Backend([string]$Jar, [bool]$Flyway, [string]$Name) {
     $port = Free-Port
@@ -552,8 +676,11 @@ try {
     Assert-That ($resource -cmatch '^smartaudits-f3-harness-[a-f0-9]{32}$') 'Unsafe run name'
     Assert-Migrations
     $head = Native 'Git HEAD' 'git' @('rev-parse','HEAD')
-    $baseline = Native 'Git baseline' 'git' @('rev-parse','cc78d6b^{commit}')
-    Assert-That ($baseline -eq 'cc78d6b355ff95042cdb9d47e38ae5d33dc17eb5') 'Unexpected rollback baseline'
+    $baseline = Native 'Git baseline' 'git' @('rev-parse',"$RollbackRelease^{commit}")
+    Assert-That ($baseline -ceq $approvedReleases[$RollbackRelease]) 'Rollback release does not match reviewed full commit'
+    $null = Native 'Rollback ancestry' 'git' @('merge-base','--is-ancestor',$baseline,$head)
+    Assert-VersionedSources
+    Assert-Candidates
     Assert-That (-not (Test-Path -LiteralPath $tempRoot)) 'Temporary directory already exists'
     $null = New-Item -ItemType Directory -Path $tempRoot
     $tempCreated=$true
@@ -571,7 +698,6 @@ try {
     $jwt=New-Secret
     $e2ePassword=New-Secret
     $adminEmail="admin-$runId@example.invalid"
-    $probeRelative='smartaudits-backend/src/test/java/harness/smartaudits/v2/MariaDb20HarnessProbe.java'
     $copies = if ($TimestampOnly) { @('new') } else { @('old','new') }
     foreach ($copy in $copies) {
         $revision = if ($copy -eq 'old') { $baseline } else { $head }
@@ -584,15 +710,16 @@ try {
     }
     $newBackend=Join-Path $tempRoot 'new/smartaudits-backend'
     $oldBackend=Join-Path $tempRoot 'old/smartaudits-backend'
-    $probeDestination=Join-Path $tempRoot "new/$probeRelative"
-    $null = New-Item -ItemType Directory -Force -Path (Split-Path $probeDestination)
-    Copy-Item -LiteralPath (Join-Path $repo $probeRelative) -Destination $probeDestination
-    # Deliberate working-tree overlay: the only new production helper under test.
-    # All migration SQL and the rollback JAR still come exclusively from Git HEAD/baseline.
-    $timeRelative='src/main/java/com/smartaudits/v2/time/UtcMicros.java'
-    $timeDestination=Join-Path $newBackend $timeRelative
-    $null = New-Item -ItemType Directory -Force -Path (Split-Path $timeDestination)
-    Copy-Item -LiteralPath (Join-Path $repo "smartaudits-backend/$timeRelative") -Destination $timeDestination
+    Assert-VersionedSources
+    if ($IncludePendingOrganization) {
+        Assert-Candidates
+        foreach ($path in $candidatePaths) {
+            $target=Join-Path $tempRoot "new/$path"
+            $null=New-Item -ItemType Directory -Force -Path (Split-Path $target)
+            Copy-Item -LiteralPath (Join-Path $repo $path) -Destination $target
+            Assert-That ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ceq $candidateHashes[$path]) 'Copied candidate hash mismatch'
+        }
+    }
     if (-not $TimestampOnly) {
     $futureSql=@'
 CREATE TABLE f3_harness_future_probe (
@@ -611,7 +738,7 @@ CREATE TABLE f3_harness_future_probe (
     $null = Maven $oldBackend '-DskipTests package'
     Pass "Exact baseline built from Git archive: $baseline"
     $null = Maven $newBackend '-DskipTests package'
-    Pass "Synthetic new JAR built from HEAD $head + V9000 + UtcMicros working-tree helper"
+    Pass "New JAR from HEAD $head + V9000; explicit Organization candidates=$IncludePendingOrganization"
     $oldJar=Join-Path $oldBackend 'target/smartaudits-backend-1.0.0.jar'
     $newJar=Join-Path $newBackend 'target/smartaudits-backend-1.0.0.jar'
     }
@@ -636,13 +763,17 @@ CREATE TABLE f3_harness_future_probe (
         Assert-That ((Sql 'SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE()') -eq '0') 'Directed probe left schema objects behind'
         Pass 'Directed timestamp validation only; no backend, Flyway or E2E started'
     } else {
+    Historical-Organization
     $backend=Start-Backend $newJar $true 'NEW initial'
     Assert-History
     Stop-Backend $backend
     Probe 'seed'
+    foreach ($zone in @('Asia/Kathmandu','Europe/Madrid')) { Organization-Probe 'contracts' $dbEnv $zone }
+    Organization-Probe 'seed'
+    Assert-That ((Sql 'SELECT COUNT(*) FROM organizations') -eq '1') 'Expected exactly one real Organization sentinel'
     $before=Snapshot
     foreach ($table in $before.Keys) { Pass "PRE $table count|data SHA256|structure SHA256=$($before[$table])" }
-    $backend=Start-Backend $oldJar $true 'OLD exact cc78d6b Flyway ON'
+    $backend=Start-Backend $oldJar $true "OLD exact $RollbackRelease Flyway ON"
     Assert-Snapshot $before 'OLD ON startup'
     Assert-Frontend
     Preserve-Vite
@@ -656,14 +787,14 @@ CREATE TABLE f3_harness_future_probe (
             E2E_RUN_ID=$runId;E2E_BASE_URL="http://127.0.0.1:$webPort";E2E_ADMIN_EMAIL=$adminEmail;E2E_PASSWORD=$e2ePassword
         } 240
     Assert-That ($e2e -match 'Running 4 tests' -and $e2e -match '\b4 passed\b') 'Expected exactly four passing legacy scenarios'
-    Pass "LEGACY E2E: 4/4 PASS (exact cc78d6b; versions=$($expectedVersions -join ','); isolated MariaDB 11.2)"
+    Pass "LEGACY E2E: 4/4 PASS (exact $RollbackRelease; versions=$($expectedVersions -join ','); isolated MariaDB 11.2)"
     Force-Stop $web
     Assert-Snapshot $before 'POST rollback ON + E2E'
     # Verify the actual E2E-created rows separately, not by weakening sentinel comparisons.
     Assert-That ((Sql "SELECT COUNT(*) FROM usuarios WHERE email LIKE 'client-%-$runId@example.invalid'") -eq '3') 'Expected three E2E-created clients'
     Assert-That ((Sql "SELECT COUNT(*) FROM auditorias a JOIN usuarios u ON u.id=a.usuario_id WHERE u.email='client-audit-$runId@example.invalid'") -eq '1') 'Expected one E2E-created audit'
     Stop-Backend $backend
-    $backend=Start-Backend $oldJar $false 'OLD exact cc78d6b Flyway OFF'
+    $backend=Start-Backend $oldJar $false "OLD exact $RollbackRelease Flyway OFF"
     Legacy-Access $backend.Port
     Assert-Snapshot $before 'POST rollback OFF'
     Stop-Backend $backend
@@ -675,6 +806,8 @@ CREATE TABLE f3_harness_future_probe (
     }
     }
     Assert-Migrations
+    Assert-Candidates
+    Assert-VersionedSources
     Assert-That ((Native 'Git HEAD verification' 'git' @('rev-parse','HEAD')) -ceq $head) 'Main checkout moved'
     Pass 'V1/V2/V3 bytes and normalized hashes intact'
 } catch {
