@@ -70,12 +70,14 @@ $expectedDomainTables = @(
     'usuarios_roles'
 ) | Sort-Object
 
+# The historical snapshot above stays pre-Flyway; current startup includes V4.
 $expectedManagedTables = @(
     'auditorias',
     'flyway_schema_history',
     'historial_acciones_admin',
     'historial_auditorias',
     'incidencias',
+    'organizations',
     'resultados',
     'roles',
     'usuarios',
@@ -701,7 +703,7 @@ function Start-ValidationBackend {
             '--spring.flyway.enabled=true',
             "--spring.flyway.baseline-on-migrate=$($Baseline.ToString().ToLowerInvariant())",
             '--spring.flyway.baseline-version=1',
-            '--spring.flyway.target=3',
+            '--spring.flyway.target=4',
             '--spring.flyway.locations=classpath:db/migration',
             '--spring.flyway.validate-on-migrate=true',
             '--spring.flyway.clean-disabled=true',
@@ -1020,7 +1022,7 @@ function Assert-MigrationContents {
         }
     }
     finally { $archive.Dispose() }
-    Write-Host 'V1 + V2 + V3 FROZEN + PACKAGED MIGRATION CONTENTS OK'
+    Write-Host 'V1 + V2 + V3 FROZEN; V1 + V2 + V3 + V4 PACKAGED MIGRATION CONTENTS OK'
 }
 
 function New-HistoricalIncidentSentinels {
@@ -1314,10 +1316,12 @@ SELECT CONCAT(
     (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='incidencias'
      AND column_name IN ('rule_id','motor','version')),'|',
     (SELECT COUNT(*) FROM flyway_schema_history WHERE version='3' AND success=1),'|',
-    (SELECT COUNT(*) FROM flyway_schema_history WHERE version='3' AND success=0));
+    (SELECT COUNT(*) FROM flyway_schema_history WHERE version='3' AND success=0),'|',
+    (SELECT COUNT(*) FROM flyway_schema_history WHERE version='4'),'|',
+    (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='organizations'));
 '@)
-    Assert-Condition -Condition ($state.Count -eq 1 -and $state[0] -ceq '0|0|1') `
-        -Message 'Expected no V3 columns and exactly one failed Flyway V3 row after pre-DDL rejection.'
+    Assert-Condition -Condition ($state.Count -eq 1 -and $state[0] -ceq '0|0|1|0|0') `
+        -Message 'Expected no V3 columns, exactly one failed Flyway V3 row and no V4 history/table after pre-DDL rejection.'
     Write-Host 'V3 PRE-DDL REJECTION: COLUMNS=0, SUCCESS=0, FAILED_HISTORY=1, OLD DATA UNCHANGED'
 
     $blocked = Start-ValidationBackend -DbUrl "jdbc:mariadb://127.0.0.1:${dbPort}/sa08_unknown_validation" `
@@ -1352,7 +1356,7 @@ SELECT CONCAT(
     Assert-AuditDataSnapshot -ContainerId $container -Expected $corrected
     Assert-IncidentProvenance -ContainerId $container -ExpectedHistorical @('900001|R01|LEGAL_TEXT|1')
     $retryHistory = @(Invoke-DockerSql -ContainerId $container -Sql "SELECT CONCAT(version,'|',type,'|',success) FROM flyway_schema_history ORDER BY installed_rank;")
-    Assert-Condition -Condition (($retryHistory -join ',') -ceq '1|BASELINE|1,2|SQL|1,3|SQL|1') -Message 'Unexpected history after repaired retry.'
+    Assert-Condition -Condition (($retryHistory -join ',') -ceq '1|BASELINE|1,2|SQL|1,3|SQL|1,4|SQL|1') -Message 'Unexpected history after repaired retry.'
     Stop-ProcessTree -ProcessId $retry.Process.Id
     Write-Host 'UNKNOWN CATEGORY CORRECTED + FLYWAY REPAIR + CLEAN RETRY OK'
 }
@@ -1493,12 +1497,13 @@ try {
 
     Assert-Condition `
         -Condition (
-            $sourceMigrations.Count -eq 3 -and
+            $sourceMigrations.Count -eq 4 -and
             $sourceMigrations[0] -ceq 'V1__initial_schema.sql' -and
             $sourceMigrations[1] -ceq 'V2__audit_analysis_provenance.sql' -and
-            $sourceMigrations[2] -ceq 'V3__incident_rule_provenance.sql'
+            $sourceMigrations[2] -ceq 'V3__incident_rule_provenance.sql' -and
+            $sourceMigrations[3] -ceq 'V4__create_organizations.sql'
         ) `
-        -Message 'Migration validation requires exactly frozen V1 + V2 and incident provenance V3.'
+        -Message 'Migration validation requires exactly frozen V1 + V2 + V3 and published organizations V4.'
 
     $jarEntries = @(
         & jar tf $jar
@@ -1523,12 +1528,13 @@ try {
 
     Assert-Condition `
         -Condition (
-            $jarMigrations.Count -eq 3 -and
+            $jarMigrations.Count -eq 4 -and
             @($jarMigrations | Sort-Object)[0] -ceq 'BOOT-INF/classes/db/migration/V1__initial_schema.sql' -and
             @($jarMigrations | Sort-Object)[1] -ceq 'BOOT-INF/classes/db/migration/V2__audit_analysis_provenance.sql' -and
-            @($jarMigrations | Sort-Object)[2] -ceq 'BOOT-INF/classes/db/migration/V3__incident_rule_provenance.sql'
+            @($jarMigrations | Sort-Object)[2] -ceq 'BOOT-INF/classes/db/migration/V3__incident_rule_provenance.sql' -and
+            @($jarMigrations | Sort-Object)[3] -ceq 'BOOT-INF/classes/db/migration/V4__create_organizations.sql'
         ) `
-        -Message 'Backend JAR must contain exactly frozen V1 + V2 and incident provenance V3.'
+        -Message 'Backend JAR must contain exactly frozen V1 + V2 + V3 and published organizations V4.'
 
     Assert-MigrationContents
 
@@ -1608,16 +1614,17 @@ try {
 
     Assert-Condition `
         -Condition (
-            $emptyHistory.Count -eq 3 -and
+            $emptyHistory.Count -eq 4 -and
             $emptyHistory[0] -ceq '1|1|initial schema|SQL|1' -and
             $emptyHistory[1] -ceq '2|2|audit analysis provenance|SQL|1' -and
-            $emptyHistory[2] -ceq '3|3|incident rule provenance|SQL|1'
+            $emptyHistory[2] -ceq '3|3|incident rule provenance|SQL|1' -and
+            $emptyHistory[3] -ceq '4|4|create organizations|SQL|1'
         ) `
         -Message 'Unexpected Flyway history for empty installation.'
 
     Assert-ProvenanceSchema -ContainerId $emptyContainerId
     Assert-IncidentProvenance -ContainerId $emptyContainerId
-    Write-Host 'FRESH V1 -> V2 -> V3 OK'
+    Write-Host 'FRESH V1 -> V2 -> V3 -> V4 OK'
     Write-Host 'HIBERNATE VALIDATE OK WITH UNMAPPED LEGACY RESULTADOS TABLE'
 
     $emptyHttp = Get-HttpStatus `
@@ -1747,10 +1754,11 @@ VALUES (900001,'historical-admin@example.invalid','Historical admin','Original a
 
     Assert-Condition `
         -Condition (
-            $baselineHistory.Count -eq 3 -and
+            $baselineHistory.Count -eq 4 -and
             $baselineHistory[0] -ceq '1|1|Legacy SmartAudits schema|BASELINE|1' -and
             $baselineHistory[1] -ceq '2|2|audit analysis provenance|SQL|1' -and
-            $baselineHistory[2] -ceq '3|3|incident rule provenance|SQL|1'
+            $baselineHistory[2] -ceq '3|3|incident rule provenance|SQL|1' -and
+            $baselineHistory[3] -ceq '4|4|create organizations|SQL|1'
         ) `
         -Message 'Unexpected Flyway history after historical baseline.'
 
@@ -1762,7 +1770,7 @@ VALUES (900001,'historical-admin@example.invalid','Historical admin','Original a
     Assert-AuditDataSnapshot -ContainerId $legacyContainerId -Expected $legacyAuditSnapshot
     Assert-NewAuditViaApi -ContainerId $legacyContainerId -ApiPort $legacyBaselineApiPort -JwtSecret $legacyJwt
     $upgradedAuditSnapshot = @(Get-AuditDataSnapshot -ContainerId $legacyContainerId -IncludeProvenance)
-    Write-Host 'HISTORICAL BASELINE 1 -> V2 -> V3 + DATA PRESERVATION OK'
+    Write-Host 'HISTORICAL BASELINE 1 -> V2 -> V3 -> V4 + DATA PRESERVATION OK'
 
     Assert-Sentinel `
         -ContainerId $legacyContainerId
@@ -1803,10 +1811,11 @@ VALUES (900001,'historical-admin@example.invalid','Historical admin','Original a
 
     Assert-Condition `
         -Condition (
-            $secondHistory.Count -eq 3 -and
+            $secondHistory.Count -eq 4 -and
             $secondHistory[0] -ceq '1|1|Legacy SmartAudits schema|BASELINE|1' -and
             $secondHistory[1] -ceq '2|2|audit analysis provenance|SQL|1' -and
-            $secondHistory[2] -ceq '3|3|incident rule provenance|SQL|1'
+            $secondHistory[2] -ceq '3|3|incident rule provenance|SQL|1' -and
+            $secondHistory[3] -ceq '4|4|create organizations|SQL|1'
         ) `
         -Message 'Flyway history changed unexpectedly on second historical startup.'
 
