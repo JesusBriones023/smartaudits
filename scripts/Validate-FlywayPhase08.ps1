@@ -1004,6 +1004,7 @@ function Assert-MigrationContents {
         'V1__initial_schema.sql' = '355F84949A1ECC83CA63BDC783D66760094CBA99487C074D9F0C22E0F05B441A'
         'V2__audit_analysis_provenance.sql' = 'DC6E575768C1CEAD54A9814D3EBC857E229102B5CE98CDB730FFE651D4F4CBBD'
         'V3__incident_rule_provenance.sql' = '8BCE983C4D69C3503629FC6B3C3523CBA3EDC98AA7A8E31B8831F2CEF4C3B10E'
+        'V4__create_organizations.sql' = '298E83B5E675CE032E24D1AE79243A1C01DB81FCC92CAB64D561A1CE0E94D2D5'
     }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $archive = [IO.Compression.ZipFile]::OpenRead($jar)
@@ -1022,7 +1023,7 @@ function Assert-MigrationContents {
         }
     }
     finally { $archive.Dispose() }
-    Write-Host 'V1 + V2 + V3 FROZEN; V1 + V2 + V3 + V4 PACKAGED MIGRATION CONTENTS OK'
+    Write-Host 'V1 + V2 + V3 + V4 FROZEN; PACKAGED MIGRATION CONTENTS OK'
 }
 
 function New-HistoricalIncidentSentinels {

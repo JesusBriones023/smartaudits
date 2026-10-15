@@ -7,7 +7,8 @@ already cached for offline (-o) builds. Requires a running Docker daemon and the
 local mariadb:11.2 image; nothing is downloaded automatically.
 Full runs also require Node/npm, frontend node_modules, resolvable Playwright and
 its installed Chromium, plus available loopback ports. The tracked frontend must
-equal the approved rollback release and have no tracked/untracked source changes.
+equal the approved rollback release and have no tracked/untracked source changes,
+except e2e/run.mjs (explicitly approved; this harness never invokes that runner).
 Vite .vite is moved to this run's temporary directory and restored byte-for-byte.
 Do not run another frontend/Vite process concurrently. Restoration failure retains
 the saved cache and reports cleanup failure instead of deleting the recovery copy.
@@ -164,20 +165,48 @@ function Maven([string]$Cwd, [string]$Options, [hashtable]$Extra = @{}) {
     # Options are harness constants, never external input or secrets.
     return Native 'Maven' $baseEnv.ComSpec @('/d','/s','/c',"mvn -B -o $Options") $Cwd $Extra 360
 }
-function Assert-Migrations {
+function Assert-Migrations([string]$Jar) {
+    # Published UTF-8 text hashes, canonical CRLF -> LF; never derived from HEAD/JAR.
     $expected = @{
         'V1__initial_schema.sql'='355F84949A1ECC83CA63BDC783D66760094CBA99487C074D9F0C22E0F05B441A'
         'V2__audit_analysis_provenance.sql'='DC6E575768C1CEAD54A9814D3EBC857E229102B5CE98CDB730FFE651D4F4CBBD'
         'V3__incident_rule_provenance.sql'='8BCE983C4D69C3503629FC6B3C3523CBA3EDC98AA7A8E31B8831F2CEF4C3B10E'
+        'V4__create_organizations.sql'='298E83B5E675CE032E24D1AE79243A1C01DB81FCC92CAB64D561A1CE0E94D2D5'
     }
-    foreach ($name in $expected.Keys) {
-        $path = Join-Path $repo "smartaudits-backend/src/main/resources/db/migration/$name"
-        $logical = Digest ([IO.File]::ReadAllText($path).Replace("`r`n", "`n"))
-        Assert-That ($logical -ceq $expected[$name]) "Frozen migration changed: $name"
-        $raw = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
-        if ($migrationHashes.ContainsKey($name)) { Assert-That ($raw -ceq $migrationHashes[$name]) "Migration bytes changed: $name" }
-        else { $migrationHashes[$name] = $raw }
+    $archive = $null
+    if ($Jar) {
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $archive = [IO.Compression.ZipFile]::OpenRead($Jar)
     }
+    try {
+        foreach ($name in $expected.Keys) {
+            $path = Join-Path $repo "smartaudits-backend/src/main/resources/db/migration/$name"
+            Assert-That (Test-Path -LiteralPath $path -PathType Leaf) "Frozen migration missing: $name"
+            $logical = Digest ([IO.File]::ReadAllText($path).Replace("`r`n", "`n"))
+            Assert-That ($logical -ceq $expected[$name]) "Frozen migration changed: $name"
+            $raw = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+            if ($migrationHashes.ContainsKey($name)) { Assert-That ($raw -ceq $migrationHashes[$name]) "Migration bytes changed: $name" }
+            else { $migrationHashes[$name] = $raw }
+            if ($archive) {
+                $entries = @($archive.Entries | Where-Object { $_.FullName -ceq "BOOT-INF/classes/db/migration/$name" })
+                Assert-That ($entries.Count -eq 1) "Packaged frozen migration missing/duplicate: $name"
+                $reader = [IO.StreamReader]::new($entries[0].Open(), $utf8)
+                try { $packaged = Digest ($reader.ReadToEnd().Replace("`r`n", "`n")) }
+                finally { $reader.Dispose() }
+                Assert-That ($packaged -ceq $expected[$name]) "Packaged frozen migration changed: $name"
+            }
+        }
+        if ($archive) {
+            # Real-Migrations fixes approved Git versions plus owned synthetic V9000.
+            $packagedVersions = @($archive.Entries | Where-Object {
+                $_.FullName.StartsWith('BOOT-INF/classes/db/migration/') -and -not $_.FullName.EndsWith('/')
+            } | ForEach-Object {
+                Assert-That ($_.FullName -cmatch '^BOOT-INF/classes/db/migration/V([0-9]+)__.+\.sql$') 'Unsupported packaged migration name'
+                [long]$Matches[1]
+            })
+            Assert-That ((($packagedVersions | Sort-Object) -join ',') -ceq (($expectedVersions | Sort-Object) -join ',')) 'Packaged migration inventory differs from approved versions'
+        }
+    } finally { if ($archive) { $archive.Dispose() } }
 }
 function Habitual-State {
     # Identity/status metadata only. Never full inspect, SQL, exec, mounts or credentials.
@@ -306,6 +335,18 @@ function Assert-Expansion([string]$Path, [switch]$RequireTableOptions) {
             if ($token.Text -eq ')') { $depth--; if ($depth -eq 0) { $close=$i; break } }
             Assert-That ($token.Text -ne ';' -and $depth -ge 0) 'Unexpected statement delimiter'
         }
+        # Inspect the body only, before the separately validated table-options tail.
+        # Column names and nested CHECK expressions do not set storage encoding.
+        # Quoting an encoding/type token in a declaration cannot bypass this guard.
+        if ($depth -eq 1 -and $token.Kind -in @('word','quoted') -and
+            $i -ne 4 -and $tokens[$i-1].Text -ne ',') {
+            $keyword = $token.Text.Trim([char]96)
+            $characterSet = $keyword -in @('CHAR','CHARACTER') -and $i+1 -lt $tokens.Count -and
+                $tokens[$i+1].Kind -in @('word','quoted') -and $tokens[$i+1].Text.Trim([char]96) -eq 'SET'
+            $encoding = $keyword -in @('CHARSET','COLLATE','ASCII','UNICODE','NCHAR','NATIONAL','NVARCHAR')
+            $storageAlias = $keyword -in @('BINARY','BYTE','JSON')
+            Assert-That (-not ($characterSet -or $encoding -or $storageAlias)) 'Column charset/collation override or implicit encoding forbidden'
+        }
         if ($token.Kind -ne 'word') { continue }
         if ($token.Text -eq 'REFERENCES') {
             Assert-That ($i+2 -lt $tokens.Count -and $tokens[$i+1].Kind -in @('word','quoted') -and
@@ -396,6 +437,29 @@ function Self-Tests {
         'ENGINE=InnoDB COLLATE=utf8mb4_unicode_520_ci;',
         'DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;') |
         ForEach-Object { "CREATE TABLE f3_example (id BIGINT) $_" }
+    $tableOptions = 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;'
+    $encodingGood = @(
+        [IO.File]::ReadAllText((Join-Path $repo $candidatePaths[0])),
+        "CREATE TABLE f3_example (status VARCHAR(20), CHECK (BINARY status IN ('ACTIVE','REVOKED'))) $tableOptions",
+        "CREATE TABLE f3_example (value VARCHAR(90) DEFAULT 'CHARSET COLLATE ASCII UNICODE NCHAR NATIONAL NVARCHAR JSON BINARY') $tableOptions",
+        ('CREATE TABLE f3_example (`charset` VARCHAR(50), `unicode` CHAR(2), value CHARACTER VARYING(50)) ' + $tableOptions),
+        "CREATE TABLE f3_example (value LONGTEXT CHECK (JSON_VALID(value))) $tableOptions"
+    )
+    $encodingDeclarations = @(
+        'VARCHAR(50) CHARSET latin1', 'VARCHAR(50) CHARSET=latin1',
+        'VARCHAR(50) CHARACTER SET latin1', 'VARCHAR(50) CHARACTER SET=latin1',
+        'VARCHAR(50) CHAR SET latin1',
+        'VARCHAR(50) COLLATE latin1_bin', 'VARCHAR(50) COLLATE=utf8mb4_bin',
+        'VARCHAR(50) CHARSET `latin1`', "VARCHAR(50) CHARSET 'latin1'",
+        'VARCHAR(50) COLLATE `utf8mb4_bin`', "VARCHAR(50) COLLATE 'utf8mb4_bin'",
+        'VARCHAR(50) CHARSET utf8mb4', 'VARCHAR(50) COLLATE utf8mb4_unicode_520_ci',
+        'VARCHAR(50) ASCII', 'VARCHAR(50) UNICODE', 'VARCHAR(50) BINARY',
+        'CHAR(5) BYTE', 'NCHAR(5)', 'NCHAR VARCHAR(50)', 'NCHAR VARYING(50)',
+        'NVARCHAR(50)', 'NATIONAL VARCHAR(50)', 'NATIONAL CHAR(5)',
+        'NATIONAL CHARACTER VARYING(50)', 'NATIONAL VARCHARACTER(50)',
+        'TEXT ASCII', 'TEXT UNICODE', 'TEXT BINARY', 'JSON'
+    )
+    $encodingRejected = 0
     $fixture = Join-Path $tempRoot 'guard-fixture.sql'
     try {
         foreach ($sql in $good) { [IO.File]::WriteAllText($fixture,$sql,$utf8); Assert-Expansion $fixture }
@@ -415,9 +479,40 @@ function Self-Tests {
             try { Assert-Expansion $fixture -RequireTableOptions } catch { $rejected=$true }
             Assert-That $rejected 'Real V4+ guard accepted incomplete table options'
         }
+        foreach ($sql in $encodingGood) {
+            [IO.File]::WriteAllText($fixture,$sql,$utf8)
+            Assert-Expansion $fixture -RequireTableOptions
+        }
+        foreach ($declaration in $encodingDeclarations) {
+            foreach ($variant in @($declaration, $declaration.ToLowerInvariant(), $declaration.Replace(' ',"`r`n`t"))) {
+                [IO.File]::WriteAllText($fixture,('CREATE TABLE f3_example (`value` ' + $variant + ') ' + $tableOptions),$utf8)
+                $reason = ''
+                try { Assert-Expansion $fixture -RequireTableOptions } catch { $reason=$_.Exception.Message }
+                Assert-That ($reason -ceq 'Column charset/collation override or implicit encoding forbidden') "Wrong encoding rejection: $declaration -> $reason"
+                $encodingRejected++
+            }
+        }
+        # Quoted type/attribute disguises and executable/comment splitting fail
+        # explicitly; rejection for unrelated malformed table options is insufficient.
+        foreach ($case in @(
+            @('VARCHAR(50) `CHARSET` latin1', 'Column charset/collation override or implicit encoding forbidden'),
+            @('`NVARCHAR`(50)', 'Column charset/collation override or implicit encoding forbidden'),
+            @('VARCHAR(50) /*! CHARSET latin1 */', 'Unsupported SQL token/comment/escape'),
+            @('VARCHAR(50) CHARACTER /* hidden */ SET latin1', 'Unsupported SQL token/comment/escape'),
+            @('VARCHAR(50) CHARSET "latin1"', 'Unsupported SQL token/comment/escape'),
+            @("VARCHAR(50) -- hidden`n CHARSET latin1", 'SQL comments forbidden'),
+            @("VARCHAR(50) # hidden`n CHARSET latin1", 'Unsupported SQL token/comment/escape')
+        )) {
+            [IO.File]::WriteAllText($fixture,('CREATE TABLE f3_example (value ' + $case[0] + ') ' + $tableOptions),$utf8)
+            $reason = ''
+            try { Assert-Expansion $fixture -RequireTableOptions } catch { $reason=$_.Exception.Message }
+            Assert-That ($reason -ceq $case[1]) "Wrong encoding syntax rejection: $($case[0]) -> $reason"
+            $encodingRejected++
+        }
     } finally { if (Test-Path -LiteralPath $fixture) { Remove-Item -LiteralPath $fixture } }
     Pass "Migration guard self-tests: $($good.Count) accepted; $($bad.Count) rejected; before Docker"
     Pass "Real V4+ table options self-tests: $($realGood.Count) accepted; $($realBad.Count) rejected; before Docker"
+    Pass "Column encoding self-tests: $($encodingGood.Count) accepted; $encodingRejected rejected with exact reasons; before Docker"
 }
 function Real-Migrations {
     $relative = 'smartaudits-backend/src/main/resources/db/migration'
@@ -435,7 +530,7 @@ function Real-Migrations {
         $versions[$version] = $file
         if ($version -ge 4) { Assert-Expansion (Join-Path $repo $file) -RequireTableOptions }
     }
-    foreach ($frozen in @(1L,2L,3L)) { Assert-That ($versions.ContainsKey($frozen)) 'Missing frozen migration' }
+    foreach ($frozen in @(1L,2L,3L,4L)) { Assert-That ($versions.ContainsKey($frozen)) 'Missing frozen migration' }
     $real = @($versions.Keys | Where-Object { $_ -ge 4 } | Sort-Object)
     $script:expectedVersions = @(1,2,3) + $real + @(9000)
     $found = if ($real.Count) { $real -join ',' } else { 'none' }
@@ -464,10 +559,12 @@ function Assert-History {
 }
 function Assert-Frontend {
     $message = "Rollback harness needs an explicit frontend/E2E decision: frontend diverges from $RollbackRelease"
-    Assert-That (-not (Native 'Git frontend status' 'git' @('status','--porcelain','--untracked-files=all','--','smartaudits-frontend'))) $message
-    try { $null = Native 'Git frontend baseline diff' 'git' @('diff','--quiet',$baseline,$head,'--','smartaudits-frontend') }
+    # Coordinator-approved exception: unused runner only; server/config/flows remain protected.
+    $paths = @('smartaudits-frontend', ':(top,exclude,literal)smartaudits-frontend/e2e/run.mjs')
+    Assert-That (-not (Native 'Git frontend status' 'git' (@('status','--porcelain','--untracked-files=all','--') + $paths))) $message
+    try { $null = Native 'Git frontend baseline diff' 'git' (@('diff','--quiet',$baseline,$head,'--') + $paths) }
     catch { throw $message }
-    Pass 'Frontend tracked HEAD equals exact baseline; working tree source clean (including untracked)'
+    Pass 'Frontend equals exact baseline and source tree is clean, except the explicitly approved unused e2e/run.mjs'
 }
 function Preflight {
     Assert-VersionedSources
@@ -741,6 +838,7 @@ CREATE TABLE f3_harness_future_probe (
     Pass "New JAR from HEAD $head + V9000; explicit Organization candidates=$IncludePendingOrganization"
     $oldJar=Join-Path $oldBackend 'target/smartaudits-backend-1.0.0.jar'
     $newJar=Join-Path $newBackend 'target/smartaudits-backend-1.0.0.jar'
+    Assert-Migrations -Jar $newJar # The old rollback JAR intentionally has no V4.
     }
     $volumeRegistered=$true
     $null = Docker @('volume','create','--label',"$label=$runId",$volume)
@@ -809,7 +907,7 @@ CREATE TABLE f3_harness_future_probe (
     Assert-Candidates
     Assert-VersionedSources
     Assert-That ((Native 'Git HEAD verification' 'git' @('rev-parse','HEAD')) -ceq $head) 'Main checkout moved'
-    Pass 'V1/V2/V3 bytes and normalized hashes intact'
+    Pass 'V1/V2/V3/V4 bytes and normalized hashes intact'
 } catch {
     $failure=Protect $_.Exception.Message
     Write-Host "FAIL $failure"

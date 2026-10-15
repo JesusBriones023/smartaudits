@@ -1,6 +1,6 @@
 import { spawn, execFileSync } from 'node:child_process'
-import { randomBytes, randomUUID } from 'node:crypto'
-import { mkdir, stat, writeFile } from 'node:fs/promises'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { createServer, createConnection } from 'node:net'
 import { dirname, resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -35,6 +35,45 @@ const dbPassword = randomBytes(24).toString('hex')
 const rootPassword = randomBytes(24).toString('hex')
 const jwt = randomBytes(48).toString('base64')
 const redact = text => [password, dbPassword, rootPassword, jwt].reduce((s, secret) => s.replaceAll(secret, '[REDACTED]'), text)
+
+async function assertMigrationContents(migrationDir, jar, extractDir) {
+  // Published UTF-8 text hashes, matching the PowerShell validators (BOM/CRLF).
+  // Neither environment/config nor matching source/JAR content can replace them.
+  const frozen = {
+    'V1__initial_schema.sql': '355F84949A1ECC83CA63BDC783D66760094CBA99487C074D9F0C22E0F05B441A',
+    'V2__audit_analysis_provenance.sql': 'DC6E575768C1CEAD54A9814D3EBC857E229102B5CE98CDB730FFE651D4F4CBBD',
+    'V3__incident_rule_provenance.sql': '8BCE983C4D69C3503629FC6B3C3523CBA3EDC98AA7A8E31B8831F2CEF4C3B10E',
+    'V4__create_organizations.sql': '298E83B5E675CE032E24D1AE79243A1C01DB81FCC92CAB64D561A1CE0E94D2D5',
+  }
+  const names = Object.keys(frozen).sort()
+  const hash = text => createHash('sha256').update(text.replace(/^\uFEFF/, '').replaceAll('\r\n', '\n'), 'utf8').digest('hex').toUpperCase()
+  if (JSON.stringify((await readdir(migrationDir)).sort()) !== JSON.stringify(names)) {
+    throw new Error('Expected exactly V1 + V2 + V3 + V4 source migrations.')
+  }
+  for (const name of names) {
+    if (hash(await readFile(join(migrationDir, name), 'utf8')) !== frozen[name]) {
+      throw new Error(`Frozen migration changed: ${name}`)
+    }
+  }
+  // JDK jar is already available with the backend toolchain; extract only these
+  // four exact entries to a new owned directory, never arbitrary archive paths.
+  const prefix = 'BOOT-INF/classes/db/migration/'
+  const entries = names.map(name => prefix + name)
+  const options = { env: baseEnv, windowsHide: true, encoding: 'utf8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'] }
+  const packaged = execFileSync('jar', ['tf', jar], options).split(/\r?\n/)
+    .filter(name => name.startsWith(prefix) && !name.endsWith('/')).sort()
+  if (JSON.stringify(packaged) !== JSON.stringify(entries)) {
+    throw new Error('Expected exactly V1 + V2 + V3 + V4 packaged migrations.')
+  }
+  await mkdir(extractDir) // Must be new: an absent entry cannot reuse stale bytes.
+  execFileSync('jar', ['xf', jar, ...entries], { ...options, cwd: extractDir })
+  for (const name of names) {
+    if (hash(await readFile(join(extractDir, prefix, name), 'utf8')) !== frozen[name]) {
+      throw new Error(`Packaged frozen migration changed: ${name}`)
+    }
+  }
+  console.log('V1 + V2 + V3 + V4 FROZEN; PACKAGED MIGRATION CONTENTS OK')
+}
 
 function docker(args, extraEnv = {}) {
   try {
@@ -189,6 +228,9 @@ try {
     ? start('build', baseEnv.ComSpec || 'cmd.exe', ['/d', '/s', '/c', 'mvn -B -o -DskipTests package'], join(repo, 'smartaudits-backend'))
     : start('build', 'mvn', ['-B', '-o', '-DskipTests', 'package'], join(repo, 'smartaudits-backend'))
   if (await build.done !== 0) throw new Error('Backend artifact build failed (see isolated build.log).')
+  const jar = join(repo, 'smartaudits-backend/target/smartaudits-backend-1.0.0.jar')
+  await assertMigrationContents(join(repo, 'smartaudits-backend/src/main/resources/db/migration'), jar,
+    join(runtime, 'verified-migrations'))
 
   volumeRegistered = true
   docker(['volume', 'create', '--label', `${label}=${runId}`, volume])
@@ -209,7 +251,7 @@ try {
   }
   const backendPort = await freePort()
   const frontendPort = await freePort()
-  const backend = start('backend', 'java', ['-jar', join(repo, 'smartaudits-backend/target/smartaudits-backend-1.0.0.jar'),
+  const backend = start('backend', 'java', ['-jar', jar,
     '--spring.config.location=classpath:/application.properties'], runtime, {
     DB_URL: `jdbc:mariadb://127.0.0.1:${dbPort}/${database}`, DB_USERNAME: 'sa14_user', DB_PASSWORD: dbPassword,
     JWT_SECRET: jwt, SERVER_ADDRESS: '127.0.0.1', SERVER_PORT: String(backendPort),
