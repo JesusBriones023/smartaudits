@@ -16,11 +16,12 @@ Only frozen migrations, guarded numeric V4+ and temporary V9000 are used.
 Protected UtcMicros/probe sources must equal HEAD and come from Git archive.
 .PARAMETER RollbackRelease
 Release from the reviewed catalogue below. Updating this catalogue requires an
-explicit deployment decision; arbitrary commits/refs are not accepted.
-.PARAMETER IncludePendingOrganization
-Pre-commit validation only: overlay the three explicitly named Organization
-candidate files, record their hashes and verify them throughout the run.
-Future V4 entities must prove they call UtcMicros before persisting timestamps;
+explicit compatibility decision; arbitrary commits/refs are not accepted.
+.PARAMETER IncludePendingMembership
+Pre-commit validation only: overlay the six V5 files and the reviewed Organization
+historical probe adaptation. Exact paths/statuses/hashes are checked throughout.
+IncludePendingOrganization is obsolete and is no longer an accepted parameter.
+Future entities must prove they call UtcMicros before persisting timestamps;
 driver handling of an unnormalized Instant is not the domain contract.
 .PARAMETER TimestampOnly
 Runs the two separate JVM timestamp probes without backend startup or E2E.
@@ -32,8 +33,8 @@ Runs finite-output and SQL-guard self-tests without Docker or application startu
 # Does not invoke run.mjs, the legacy validator entrypoint, Compose or Flyway repair.
 [CmdletBinding()]
 param([switch]$TimestampOnly, [switch]$SelfTestOnly,
-    [ValidateSet('a201582','cc78d6b')][string]$RollbackRelease = 'a201582',
-    [switch]$IncludePendingOrganization)
+    [ValidateSet('bbd02ff','a201582')][string]$RollbackRelease = 'bbd02ff',
+    [switch]$IncludePendingMembership)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -76,12 +77,17 @@ $cacheBefore = $null
 $preserveTemp = $false
 $expectedVersions = @()
 $approvedReleases = @{
+    # Published compatibility references, neither represents a production deployment.
+    bbd02ff='bbd02ff0ae738fff71b6f27a8c6fd70845d1ad3b'
     a201582='a20158268666d4d43bc16844bfaedfa9f00e786d'
-    cc78d6b='cc78d6b355ff95042cdb9d47e38ae5d33dc17eb5'
 }
 $candidatePaths = @(
-    'smartaudits-backend/src/main/resources/db/migration/V4__create_organizations.sql',
-    'smartaudits-backend/src/main/java/com/smartaudits/v2/model/Organization.java',
+    'smartaudits-backend/src/main/resources/db/migration/V5__create_organization_memberships.sql',
+    'smartaudits-backend/src/main/java/com/smartaudits/v2/model/OrganizationMembership.java',
+    'smartaudits-backend/src/main/java/com/smartaudits/v2/model/MembershipRole.java',
+    'smartaudits-backend/src/main/java/com/smartaudits/v2/model/MembershipStatus.java',
+    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/OrganizationMembershipTest.java',
+    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/OrganizationMembershipMariaDbProbe.java',
     'smartaudits-backend/src/test/java/com/smartaudits/v2/model/OrganizationTest.java'
 )
 $candidateHashes = @{}
@@ -148,7 +154,7 @@ function Output-Of($Record) {
     Assert-That ($Record.Process.HasExited) 'Cannot collect output from a running child'
     return (Await-Output $Record.Out "$($Record.Name) stdout") + (Await-Output $Record.Err "$($Record.Name) stderr")
 }
-function Native([string]$Name, [string]$Exe, [string[]]$Arguments, [string]$Cwd = $repo, [hashtable]$Extra = @{}, [int]$Timeout = 60) {
+function Native([string]$Name, [string]$Exe, [string[]]$Arguments, [string]$Cwd = $repo, [hashtable]$Extra = @{}, [int]$Timeout = 60, [switch]$KeepLeadingWhitespace) {
     $record = Start-Owned $Name $Exe $Arguments $Cwd $Extra
     if (-not $record.Process.WaitForExit($Timeout * 1000)) { throw "$Name timed out (owned process retained for cleanup)" }
     $output = Output-Of $record
@@ -156,6 +162,7 @@ function Native([string]$Name, [string]$Exe, [string[]]$Arguments, [string]$Cwd 
         $tail = $output.Substring([Math]::Max(0, $output.Length - 5000))
         throw "$Name failed (exit $($record.Process.ExitCode)); final $($tail.Length) of $($output.Length) log characters: $(Protect $tail)"
     }
+    if ($KeepLeadingWhitespace) { return $output.TrimEnd() }
     return $output.Trim()
 }
 function Docker([string[]]$Arguments, [hashtable]$Extra = @{}) {
@@ -172,7 +179,11 @@ function Assert-Migrations([string]$Jar) {
         'V2__audit_analysis_provenance.sql'='DC6E575768C1CEAD54A9814D3EBC857E229102B5CE98CDB730FFE651D4F4CBBD'
         'V3__incident_rule_provenance.sql'='8BCE983C4D69C3503629FC6B3C3523CBA3EDC98AA7A8E31B8831F2CEF4C3B10E'
         'V4__create_organizations.sql'='298E83B5E675CE032E24D1AE79243A1C01DB81FCC92CAB64D561A1CE0E94D2D5'
+        'V5__create_organization_memberships.sql'='CE5A10EF0E1074B337971AF4ABA0DFECEC410A55A0A4BA469C479798F956C498'
     }
+    $migrationDir = Join-Path $repo 'smartaudits-backend/src/main/resources/db/migration'
+    $sourceNames = @(Get-ChildItem -LiteralPath $migrationDir -Force | ForEach-Object { $_.Name } | Sort-Object)
+    Assert-That (($sourceNames -join ',') -ceq (($expected.Keys | Sort-Object) -join ',')) 'Expected exactly V1-V5 source migrations'
     $archive = $null
     if ($Jar) {
         Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -439,6 +450,7 @@ function Self-Tests {
         ForEach-Object { "CREATE TABLE f3_example (id BIGINT) $_" }
     $tableOptions = 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;'
     $encodingGood = @(
+        [IO.File]::ReadAllText((Join-Path $repo 'smartaudits-backend/src/main/resources/db/migration/V4__create_organizations.sql')),
         [IO.File]::ReadAllText((Join-Path $repo $candidatePaths[0])),
         "CREATE TABLE f3_example (status VARCHAR(20), CHECK (BINARY status IN ('ACTIVE','REVOKED'))) $tableOptions",
         "CREATE TABLE f3_example (value VARCHAR(90) DEFAULT 'CHARSET COLLATE ASCII UNICODE NCHAR NATIONAL NVARCHAR JSON BINARY') $tableOptions",
@@ -518,10 +530,10 @@ function Real-Migrations {
     $relative = 'smartaudits-backend/src/main/resources/db/migration'
     $status = Native 'Git migration status' 'git' @('status','--porcelain','--untracked-files=all','--',$relative)
     if ($status) {
-        Assert-That ($IncludePendingOrganization -and $status -ceq "?? $($candidatePaths[0])") 'Only explicit new Organization migration candidate may differ from HEAD'
+        Assert-That ($IncludePendingMembership -and $status -ceq "?? $($candidatePaths[0])") 'Only explicit new Membership migration candidate may differ from HEAD'
     }
     $files = @((Native 'Git migration inventory' 'git' @('ls-tree','-r','--name-only',$head,'--',$relative)) -split '\r?\n')
-    if ($IncludePendingOrganization -and $files -notcontains $candidatePaths[0]) { $files += $candidatePaths[0] }
+    if ($IncludePendingMembership -and $files -notcontains $candidatePaths[0]) { $files += $candidatePaths[0] }
     $versions = @{}
     foreach ($file in $files) {
         Assert-That ((Split-Path $file -Leaf) -cmatch '^V([0-9]+)__.+\.sql$') 'Unsupported migration filename/version'
@@ -530,11 +542,11 @@ function Real-Migrations {
         $versions[$version] = $file
         if ($version -ge 4) { Assert-Expansion (Join-Path $repo $file) -RequireTableOptions }
     }
-    foreach ($frozen in @(1L,2L,3L,4L)) { Assert-That ($versions.ContainsKey($frozen)) 'Missing frozen migration' }
+    Assert-That ((($versions.Keys | Sort-Object) -join ',') -ceq '1,2,3,4,5') 'Expected exactly versioned V1-V5 (plus explicit pending V5 only)'
     $real = @($versions.Keys | Where-Object { $_ -ge 4 } | Sort-Object)
     $script:expectedVersions = @(1,2,3) + $real + @(9000)
     $found = if ($real.Count) { $real -join ',' } else { 'none' }
-    Pass "Real V4+: $found; pending candidates=$IncludePendingOrganization; expected Flyway versions=$($expectedVersions -join ','); count=$($expectedVersions.Count)"
+    Pass "Real V4+: $found; pending candidates=$IncludePendingMembership; expected Flyway versions=$($expectedVersions -join ','); count=$($expectedVersions.Count)"
 }
 function Assert-VersionedSources {
     foreach ($path in @('smartaudits-backend/src/main/java/com/smartaudits/v2/time/UtcMicros.java',
@@ -546,8 +558,36 @@ function Assert-VersionedSources {
     Pass 'UtcMicros and original probe equal HEAD; Git archive is the source of both'
 }
 function Assert-Candidates {
-    if (-not $IncludePendingOrganization) { return }
+    # The only other dirty files allowed are the four reviewed validation/documentation files.
+    $allowedChanges = $candidatePaths + @('scripts/Validate-SmartAudits20Harness.ps1',
+        'scripts/Validate-FlywayPhase08.ps1','smartaudits-frontend/e2e/run.mjs','docs/ADR-0001-smartaudits-2-core-model.md')
+    $status = Native 'Git exact V5 scope entries' 'git' @('-c','core.quotePath=false','status','--porcelain=v1','--untracked-files=all') -KeepLeadingWhitespace
+    $entries = @(if ($status) { $status -split '\r?\n' })
+    for ($i=0; $i -lt $entries.Count; $i++) {
+        $entry=$entries[$i]
+        Assert-That ($entry.Length -gt 3) 'Malformed Git status'
+        $path=$entry.Substring(3)
+        $state=$entry.Substring(0,2)
+        Assert-That ($allowedChanges -ccontains $path) "Unexpected file outside V5 scope: $path"
+        $newCandidate = $candidatePaths[0..5] -ccontains $path
+        Assert-That (($newCandidate -and $IncludePendingMembership -and $state -ceq '??') -or
+            (-not $newCandidate -and $state -ceq ' M')) "Unexpected index/candidate status: $path"
+        if (-not $IncludePendingMembership) {
+            Assert-That ($candidatePaths -cnotcontains $path) 'Membership sources must equal HEAD without IncludePendingMembership'
+        }
+    }
+    if ($IncludePendingMembership) {
+        foreach ($path in $candidatePaths[0..5]) {
+            Assert-That ((Native 'Pending candidate status' 'git' @('status','--porcelain=v1','--untracked-files=all','--',$path)) -ceq "?? $path") 'Pending Membership requires six exact untracked new files'
+        }
+    }
     foreach ($path in $candidatePaths) {
+        $item=Get-Item -LiteralPath (Join-Path $repo $path) -Force
+        Assert-That (-not $item.PSIsContainer -and -not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) 'Candidate must be a regular file'
+        if (-not $IncludePendingMembership) {
+            $blob=Native 'Membership HEAD blob' 'git' @('rev-parse',"${head}:$path")
+            Assert-That ((Native 'Membership source blob' 'git' @('hash-object',"--path=$path",$path)) -ceq $blob) 'Membership source differs from HEAD'
+        }
         $hash=(Get-FileHash -LiteralPath (Join-Path $repo $path) -Algorithm SHA256).Hash
         if ($candidateHashes.ContainsKey($path)) { Assert-That ($candidateHashes[$path] -ceq $hash) 'Candidate changed during validation' }
         else { $candidateHashes[$path]=$hash; Pass "Candidate $path SHA256=$hash" }
@@ -652,6 +692,7 @@ function Snapshot {
     if ((Sql "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='organizations'") -eq '1') {
         $filters['organizations']='1=1'
     }
+    $filters['organization_memberships']='1=1'
     $snapshot = [ordered]@{}
     foreach ($table in $filters.Keys) {
         $columns = (Sql "SELECT COLUMN_NAME FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='$table' ORDER BY ORDINAL_POSITION").Split("`n")
@@ -696,7 +737,7 @@ function Timestamp-Matrix {
 function Organization-Probe([string]$Mode, [hashtable]$DatabaseEnv = $dbEnv, [string]$Timezone = 'Europe/Madrid') {
     Assert-That ($Mode -cin @('contracts','seed','historical')) 'Unexpected Organization probe mode'
     Assert-That ($Timezone -cin @('Asia/Kathmandu','Europe/Madrid')) 'Unexpected Organization timezone'
-    $environment=@{} + $DatabaseEnv + @{F3_ORG_MODE=$Mode;F3_TIMEZONE=$Timezone}
+    $environment=@{} + $DatabaseEnv + @{F3_ORG_MODE=$Mode;F3_TIMEZONE=$Timezone;F3_EXPECTED_VERSIONS=($expectedVersions -join ',')}
     $output=Maven $newBackend "-Dtest=com.smartaudits.v2.model.OrganizationMariaDbProbe -DargLine=-Duser.timezone=$Timezone test" $environment
     Assert-That ($output -match 'Tests run: 1, Failures: 0, Errors: 0, Skipped: 0') 'Organization MariaDB probe did not pass'
     foreach ($line in ($output -split '\r?\n')) {
@@ -716,6 +757,30 @@ function Historical-Organization {
     $historyEnv.F3_DB_URL="jdbc:mariadb://127.0.0.1:$dbPort/$historyDb"
     Organization-Probe 'historical' $historyEnv
     Pass 'Historical schema is owned by this run and will be removed with its container/volume'
+}
+function Membership-Probe([string]$Mode, [hashtable]$DatabaseEnv = $dbEnv, [string]$Timezone = 'Europe/Madrid') {
+    Assert-That ($Mode -cin @('contracts','seed','upgrade')) 'Unexpected Membership probe mode'
+    Assert-That ($Timezone -cin @('Asia/Kathmandu','Europe/Madrid')) 'Unexpected Membership timezone'
+    $environment=@{} + $DatabaseEnv + @{F3_MEMBERSHIP_MODE=$Mode;F3_TIMEZONE=$Timezone;
+        F3_EXPECTED_VERSIONS=($expectedVersions -join ',');F3_MEMBERSHIP_HARNESS_RUN_ID=$runId}
+    $output=Maven $newBackend "-Dtest=com.smartaudits.v2.model.OrganizationMembershipMariaDbProbe -DargLine=-Duser.timezone=$Timezone test" $environment
+    Assert-That ($output -match 'Tests run: 1, Failures: 0, Errors: 0, Skipped: 0') 'Membership MariaDB probe did not pass'
+    $marker = switch ($Mode) { 'contracts' {'MEMBERSHIP CONTRACTS PASS:'}; 'seed' {'MEMBERSHIP SENTINELS PASS:'}; 'upgrade' {'MEMBERSHIP UPGRADE PASS:'} }
+    Assert-That ($output.Contains($marker)) 'Missing Membership proof marker'
+    foreach ($line in ($output -split '\r?\n')) { if ($line.StartsWith($marker)) { Pass $line } }
+}
+function Populated-V4-Upgrade {
+    $upgradeDb='f3_harness_' + [Guid]::NewGuid().ToString('N')
+    Assert-That ($upgradeDb -cmatch '^f3_harness_[a-f0-9]{32}$') 'Unsafe V4 upgrade schema'
+    $owner=Docker @('container','inspect','--format','{{index .Config.Labels "smartaudits.f3-harness"}}',$resource)
+    Assert-That ($owner -ceq $runId) 'V4 upgrade requires exact owned container label'
+    $null=Docker @('exec','-e','MYSQL_PWD',$resource,'mariadb','--host=127.0.0.1','-uroot','-e',
+        "CREATE DATABASE $upgradeDb; GRANT ALL ON $upgradeDb.* TO 'f3_harness_user'@'%';") @{MYSQL_PWD=$rootPassword}
+    $upgradeEnv=@{} + $dbEnv
+    $upgradeEnv.F3_DB_NAME=$upgradeDb
+    $upgradeEnv.F3_DB_URL="jdbc:mariadb://127.0.0.1:$dbPort/$upgradeDb"
+    Membership-Probe 'upgrade' $upgradeEnv
+    Pass 'Populated V4 upgrade schema belongs to this run and is removed with its container/volume'
 }
 function Start-Backend([string]$Jar, [bool]$Flyway, [string]$Name) {
     $port = Free-Port
@@ -808,7 +873,7 @@ try {
     $newBackend=Join-Path $tempRoot 'new/smartaudits-backend'
     $oldBackend=Join-Path $tempRoot 'old/smartaudits-backend'
     Assert-VersionedSources
-    if ($IncludePendingOrganization) {
+    if ($IncludePendingMembership) {
         Assert-Candidates
         foreach ($path in $candidatePaths) {
             $target=Join-Path $tempRoot "new/$path"
@@ -835,10 +900,10 @@ CREATE TABLE f3_harness_future_probe (
     $null = Maven $oldBackend '-DskipTests package'
     Pass "Exact baseline built from Git archive: $baseline"
     $null = Maven $newBackend '-DskipTests package'
-    Pass "New JAR from HEAD $head + V9000; explicit Organization candidates=$IncludePendingOrganization"
+    Pass "New JAR from HEAD $head + V9000; explicit Membership candidates=$IncludePendingMembership"
     $oldJar=Join-Path $oldBackend 'target/smartaudits-backend-1.0.0.jar'
     $newJar=Join-Path $newBackend 'target/smartaudits-backend-1.0.0.jar'
-    Assert-Migrations -Jar $newJar # The old rollback JAR intentionally has no V4.
+    Assert-Migrations -Jar $newJar # OLD may have V1-V3 or V1-V4; never require V5 in OLD.
     }
     $volumeRegistered=$true
     $null = Docker @('volume','create','--label',"$label=$runId",$volume)
@@ -862,13 +927,18 @@ CREATE TABLE f3_harness_future_probe (
         Pass 'Directed timestamp validation only; no backend, Flyway or E2E started'
     } else {
     Historical-Organization
+    Populated-V4-Upgrade
     $backend=Start-Backend $newJar $true 'NEW initial'
     Assert-History
     Stop-Backend $backend
     Probe 'seed'
     foreach ($zone in @('Asia/Kathmandu','Europe/Madrid')) { Organization-Probe 'contracts' $dbEnv $zone }
+    # Organization contracts delete their fixtures before Membership creates any dependent rows.
+    foreach ($zone in @('Asia/Kathmandu','Europe/Madrid')) { Membership-Probe 'contracts' $dbEnv $zone }
     Organization-Probe 'seed'
     Assert-That ((Sql 'SELECT COUNT(*) FROM organizations') -eq '1') 'Expected exactly one real Organization sentinel'
+    Membership-Probe 'seed'
+    Assert-That ((Sql 'SELECT COUNT(*) FROM organization_memberships') -eq '2') 'Expected ACTIVE and REVOKED Membership sentinels'
     $before=Snapshot
     foreach ($table in $before.Keys) { Pass "PRE $table count|data SHA256|structure SHA256=$($before[$table])" }
     $backend=Start-Backend $oldJar $true "OLD exact $RollbackRelease Flyway ON"
@@ -907,7 +977,7 @@ CREATE TABLE f3_harness_future_probe (
     Assert-Candidates
     Assert-VersionedSources
     Assert-That ((Native 'Git HEAD verification' 'git' @('rev-parse','HEAD')) -ceq $head) 'Main checkout moved'
-    Pass 'V1/V2/V3/V4 bytes and normalized hashes intact'
+    Pass 'V1/V2/V3/V4/V5 bytes and normalized hashes intact'
 } catch {
     $failure=Protect $_.Exception.Message
     Write-Host "FAIL $failure"

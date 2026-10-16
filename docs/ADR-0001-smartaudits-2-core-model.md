@@ -133,6 +133,62 @@ La pertenencia no se almacenará dentro del JWT. Su revocación debe cortar el
 acceso en la siguiente petición. No basta con haber creado el recurso ni con
 haber tenido pertenencia al emitir el token.
 
+### Contrato estructural V5 — Fase 3.4B
+
+Decisión aprobada el 2026-10-16. V5 crea `organization_memberships` con exactamente
+ocho columnas:
+
+| Columna | Contrato SQL |
+| --- | --- |
+| `id` | BIGINT NOT NULL AUTO_INCREMENT, PK |
+| `organization_id` | BIGINT NOT NULL, FK a `organizations(id)` |
+| `user_id` | BIGINT NOT NULL, FK a `usuarios(id)` |
+| `role` | VARCHAR(16) NOT NULL; CHECK binario que acepta solo OWNER |
+| `status` | VARCHAR(16) NOT NULL; CHECK binario que acepta solo ACTIVE y REVOKED |
+| `created_at` | DATETIME(6) NOT NULL, UTC, inmutable en el mapping |
+| `updated_at` | DATETIME(6) NOT NULL, UTC |
+| `row_version` | BIGINT NOT NULL DEFAULT 0, versión optimista JPA |
+
+La pareja `(organization_id, user_id)` es UNIQUE durante toda la vida de la fila,
+incluido REVOKED, e inmutable en el mapping. Un índice explícito sobre `user_id`
+completa los índices PK y UNIQUE. Ambas FK usan ON DELETE RESTRICT y ON UPDATE
+RESTRICT. La tabla usa InnoDB, utf8mb4 y utf8mb4_unicode_520_ci. Los CHECK usan
+el operador BINARY dentro de la expresión: deben rechazar minúsculas, acentos,
+variantes Unicode, cadenas vacías y espacios iniciales/finales. No se cambian
+collations por columna ni se utiliza ENUM nativo.
+
+JPA utiliza `Long` con IDENTITY, relaciones unidireccionales LAZY obligatorias
+sin cascadas, enums propios `MembershipRole` y `MembershipStatus` con STRING y
+VARCHAR explícito, y `@Version Long`. El contrato temporal es Instant,
+TIMESTAMP_UTC, DATETIME(6) y normalización previa con UtcMicros. El constructor
+recibe Organization, Usuario e Instant no nulos; crea OWNER/ACTIVE con ambas
+fechas iguales. No hay defaults SQL para rol, estado o timestamps.
+
+**V5 solo permite creación en el modelo productivo.** No incorpora revoke,
+reactivate, changeRole, setters públicos de estado/identidad, borrado, servicio,
+repositorio productivo, controller ni endpoint. REVOKED existe para lectura y
+contratos estructurales; sus pruebas usan SQL sintético aislado. La reactivación
+queda diferida; MEMBER e invitaciones siguen en F19.
+
+El futuro servicio que reduzca OWNER deberá abrir una transacción, adquirir
+PESSIMISTIC_WRITE sobre Organization, leer con bloqueo el conjunto actualizado
+de OWNER ACTIVE, comprobar el recuento, realizar la mutación protegida y confirmar.
+Todas esas operaciones seguirán el mismo orden de bloqueos. Una versión por fila
+no protege por sí sola revocaciones concurrentes de distintas pertenencias.
+La prueba concurrente de revocación se hará con el servicio real, no con una
+imitación de servicio dentro de las pruebas de V5.
+
+El recuento del último OWNER se define por Membership OWNER + ACTIVE.
+`Usuario.activo=false` impide acceso efectivo, pero no revoca la pertenencia.
+No se sincronizan bajas legacy con Membership ni se modifica auth legacy.
+La recuperación operativa mediante reactivación del usuario o soporte queda
+para una decisión funcional posterior.
+
+Cuando exista provisión de organizaciones, Organization y su primera Membership
+OWNER ACTIVE se crearán en la misma transacción. No se implementa ese servicio
+en V5 ni se hace backfill: una Organization sin Membership sigue siendo válida
+durante esta fase estructural.
+
 ### ADMIN y respuestas sin acceso
 
 ADMIN legacy conserva exactamente su comportamiento para recursos legacy.
@@ -377,19 +433,26 @@ ya desplegadas.
 
 ## 15. Rollback strategy
 
-Rollback significa volver al **último release que haya estado desplegado en
-producción**, anterior al despliegue que se revierte, **manteniendo el esquema
-y los datos nuevos**. No significa DROP automático ni rollback transaccional de
-toda una secuencia DDL.
+**Corrección de estado, 2026-10-16: SmartAudits no está en producción.** Ninguna
+de las referencias siguientes representa un release desplegado en producción:
 
-Al redactar este ADR, el baseline operativo era `cc78d6b`, que se conserva como
-referencia histórica. Para Fase 3.4A, el último release desplegado y validado es
-`a201582`: este es el baseline operativo utilizado para el rollback contractual
-de V4, no `cc78d6b`.
-En despliegues posteriores, el baseline de rollback será el último release
-efectivamente desplegado y validado en producción, anterior al que se revierte.
-No se asume que cada migración individual tenga su propio release de producción.
-La validación de cada migración utilizará el baseline operativo aplicable.
+- `bbd02ff0ae738fff71b6f27a8c6fd70845d1ad3b`: última versión publicada y validada
+  por CI antes de V5; incluye V4.
+- `a20158268666d4d43bc16844bfaedfa9f00e786d`: baseline histórico de compatibilidad
+  utilizado para el contrato de V4; incluye V1–V3.
+
+V5 probará separadamente NEW → OLD bbd02ff → NEW y NEW → OLD a201582 → NEW,
+con OLD Flyway ON/OFF, Hibernate validate, legacy E2E 4/4 y conservación de
+Organization, Membership e historial Flyway. OLD se compila desde git archive;
+no se cambia el checkout. El catálogo cerrado del harness admite esos dos SHA.
+La excepción de comparación del frontend sigue limitada al runner `e2e/run.mjs`;
+server, configuración y flujos legacy permanecen protegidos.
+
+Rollback de aplicación conserva el esquema y los datos nuevos. No significa
+DROP automático ni rollback transaccional de toda una secuencia DDL. Cuando
+existan despliegues productivos, el baseline operativo será el último release
+efectivamente desplegado y validado, anterior al que se revierte. No se presume
+que cada migración individual tenga un release productivo propio.
 
 Antes de volver atrás se detendrán los escritores 2.0 que el release de rollback
 no pueda gestionar; los datos nuevos se conservarán aunque no sean accesibles
@@ -435,8 +498,8 @@ y verificará su cleanup. Fase 3.1 no crea ni ejecuta ese harness.
 4. Constraints válidas e inválidas comprobadas en MariaDB.
 5. Timestamps UTC comprobados, incluyendo la prueba no UTC obligatoria desde V4.
 6. Creación de datos 2.0 correspondientes al esquema disponible.
-7. Arranque del release exacto del baseline operativo de rollback definido en
-   la sección 15, con Flyway ON y con Flyway OFF.
+7. Arranque de las referencias exactas de compatibilidad de la sección 15
+   (o del baseline operativo cuando exista producción), con Flyway ON y OFF.
 8. E2E legacy 4/4.
 9. `flyway_schema_history` sin mutación por el rollback.
 10. Datos 2.0 con los mismos counts/hashes antes y después del rollback.
@@ -456,6 +519,15 @@ Las pruebas de servicios e integración cubrirán tenancy en lecturas y escritur
 provisión personal idempotente, último OWNER ante concurrencia y los estados,
 reintentos y exclusión de Scans no terminales. Se comprobará la ausencia de
 cascadas destructivas y de escrituras 2.0 en legacy.
+
+En V5 estructural, los tests unitarios se ejecutan sin MariaDB. Una sonda Membership
+separada, fuera del descubrimiento normal de Surefire, se invoca únicamente desde
+el harness explícitamente autorizado. Cubre constraints, enums binarios, UTC y
+microsegundos en JVM no UTC, versión optimista, múltiples OWNER y organizaciones,
+centinelas y upgrade de V4 poblada a V5 sin backfill ni migraciones repetidas.
+Las sondas Organization terminan y limpian sus fixtures antes de crear filas
+Membership dependientes. No se afirma cobertura de autorización ni de revocación
+concurrente hasta que existan sus implementaciones reales.
 
 No se anticipan pruebas funcionales de crawler, extracción, consentimiento,
 informes persistentes o scheduler antes de sus respectivas fases.

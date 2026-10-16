@@ -44,11 +44,12 @@ async function assertMigrationContents(migrationDir, jar, extractDir) {
     'V2__audit_analysis_provenance.sql': 'DC6E575768C1CEAD54A9814D3EBC857E229102B5CE98CDB730FFE651D4F4CBBD',
     'V3__incident_rule_provenance.sql': '8BCE983C4D69C3503629FC6B3C3523CBA3EDC98AA7A8E31B8831F2CEF4C3B10E',
     'V4__create_organizations.sql': '298E83B5E675CE032E24D1AE79243A1C01DB81FCC92CAB64D561A1CE0E94D2D5',
+    'V5__create_organization_memberships.sql': 'CE5A10EF0E1074B337971AF4ABA0DFECEC410A55A0A4BA469C479798F956C498',
   }
   const names = Object.keys(frozen).sort()
   const hash = text => createHash('sha256').update(text.replace(/^\uFEFF/, '').replaceAll('\r\n', '\n'), 'utf8').digest('hex').toUpperCase()
   if (JSON.stringify((await readdir(migrationDir)).sort()) !== JSON.stringify(names)) {
-    throw new Error('Expected exactly V1 + V2 + V3 + V4 source migrations.')
+    throw new Error('Expected exactly V1 + V2 + V3 + V4 + V5 source migrations.')
   }
   for (const name of names) {
     if (hash(await readFile(join(migrationDir, name), 'utf8')) !== frozen[name]) {
@@ -56,14 +57,14 @@ async function assertMigrationContents(migrationDir, jar, extractDir) {
     }
   }
   // JDK jar is already available with the backend toolchain; extract only these
-  // four exact entries to a new owned directory, never arbitrary archive paths.
+  // five exact entries to a new owned directory, never arbitrary archive paths.
   const prefix = 'BOOT-INF/classes/db/migration/'
   const entries = names.map(name => prefix + name)
   const options = { env: baseEnv, windowsHide: true, encoding: 'utf8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'] }
   const packaged = execFileSync('jar', ['tf', jar], options).split(/\r?\n/)
     .filter(name => name.startsWith(prefix) && !name.endsWith('/')).sort()
   if (JSON.stringify(packaged) !== JSON.stringify(entries)) {
-    throw new Error('Expected exactly V1 + V2 + V3 + V4 packaged migrations.')
+    throw new Error('Expected exactly V1 + V2 + V3 + V4 + V5 packaged migrations.')
   }
   await mkdir(extractDir) // Must be new: an absent entry cannot reuse stale bytes.
   execFileSync('jar', ['xf', jar, ...entries], { ...options, cwd: extractDir })
@@ -72,7 +73,7 @@ async function assertMigrationContents(migrationDir, jar, extractDir) {
       throw new Error(`Packaged frozen migration changed: ${name}`)
     }
   }
-  console.log('V1 + V2 + V3 + V4 FROZEN; PACKAGED MIGRATION CONTENTS OK')
+  console.log('V1 + V2 + V3 + V4 + V5 FROZEN; PACKAGED MIGRATION CONTENTS OK')
 }
 
 function docker(args, extraEnv = {}) {
@@ -221,7 +222,7 @@ try {
   habitualBefore = habitualState()
   envBefore = await envMetadata()
   docker(['image', 'inspect', '--format', '{{.Id}}', 'mariadb:11.2'])
-  console.log(`E2E run ${runId}: isolated MariaDB 11.2, Flyway V1 + V2 + V3 + V4, Chromium.`)
+  console.log(`E2E run ${runId}: isolated MariaDB 11.2, Flyway V1 + V2 + V3 + V4 + V5, Chromium.`)
 
   // Always build current sources; offline Maven avoids runtime Internet dependency.
   const build = process.platform === 'win32'
@@ -261,14 +262,14 @@ try {
     SMARTAUDITS_ADMIN_NOMBRE: 'Administrador E2E',
   })
   await waitUntil('backend startup', () => backend.log.includes('Started SmartAuditsApplication'), 120_000, backend)
-  if (sql('SELECT version, type, script, success FROM flyway_schema_history ORDER BY installed_rank') !== '1\tSQL\tV1__initial_schema.sql\t1\n2\tSQL\tV2__audit_analysis_provenance.sql\t1\n3\tSQL\tV3__incident_rule_provenance.sql\t1\n4\tSQL\tV4__create_organizations.sql\t1') {
-    throw new Error('Expected exactly V1 + V2 + V3 + V4 migrations and no baseline.')
+  if (sql('SELECT version, type, script, success FROM flyway_schema_history ORDER BY installed_rank') !== '1\tSQL\tV1__initial_schema.sql\t1\n2\tSQL\tV2__audit_analysis_provenance.sql\t1\n3\tSQL\tV3__incident_rule_provenance.sql\t1\n4\tSQL\tV4__create_organizations.sql\t1\n5\tSQL\tV5__create_organization_memberships.sql\t1') {
+    throw new Error('Expected exactly V1 + V2 + V3 + V4 + V5 migrations and no baseline.')
   }
   // Spring's Started log precedes CommandLineRunner; wait for its transaction
   // to commit before allowing registration or login in the browser.
   await waitUntil('temporary ADMIN bootstrap', () =>
     sql("SELECT COUNT(*) FROM usuarios WHERE role = 'ADMIN' AND protegido = b'1'") === '1', 30_000, backend)
-  console.log('EMPTY DATABASE + FLYWAY V1 + V2 + V3 + V4 OK (no baseline)')
+  console.log('EMPTY DATABASE + FLYWAY V1 + V2 + V3 + V4 + V5 OK (no baseline)')
   const web = start('frontend', process.execPath, [join(frontend, 'e2e/server.mjs')], frontend, {
     E2E_BACKEND_URL: `http://127.0.0.1:${backendPort}`, E2E_FRONTEND_PORT: String(frontendPort),
   })
