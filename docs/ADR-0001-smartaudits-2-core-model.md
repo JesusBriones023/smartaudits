@@ -250,6 +250,77 @@ capacidad.
 Las futuras columnas de URL/hash usarán semántica binaria apropiada; no
 dependerán de `utf8mb4_general_ci` para comparar identidades.
 
+### Contrato estructural V6 — Fase 3.5
+
+Decisión aprobada el 2026-10-17. V6 crea `sites` con exactamente nueve columnas,
+en una única sentencia `CREATE TABLE`:
+
+| Columna | Contrato SQL |
+| --- | --- |
+| `id` | BIGINT NOT NULL AUTO_INCREMENT, PK |
+| `organization_id` | BIGINT NOT NULL, FK a `organizations(id)` |
+| `name` | VARCHAR(255) NOT NULL |
+| `base_url` | VARCHAR(2048) NOT NULL |
+| `status` | VARCHAR(16) NOT NULL; CHECK binario que acepta solo ACTIVE y ARCHIVED |
+| `created_by_user_id` | BIGINT NOT NULL, FK a `usuarios(id)` |
+| `created_at` | DATETIME(6) NOT NULL, UTC, inmutable en el mapping |
+| `updated_at` | DATETIME(6) NOT NULL, UTC |
+| `row_version` | BIGINT NOT NULL DEFAULT 0, versión optimista JPA |
+
+Solo `row_version` tiene default SQL; estado y timestamps no. Hay exactamente tres
+índices: PRIMARY (`id`), `uq_sites_org_site (organization_id, id)` e
+`ix_sites_created_by (created_by_user_id)`. Las FK `fk_sites_organization` y
+`fk_sites_created_by` usan ON DELETE RESTRICT y ON UPDATE RESTRICT.
+`ck_sites_status` usa `BINARY status IN ('ACTIVE','ARCHIVED')` y rechaza
+minúsculas, acentos, variantes Unicode, cadenas vacías y espacios. La tabla usa
+InnoDB, utf8mb4 y utf8mb4_unicode_520_ci, sin collations por columna ni ENUM
+nativo.
+
+**UNIQUE tenant compuesta.** `uq_sites_org_site` no expresa unicidad por URL ni
+por nombre: como `id` ya es PK, existe para que V7 pueda declarar
+`audits(organization_id, site_id) → sites(organization_id, id)`. También sirve a la
+FK de `organization_id`, por lo que no se crea un índice redundante sobre esa
+columna. No se sustituye por un índice no único ni se crea FK hacia Membership.
+
+**URL literal, sin identidad canónica.** Site se identifica por `id`. `base_url`
+conserva exactamente el texto recibido: sin trim, minúsculas, eliminación de
+fragmento o query, normalización Unicode, canonización de dominio, deduplicación,
+DNS ni peticiones HTTP. Dos Sites de la misma o de distintas organizaciones pueden
+almacenar la misma URL. VARCHAR(2048) es un límite de diseño en caracteres, y la
+collation de la tabla no define identidad. Almacenar una URL no concede permiso
+para visitarla: SSRF, DNS, redirects, navegación e identidad por URL siguen en F4.
+
+En V6 estructural NULL está prohibido, pero las cadenas vacías son válidas y no
+hay CHECK de blancos. La validación funcional futura deberá rechazar nombres y URL
+vacíos, en blanco o peligrosos, y contar longitudes con `codePointCount` cuando
+corresponda, coherente con el recuento por caracteres de MariaDB. Los rechazos
+1406 por longitud dependen de que la sesión use modo SQL estricto; la sonda lo
+comprueba en cada sesión sin modificar `sql_mode`.
+
+JPA utiliza `Long` con IDENTITY, relaciones unidireccionales LAZY obligatorias
+(`organization`, `createdBy`) sin cascadas y con columnas no actualizables,
+`SiteStatus` con STRING y VARCHAR explícito, y `@Version Long`. Todos los campos
+declaran su columna, y la UNIQUE, el índice y las FK declaran sus nombres.
+`base_url` es `updatable=false`: el mapping no permite cambiar organización, autor
+ni URL. El contrato temporal es Instant, TIMESTAMP_UTC, DATETIME(6) y UtcMicros.
+El constructor recibe Organization, name, baseUrl, Usuario creador e Instant no
+nulos, no transforma los textos y crea ACTIVE con ambas fechas iguales.
+
+**V6 solo permite creación en el modelo productivo.** No incorpora archive,
+reactivate, borrado, cambio de organización o URL, setters públicos, servicio,
+repositorio, controller ni endpoint. ARCHIVED existe para lectura y contratos
+estructurales; sus pruebas usan SQL sintético aislado. `createdBy` es autoría, no
+autorización: ni ADMIN legacy ni `personal_owner_user_id` conceden acceso a un
+Site. La autorización tenant llegará con los servicios correspondientes.
+
+**Limitación del guard estático.** El guard de migraciones del harness es un
+subconjunto léxico que solo acepta una sentencia `CREATE TABLE` y rechaza
+cualquier ALTER, DML o segunda sentencia; no razona sobre la semántica de un
+ALTER. Si F4 necesita persistir identidad de URL (URL normalizada, host o hash con
+semántica binaria), no podrá añadirla con ALTER sobre `sites` bajo este guard. Las
+opciones serán una tabla nueva dependiente de Site o una decisión explícita que
+amplíe el guard con reglas ALTER revisadas; ninguna se adopta ahora.
+
 ## 8. Audit and Scan
 
 Audit representa una solicitud/intención lógica de evaluación. Scan representa
@@ -448,6 +519,30 @@ no se cambia el checkout. El catálogo cerrado del harness admite esos dos SHA.
 La excepción de comparación del frontend sigue limitada al runner `e2e/run.mjs`;
 server, configuración y flujos legacy permanecen protegidos.
 
+**Matrices de rollback de V6, 2026-10-17.** El catálogo cerrado del harness admite:
+
+- `9bd3ccc5c5b63fef0b299bf0175fe7ab8b18ea55`: última versión publicada y validada
+  por CI antes de V6; incluye V1–V5.
+- `a20158268666d4d43bc16844bfaedfa9f00e786d`: baseline histórico; incluye V1–V3.
+- `bbd02ff0ae738fff71b6f27a8c6fd70845d1ad3b`: se conserva para la tercera matriz
+  histórica prevista en V8.
+
+V6 prueba separadamente NEW → OLD 9bd3ccc → NEW y NEW → OLD a201582 → NEW, con OLD
+Flyway ON/OFF, Hibernate validate, legacy E2E 4/4 y conservación de Organization,
+Membership, Site e historial Flyway con sus timestamps. OLD se compila desde git
+archive, sin cambiar el checkout.
+
+**Equivalencia estructural y reducción a dos matrices.** El código backend legacy
+es idéntico en los tres commits, y el frontend también salvo `e2e/run.mjs`. Solo
+difieren en artefactos 2.0 aditivos: a201582 no tiene V4/V5, bbd02ff añade V4 y
+Organization, y 9bd3ccc añade además V5 y OrganizationMembership. Frente al esquema
+V6, bbd02ff queda entre los dos extremos probados: 9bd3ccc es el release inmediato
+anterior y valida más entidades con Hibernate; a201582 es el más antiguo y trata
+como futuras más migraciones aplicadas. Por eso V6 se reduce a dos matrices
+habituales, y bbd02ff vuelve a probarse en V8 como tercera matriz histórica. La
+reducción no presume compatibilidad de migraciones futuras: cada Vn repetirá su
+propia decisión.
+
 Rollback de aplicación conserva el esquema y los datos nuevos. No significa
 DROP automático ni rollback transaccional de toda una secuencia DDL. Cuando
 existan despliegues productivos, el baseline operativo será el último release
@@ -528,6 +623,23 @@ centinelas y upgrade de V4 poblada a V5 sin backfill ni migraciones repetidas.
 Las sondas Organization terminan y limpian sus fixtures antes de crear filas
 Membership dependientes. No se afirma cobertura de autorización ni de revocación
 concurrente hasta que existan sus implementaciones reales.
+
+En V6 estructural, `SiteTest` cubre sin MariaDB el constructor, la preservación
+literal, la API sin mutadores y el mapping. `SiteMariaDbProbe`, fuera del
+descubrimiento normal de Surefire, se invoca solo desde el harness autorizado:
+esquema exacto, límites 255/2048 en ASCII y Unicode de cuatro bytes con modo
+estricto verificado, conservación literal mediante JDBC, Hibernate y HEX, URL
+duplicadas, UTC y microsegundos en Asia/Kathmandu y Europe/Madrid, versión
+optimista, identidad inmutable, ausencia de cascadas, sentinels ACTIVE/ARCHIVED y
+upgrade de V5 poblada a V6 sin backfill ni migraciones repetidas. La tabla
+sintética propia `f3_site_child_probe`, creada solo en el esquema aislado del
+harness y eliminada incluso ante errores, prueba con una FK compuesta real que el
+patrón futuro de V7 rechaza referencias entre tenants (1452) y cambios de tenant
+de un padre referenciado (1451). Las sondas históricas Organization y Membership
+exigen exactamente el inventario V1–V6 más V9000 sintético. El harness separa el
+modo normal (working tree e índice limpios, NEW desde git archive HEAD sin
+overlay) del modo candidato `-IncludePendingSite` (cinco archivos nuevos y seis
+modificados exactos; solo los siete del overlay entran en NEW).
 
 No se anticipan pruebas funcionales de crawler, extracción, consentimiento,
 informes persistentes o scheduler antes de sus respectivas fases.
