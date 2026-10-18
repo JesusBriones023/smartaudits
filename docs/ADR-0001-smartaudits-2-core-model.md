@@ -363,6 +363,53 @@ con un `failure_code` equivalente a INTERRUPTED mediante una política explícit
 de recuperación. Esta recuperación queda diferida junto con `failure_code`, el
 detalle saneado de fallo y la lógica real de ejecución.
 
+### Contrato estructural V7 — Fase 3.6
+
+Decisión aprobada el 2026-10-19. V7 crea `audits` con exactamente siete columnas,
+en una única sentencia `CREATE TABLE`:
+
+| Columna | Contrato SQL |
+| --- | --- |
+| `id` | BIGINT NOT NULL AUTO_INCREMENT, PK |
+| `organization_id` | BIGINT NOT NULL, FK directa a `organizations(id)` |
+| `site_id` | BIGINT NOT NULL, FK compuesta con `organization_id` |
+| `created_by_user_id` | BIGINT NOT NULL, FK a `usuarios(id)` |
+| `created_at` | DATETIME(6) NOT NULL, UTC, inmutable en el mapping |
+| `updated_at` | DATETIME(6) NOT NULL, UTC |
+| `row_version` | BIGINT NOT NULL DEFAULT 0, versión optimista JPA |
+
+Solo `row_version` tiene default SQL. No hay columnas de texto, estado, CHECK,
+`current_scan_id` ni campos especulativos (nombre, disparador, alcance o
+monitoring). Hay exactamente cuatro índices: PRIMARY, `uq_audits_org_audit
+(organization_id, id)`, `ix_audits_org_site (organization_id, site_id)` e
+`ix_audits_created_by (created_by_user_id)`. Las tres FK usan ON DELETE RESTRICT y
+ON UPDATE RESTRICT. La tabla usa InnoDB, utf8mb4 y utf8mb4_unicode_520_ci.
+
+**Tenancy.** `fk_audits_site (organization_id, site_id) → sites(organization_id,
+id)` impide referenciar un Site de otra organización y cambiar la organización de
+un Site que ya tiene Audits. `uq_audits_org_audit` no es unicidad de negocio:
+existe para que V8 declare `scans(organization_id, audit_id) → audits(organization_id,
+id)`. `fk_audits_organization` es una defensa en profundidad redundante con la FK
+compuesta y no necesita índice propio. No hay FK hacia Membership; `createdBy` es
+autoría, no autorización, y ni ADMIN legacy ni `personal_owner_user_id` conceden
+acceso.
+
+**JPA.** `Audit` usa `Long` con IDENTITY, relaciones LAZY obligatorias hacia
+Organization, Site (por `site_id`) y Usuario, sin cascadas ni colecciones, con
+columnas no actualizables, Instant con TIMESTAMP_UTC, DATETIME(6), UtcMicros y
+`@Version Long`. Todos los campos, la UNIQUE, los índices y las FK declaran sus
+nombres. La integridad de tenant la garantiza la FK SQL compuesta; Hibernate
+validate no comprueba FK, por lo que la sonda MariaDB la demuestra con inserciones
+reales. El factory de V8 deberá comprobar además que Site pertenece a la misma
+Organization.
+
+**V7 no permite crear Audits.** Como una Audit no puede existir sin su primer Scan,
+la entidad solo tiene un constructor JPA protegido: no hay constructor ni factory
+públicos, repositorio, servicio, controller ni endpoint. El factory atómico Audit +
+primer Scan llega con V8, junto con el mecanismo de concurrencia de reintentos que
+usará `row_version`. No hay backfill desde `auditorias` legacy ni dual-write; la
+tabla legacy y su API (propietario + ADMIN, 403) permanecen intactas.
+
 ## 9. Future acquisition/content model
 
 Esta sección congela conceptos, **no tablas para Fase 3**.
@@ -543,6 +590,16 @@ habituales, y bbd02ff vuelve a probarse en V8 como tercera matriz histórica. La
 reducción no presume compatibilidad de migraciones futuras: cada Vn repetirá su
 propia decisión.
 
+**Matrices de rollback de V7, 2026-10-19.** Las habituales son NEW → OLD
+`ca7567440942ff42f596a09ff724fa46689280fb` (V6 publicada, V1–V6) → NEW y NEW → OLD
+a201582 → NEW, con OLD Flyway ON/OFF, Hibernate validate, legacy E2E 4/4 y cuatro
+ciclos de backend con cierre validado. El catálogo cerrado conserva `9bd3ccc` y
+`bbd02ff`; este último sigue reservado para la tercera matriz histórica de V8. El
+código backend legacy es idéntico en los cuatro commits, que solo difieren en
+artefactos 2.0 aditivos, por lo que la equivalencia estructural de V6 se extiende
+a V7. La matriz de conservación no contiene Audits: `audits` debe estar vacía antes
+y después del rollback.
+
 Rollback de aplicación conserva el esquema y los datos nuevos. No significa
 DROP automático ni rollback transaccional de toda una secuencia DDL. Cuando
 existan despliegues productivos, el baseline operativo será el último release
@@ -640,6 +697,25 @@ exigen exactamente el inventario V1–V6 más V9000 sintético. El harness separ
 modo normal (working tree e índice limpios, NEW desde git archive HEAD sin
 overlay) del modo candidato `-IncludePendingSite` (cinco archivos nuevos y seis
 modificados exactos; solo los siete del overlay entran en NEW).
+
+En V7, la regla anterior sobre Audits huérfanas se aplica así: ninguna Audit se
+confirma nunca en MariaDB como dato de prueba, ni siquiera de forma temporal, y no
+existen seeds ni centinelas Audit. Las pruebas de contrato y de tenancy usan
+fixtures transitorias dentro de una única transacción Hibernate que termina
+obligatoriamente en ROLLBACK; la sonda demuestra con una conexión independiente
+que esas filas no son visibles fuera de su transacción y que no queda ninguna
+después. Así se verifica el esquema sin que llegue a existir una Audit sin Scan.
+`AuditTest` cubre sin MariaDB la ausencia de constructor público y de API de
+creación, la ausencia de estado y colecciones, y el mapping. `AuditMariaDbProbe`
+(modos contracts, tenant y upgrade, sin modo seed) cubre el esquema exacto, NOT
+NULL, las tres FK con rechazos 1452/1451 identificados por constraint, la FK
+compuesta entre tenants, UTC y microsegundos en Asia/Kathmandu y Europe/Madrid,
+identidad inmutable, ausencia de cascadas y la comprobación de versión optimista
+dentro de la misma transacción, además del upgrade de V6 poblada a V7 sin backfill.
+Las pruebas que exigen Audits confirmadas, incluida la concurrencia entre sesiones,
+se aplazan a V8 junto con el factory Audit + primer Scan. El harness pasa a
+`-IncludePendingAudit` (cuatro archivos nuevos y siete modificados) y conserva el
+gate de cuatro ciclos de backend validados.
 
 No se anticipan pruebas funcionales de crawler, extracción, consentimiento,
 informes persistentes o scheduler antes de sus respectivas fases.
