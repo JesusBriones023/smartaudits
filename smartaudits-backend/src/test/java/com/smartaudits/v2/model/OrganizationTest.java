@@ -276,8 +276,8 @@ class OrganizationMariaDbProbe {
 
     private static void historical(Connection c, String url, String user, String password) throws Exception {
         String expectedVersions = required("F3_EXPECTED_VERSIONS");
-        assertEquals("1,2,3,4,5,6,9000", expectedVersions,
-                "Historical Organization probe requires the exact reviewed V6 version set");
+        assertEquals("1,2,3,4,5,6,7,9000", expectedVersions,
+                "Historical Organization probe requires the exact reviewed V7 version set");
         assertEquals("0", scalar(c, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE()"));
         // Isolated reconstruction of a pre-Flyway V1 schema, then explicit baseline adoption.
         ScriptUtils.executeSqlScript(c, new ClassPathResource("db/migration/V1__initial_schema.sql"));
@@ -293,6 +293,7 @@ class OrganizationMariaDbProbe {
         future.migrate();
         assertEquals(legacy, snapshot(c, LEGACY), "V4 changed the historical fixture");
         assertEquals("0", scalar(c, "SELECT COUNT(*) FROM sites"), "No legacy Site may be backfilled");
+        assertEquals("0", scalar(c, "SELECT COUNT(*) FROM audits"), "No legacy auditoria may be backfilled as an Audit");
         assertEquals(expectedVersions, scalar(c, "SELECT GROUP_CONCAT(version ORDER BY installed_rank) FROM flyway_schema_history"));
         assertEquals(Integer.toString(expectedVersions.split(",").length), scalar(c, "SELECT COUNT(*) FROM flyway_schema_history WHERE success=1"));
         List<String> newHistory = snapshot(c, "flyway_schema_history").get("flyway_schema_history");
