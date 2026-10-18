@@ -17,10 +17,16 @@ Protected UtcMicros/probe sources must equal HEAD and come from Git archive.
 .PARAMETER RollbackRelease
 Release from the reviewed catalogue below. Updating this catalogue requires an
 explicit compatibility decision; arbitrary commits/refs are not accepted.
-.PARAMETER IncludePendingMembership
-Pre-commit validation only: overlay the six V5 files and the reviewed Organization
-historical probe adaptation. Exact paths/statuses/hashes are checked throughout.
-IncludePendingOrganization is obsolete and is no longer an accepted parameter.
+V6 runs the two habitual matrices 9bd3ccc and a201582; bbd02ff stays catalogued
+for the historical third matrix planned at V8.
+.PARAMETER IncludePendingSite
+Pre-commit validation only. Without it (normal mode) the Git working tree and
+index must be clean and NEW is git archive HEAD with no overlay. With it, Git must
+show exactly the five new V6 files (??) and six modified files ( M) listed below;
+only the seven overlay files are copied into NEW and their hashes are checked
+before, after the copy and at the end. Auxiliary files are never copied.
+IncludePendingMembership and IncludePendingOrganization are obsolete and are no
+longer accepted parameters.
 Future entities must prove they call UtcMicros before persisting timestamps;
 driver handling of an unnormalized Instant is not the domain contract.
 .PARAMETER TimestampOnly
@@ -33,8 +39,8 @@ Runs finite-output and SQL-guard self-tests without Docker or application startu
 # Does not invoke run.mjs, the legacy validator entrypoint, Compose or Flyway repair.
 [CmdletBinding()]
 param([switch]$TimestampOnly, [switch]$SelfTestOnly,
-    [ValidateSet('bbd02ff','a201582')][string]$RollbackRelease = 'bbd02ff',
-    [switch]$IncludePendingMembership)
+    [ValidateSet('9bd3ccc','a201582','bbd02ff')][string]$RollbackRelease = '9bd3ccc',
+    [switch]$IncludePendingSite)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -65,6 +71,7 @@ $habitualBefore = $null
 $failure = $null
 $cleanupErrors = New-Object 'System.Collections.Generic.List[string]'
 $backend = $null
+$backends = New-Object 'System.Collections.Generic.List[object]'
 $newBackend = $null
 $dbEnv = @{}
 $migrationHashes = @{}
@@ -77,19 +84,36 @@ $cacheBefore = $null
 $preserveTemp = $false
 $expectedVersions = @()
 $approvedReleases = @{
-    # Published compatibility references, neither represents a production deployment.
-    bbd02ff='bbd02ff0ae738fff71b6f27a8c6fd70845d1ad3b'
+    # Published compatibility references; none represents a production deployment.
+    # Legacy backend code is identical in all three; they differ only in additive 2.0 files.
+    '9bd3ccc'='9bd3ccc5c5b63fef0b299bf0175fe7ab8b18ea55'
     a201582='a20158268666d4d43bc16844bfaedfa9f00e786d'
+    bbd02ff='bbd02ff0ae738fff71b6f27a8c6fd70845d1ad3b'
 }
-$candidatePaths = @(
-    'smartaudits-backend/src/main/resources/db/migration/V5__create_organization_memberships.sql',
-    'smartaudits-backend/src/main/java/com/smartaudits/v2/model/OrganizationMembership.java',
-    'smartaudits-backend/src/main/java/com/smartaudits/v2/model/MembershipRole.java',
-    'smartaudits-backend/src/main/java/com/smartaudits/v2/model/MembershipStatus.java',
-    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/OrganizationMembershipTest.java',
-    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/OrganizationMembershipMariaDbProbe.java',
-    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/OrganizationTest.java'
+# Closed literal V6 scope. New files must be untracked (??), all others tracked ( M).
+$newPaths = @(
+    'smartaudits-backend/src/main/resources/db/migration/V6__create_sites.sql',
+    'smartaudits-backend/src/main/java/com/smartaudits/v2/model/Site.java',
+    'smartaudits-backend/src/main/java/com/smartaudits/v2/model/SiteStatus.java',
+    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/SiteTest.java',
+    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/SiteMariaDbProbe.java'
 )
+$overlayModifiedPaths = @(
+    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/OrganizationTest.java',
+    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/OrganizationMembershipMariaDbProbe.java'
+)
+# Reviewed validation/documentation files: allowed to differ, never copied into NEW.
+$auxPaths = @(
+    'scripts/Validate-SmartAudits20Harness.ps1',
+    'scripts/Validate-FlywayPhase08.ps1',
+    'smartaudits-frontend/e2e/run.mjs',
+    'docs/ADR-0001-smartaudits-2-core-model.md'
+)
+$overlayPaths = $newPaths + $overlayModifiedPaths
+$scopePaths = $overlayPaths + $auxPaths
+$migrationCandidate = 'smartaudits-backend/src/main/resources/db/migration/V6__create_sites.sql'
+$migrationNames = @('V1__initial_schema.sql','V2__audit_analysis_provenance.sql','V3__incident_rule_provenance.sql',
+    'V4__create_organizations.sql','V5__create_organization_memberships.sql','V6__create_sites.sql')
 $candidateHashes = @{}
 
 function Assert-That([bool]$Condition, [string]$Message) {
@@ -172,18 +196,20 @@ function Maven([string]$Cwd, [string]$Options, [hashtable]$Extra = @{}) {
     # Options are harness constants, never external input or secrets.
     return Native 'Maven' $baseEnv.ComSpec @('/d','/s','/c',"mvn -B -o $Options") $Cwd $Extra 360
 }
-function Assert-Migrations([string]$Jar) {
+function Assert-Migrations([string]$Jar, [string]$MigrationDir = (Join-Path $repo 'smartaudits-backend/src/main/resources/db/migration'),
+    [switch]$Fixture, [long[]]$Versions = $expectedVersions) {
     # Published UTF-8 text hashes, canonical CRLF -> LF; never derived from HEAD/JAR.
+    # -Fixture only redirects the inputs for self-tests; the frozen literals never change.
     $expected = @{
         'V1__initial_schema.sql'='355F84949A1ECC83CA63BDC783D66760094CBA99487C074D9F0C22E0F05B441A'
         'V2__audit_analysis_provenance.sql'='DC6E575768C1CEAD54A9814D3EBC857E229102B5CE98CDB730FFE651D4F4CBBD'
         'V3__incident_rule_provenance.sql'='8BCE983C4D69C3503629FC6B3C3523CBA3EDC98AA7A8E31B8831F2CEF4C3B10E'
         'V4__create_organizations.sql'='298E83B5E675CE032E24D1AE79243A1C01DB81FCC92CAB64D561A1CE0E94D2D5'
         'V5__create_organization_memberships.sql'='CE5A10EF0E1074B337971AF4ABA0DFECEC410A55A0A4BA469C479798F956C498'
+        'V6__create_sites.sql'='62AF26386433E7F8316D0559294A85F00197926AFF3EA6DB114A2EFA46F55804'
     }
-    $migrationDir = Join-Path $repo 'smartaudits-backend/src/main/resources/db/migration'
-    $sourceNames = @(Get-ChildItem -LiteralPath $migrationDir -Force | ForEach-Object { $_.Name } | Sort-Object)
-    Assert-That (($sourceNames -join ',') -ceq (($expected.Keys | Sort-Object) -join ',')) 'Expected exactly V1-V5 source migrations'
+    $sourceNames = @(Get-ChildItem -LiteralPath $MigrationDir -Force | ForEach-Object { $_.Name } | Sort-Object)
+    Assert-That (($sourceNames -join ',') -ceq (($expected.Keys | Sort-Object) -join ',')) 'Expected exactly V1-V6 source migrations'
     $archive = $null
     if ($Jar) {
         Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -191,12 +217,13 @@ function Assert-Migrations([string]$Jar) {
     }
     try {
         foreach ($name in $expected.Keys) {
-            $path = Join-Path $repo "smartaudits-backend/src/main/resources/db/migration/$name"
+            $path = Join-Path $MigrationDir $name
             Assert-That (Test-Path -LiteralPath $path -PathType Leaf) "Frozen migration missing: $name"
             $logical = Digest ([IO.File]::ReadAllText($path).Replace("`r`n", "`n"))
             Assert-That ($logical -ceq $expected[$name]) "Frozen migration changed: $name"
             $raw = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
-            if ($migrationHashes.ContainsKey($name)) { Assert-That ($raw -ceq $migrationHashes[$name]) "Migration bytes changed: $name" }
+            if ($Fixture) { }
+            elseif ($migrationHashes.ContainsKey($name)) { Assert-That ($raw -ceq $migrationHashes[$name]) "Migration bytes changed: $name" }
             else { $migrationHashes[$name] = $raw }
             if ($archive) {
                 $entries = @($archive.Entries | Where-Object { $_.FullName -ceq "BOOT-INF/classes/db/migration/$name" })
@@ -215,7 +242,7 @@ function Assert-Migrations([string]$Jar) {
                 Assert-That ($_.FullName -cmatch '^BOOT-INF/classes/db/migration/V([0-9]+)__.+\.sql$') 'Unsupported packaged migration name'
                 [long]$Matches[1]
             })
-            Assert-That ((($packagedVersions | Sort-Object) -join ',') -ceq (($expectedVersions | Sort-Object) -join ',')) 'Packaged migration inventory differs from approved versions'
+            Assert-That ((($packagedVersions | Sort-Object) -join ',') -ceq (($Versions | Sort-Object) -join ',')) 'Packaged migration inventory differs from approved versions'
         }
     } finally { if ($archive) { $archive.Dispose() } }
 }
@@ -407,9 +434,20 @@ function Self-Tests {
         'CREATE TABLE f3_example (id BIGINT, CONSTRAINT fk FOREIGN KEY (id) REFERENCES `usuarios` (`id`) ON DELETE RESTRICT ON UPDATE RESTRICT);',
         "CREATE`nTABLE f3_example (id BIGINT, FOREIGN KEY (id) REFERENCES usuarios(id) ON DELETE NO ACTION ON UPDATE NO ACTION);",
         'CREATE TABLE f3_example (id BIGINT, INDEX ix (id), UNIQUE KEY uq (id));',
-        "CREATE TABLE f3_example (status VARCHAR(60) CHECK (status IN ('DELETE FROM; --','it''s ACTIVE')));"
+        "CREATE TABLE f3_example (status VARCHAR(60) CHECK (status IN ('DELETE FROM; --','it''s ACTIVE')));",
+        # V6/V7 tenant shapes: composite UNIQUE plus composite FK to a 2.0 parent.
+        'CREATE TABLE f3_example (organization_id BIGINT NOT NULL, site_id BIGINT NOT NULL, UNIQUE KEY uq (organization_id, site_id), CONSTRAINT fk FOREIGN KEY (organization_id, site_id) REFERENCES sites (organization_id, id) ON DELETE RESTRICT ON UPDATE RESTRICT);',
+        'CREATE TABLE f3_example (organization_id BIGINT, site_id BIGINT, FOREIGN KEY (organization_id, site_id) REFERENCES `sites` (`organization_id`, `id`), FOREIGN KEY (organization_id) REFERENCES organizations (id));'
     )
+    $composite = 'CREATE TABLE f3_example (organization_id BIGINT, site_id BIGINT, CONSTRAINT fk FOREIGN KEY (organization_id, site_id) REFERENCES'
     $bad = @(
+        "$composite sites (organization_id, id) ON DELETE CASCADE);", "$composite sites (organization_id, id) ON UPDATE CASCADE);",
+        "$composite sites (organization_id, id) ON DELETE SET NULL);", "$composite sites (organization_id, id) ON UPDATE SET DEFAULT);",
+        "$composite auditorias (id, usuario_id));", "$composite other.sites (organization_id, id));",
+        'ALTER TABLE sites ADD CONSTRAINT uq UNIQUE (organization_id, id);', "$simple ALTER TABLE f3_example ADD INDEX ix (id);",
+        "CREATE TRIGGER f3_trigger BEFORE INSERT ON sites FOR EACH ROW SET NEW.status = 'ACTIVE';",
+        'CREATE TABLE f3_example (updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6));',
+        'DROP TABLE sites;', 'INSERT INTO sites (organization_id) SELECT id FROM organizations;',
         "$simple CREATE TABLE extra (id INT);", "$simple CREATE INDEX ix ON f3_example(id);",
         'ALTER TABLE usuarios ADD x INT;', 'DROP TABLE usuarios;', 'INSERT INTO usuarios VALUES (1);',
         'UPDATE usuarios SET id=1;', 'DELETE FROM usuarios;', 'TRUNCATE TABLE usuarios;',
@@ -440,7 +478,8 @@ function Self-Tests {
     $bad += 'CREATE TABLE f3_example (id BIGINT REFERENCES other.`usuarios` (id));'
     $realGood = @(
         'CREATE TABLE f3_example (id BIGINT REFERENCES usuarios(id)) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;',
-        "create`ntable ``f3_example`` (id BIGINT)`nengine = InnoDB`ndefault charset = utf8mb4`ncollate = utf8mb4_unicode_520_ci;"
+        "create`ntable ``f3_example`` (id BIGINT)`nengine = InnoDB`ndefault charset = utf8mb4`ncollate = utf8mb4_unicode_520_ci;",
+        "$composite sites (organization_id, id) ON DELETE RESTRICT ON UPDATE RESTRICT) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;"
     )
     # Every incomplete subset of ENGINE / charset / collation must fail for real V4+.
     $realBad = @(';', 'ENGINE=InnoDB;', 'DEFAULT CHARACTER SET=utf8mb4;',
@@ -450,8 +489,10 @@ function Self-Tests {
         ForEach-Object { "CREATE TABLE f3_example (id BIGINT) $_" }
     $tableOptions = 'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;'
     $encodingGood = @(
+        # Explicit literal real migrations; never derived from a candidate list position.
         [IO.File]::ReadAllText((Join-Path $repo 'smartaudits-backend/src/main/resources/db/migration/V4__create_organizations.sql')),
-        [IO.File]::ReadAllText((Join-Path $repo $candidatePaths[0])),
+        [IO.File]::ReadAllText((Join-Path $repo 'smartaudits-backend/src/main/resources/db/migration/V5__create_organization_memberships.sql')),
+        [IO.File]::ReadAllText((Join-Path $repo 'smartaudits-backend/src/main/resources/db/migration/V6__create_sites.sql')),
         "CREATE TABLE f3_example (status VARCHAR(20), CHECK (BINARY status IN ('ACTIVE','REVOKED'))) $tableOptions",
         "CREATE TABLE f3_example (value VARCHAR(90) DEFAULT 'CHARSET COLLATE ASCII UNICODE NCHAR NATIONAL NVARCHAR JSON BINARY') $tableOptions",
         ('CREATE TABLE f3_example (`charset` VARCHAR(50), `unicode` CHAR(2), value CHARACTER VARYING(50)) ' + $tableOptions),
@@ -525,28 +566,272 @@ function Self-Tests {
     Pass "Migration guard self-tests: $($good.Count) accepted; $($bad.Count) rejected; before Docker"
     Pass "Real V4+ table options self-tests: $($realGood.Count) accepted; $($realBad.Count) rejected; before Docker"
     Pass "Column encoding self-tests: $($encodingGood.Count) accepted; $encodingRejected rejected with exact reasons; before Docker"
+    Scope-SelfTests
+    Inventory-SelfTests
+    Migration-SelfTests
+    Overlay-SelfTest
 }
-function Real-Migrations {
-    $relative = 'smartaudits-backend/src/main/resources/db/migration'
-    $status = Native 'Git migration status' 'git' @('status','--porcelain','--untracked-files=all','--',$relative)
-    if ($status) {
-        Assert-That ($IncludePendingMembership -and $status -ceq "?? $($candidatePaths[0])") 'Only explicit new Membership migration candidate may differ from HEAD'
+function Expect-Rejection([scriptblock]$Action, [string]$Message) {
+    $rejected = $false
+    try { & $Action } catch { $rejected = $true }
+    Assert-That $rejected $Message
+}
+function Scope-SelfTests {
+    Assert-That ($newPaths.Count -eq 5 -and $overlayModifiedPaths.Count -eq 2 -and $auxPaths.Count -eq 4) 'V6 scope lists changed size'
+    Assert-That (@($scopePaths | Sort-Object -Unique -CaseSensitive).Count -eq 11) 'V6 scope lists contain duplicates'
+    Assert-That ($newPaths -ccontains $migrationCandidate) 'Migration candidate is not a new V6 file'
+    $exact = [string[]]@($scopePaths | ForEach-Object { if ($newPaths -ccontains $_) { "?? $_" } else { " M $_" } })
+    Assert-ScopeEntries $exact $true
+    Assert-ScopeEntries @() $false
+    # Entry order: 0-4 new files, 5-6 modified overlay files, 7-10 auxiliary files.
+    $variant = { param([int]$Index, [string]$Value) $copy = [string[]]$exact.Clone(); $copy[$Index] = $Value; ,$copy }
+    $cases = New-Object 'System.Collections.Generic.List[object]'
+    $cases.Add([string[]]($exact + @('?? notes.txt')))
+    $cases.Add([string[]]($exact + @('?? smartaudits-backend/src/main/resources/db/migration/V7__create_audits.sql')))
+    $cases.Add([string[]]@($exact | Select-Object -Skip 1))
+    $cases.Add((& $variant 10 $exact[0]))
+    $cases.Add((& $variant 0 ('A  ' + $newPaths[0])))
+    $cases.Add((& $variant 0 (' M ' + $newPaths[0])))
+    $cases.Add((& $variant 0 ('?? ' + $newPaths[0].ToUpperInvariant())))
+    $cases.Add((& $variant 0 ('??' + $newPaths[0])))
+    $cases.Add((& $variant 5 ('?? ' + $overlayModifiedPaths[0])))
+    $cases.Add((& $variant 5 ('M  ' + $overlayModifiedPaths[0])))
+    $cases.Add((& $variant 5 ('MM ' + $overlayModifiedPaths[0])))
+    $cases.Add((& $variant 7 (' D ' + $auxPaths[0])))
+    $cases.Add((& $variant 7 ('D  ' + $auxPaths[0])))
+    $cases.Add((& $variant 7 ('R  scripts/Old.ps1 -> ' + $auxPaths[0])))
+    foreach ($case in $cases) { Expect-Rejection { Assert-ScopeEntries $case $true } 'Scope check accepted an invalid pending Git status fixture' }
+    Expect-Rejection { Assert-ScopeEntries @(' M ' + $auxPaths[0]) $false } 'Normal mode accepted a dirty Git status fixture'
+    Pass "Scope self-tests: exact 5 ?? + 6 M and clean normal mode accepted; $($cases.Count + 1) invalid status fixtures rejected"
+}
+function Inventory-SelfTests {
+    $prefix = 'smartaudits-backend/src/main/resources/db/migration/'
+    $base = [string[]]@($migrationNames | ForEach-Object { $prefix + $_ })
+    $null = Get-VersionInventory $base
+    $cases = New-Object 'System.Collections.Generic.List[object]'
+    $cases.Add([string[]]@($base | Where-Object { $_ -cne ($prefix + 'V6__create_sites.sql') }))
+    foreach ($extra in @('V7__create_audits.sql','V6__create_sites_copy.sql','V9000__f3_harness_future_probe.sql',
+        'V0__zero.sql','R__repeatable.sql','V6.1__point.sql')) { $cases.Add([string[]]($base + @($prefix + $extra))) }
+    foreach ($case in $cases) { Expect-Rejection { $null = Get-VersionInventory $case } 'Migration inventory accepted an invalid fixture' }
+    Pass "Inventory self-tests: exact V1-V6 accepted; $($cases.Count) rejected (V6 absent, V7, duplicate V6, publishable V9000, V0, repeatable, dotted)"
+}
+function Migration-SelfTests {
+    $source = Join-Path $repo 'smartaudits-backend/src/main/resources/db/migration'
+    $dir = Join-Path $tempRoot 'migration-fixture'
+    $jar = Join-Path $tempRoot 'migration-fixture.jar'
+    $packaged = [long[]]@(1,2,3,4,5,6,9000)
+    $future = 'V9000__f3_harness_future_probe.sql'
+    $altered = [IO.File]::ReadAllText((Join-Path $source 'V6__create_sites.sql')) + ' '
+    $reset = {
+        if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
+        $null = New-Item -ItemType Directory -Path $dir
+        foreach ($name in $migrationNames) { Copy-Item -LiteralPath (Join-Path $source $name) -Destination (Join-Path $dir $name) }
     }
-    $files = @((Native 'Git migration inventory' 'git' @('ls-tree','-r','--name-only',$head,'--',$relative)) -split '\r?\n')
-    if ($IncludePendingMembership -and $files -notcontains $candidatePaths[0]) { $files += $candidatePaths[0] }
+    $pack = {
+        param([string[]]$Names, [hashtable]$Override = @{})
+        if (Test-Path -LiteralPath $jar) { Remove-Item -LiteralPath $jar -Force }
+        Add-Type -AssemblyName System.IO.Compression
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $zip = [IO.Compression.ZipFile]::Open($jar, 'Create')
+        try {
+            foreach ($name in $Names) {
+                $text = if ($Override.ContainsKey($name)) { $Override[$name] }
+                    elseif ($name -ceq $future) { 'CREATE TABLE f3_harness_future_probe (id BIGINT) ENGINE=InnoDB;' }
+                    else { [IO.File]::ReadAllText((Join-Path $source $name)) }
+                $writer = New-Object IO.StreamWriter(($zip.CreateEntry("BOOT-INF/classes/db/migration/$name")).Open(), $utf8)
+                try { $writer.Write($text) } finally { $writer.Dispose() }
+            }
+        } finally { $zip.Dispose() }
+    }
+    $sourceCases = @(
+        @{ Why='V6 modified'; Do={ [IO.File]::WriteAllText((Join-Path $dir 'V6__create_sites.sql'), $altered, $utf8) } },
+        @{ Why='V6 absent'; Do={ Remove-Item -LiteralPath (Join-Path $dir 'V6__create_sites.sql') } },
+        @{ Why='unexpected V7'; Do={ [IO.File]::WriteAllText((Join-Path $dir 'V7__create_audits.sql'), 'CREATE TABLE audits (id BIGINT);', $utf8) } },
+        @{ Why='duplicate V6'; Do={ Copy-Item -LiteralPath (Join-Path $dir 'V6__create_sites.sql') -Destination (Join-Path $dir 'V6__create_sites_copy.sql') } },
+        @{ Why='publishable V9000'; Do={ [IO.File]::WriteAllText((Join-Path $dir $future), 'CREATE TABLE f3_harness_future_probe (id BIGINT);', $utf8) } },
+        @{ Why='incorrect V6 hash'; Do={ Copy-Item -LiteralPath (Join-Path $source 'V5__create_organization_memberships.sql') -Destination (Join-Path $dir 'V6__create_sites.sql') -Force } }
+    )
+    $all = [string[]]($migrationNames + @($future))
+    $jarCases = @(
+        @{ Why='JAR altered'; Do={ & $pack $all @{'V6__create_sites.sql'=$altered} } },
+        @{ Why='source and JAR altered identically'; Do={ [IO.File]::WriteAllText((Join-Path $dir 'V6__create_sites.sql'), $altered, $utf8); & $pack $all @{'V6__create_sites.sql'=$altered} } },
+        @{ Why='duplicate JAR entry'; Do={ & $pack ([string[]]($all + @('V6__create_sites.sql'))) } },
+        @{ Why='JAR V6 absent'; Do={ & $pack ([string[]]@($all | Where-Object { $_ -cne 'V6__create_sites.sql' })) } },
+        @{ Why='unexpected JAR V7'; Do={ & $pack ([string[]]($all + @('V7__create_audits.sql'))) @{'V7__create_audits.sql'='CREATE TABLE audits (id BIGINT);'} } },
+        @{ Why='JAR without synthetic V9000'; Do={ & $pack ([string[]]$migrationNames) } }
+    )
+    try {
+        & $reset
+        Assert-Migrations -MigrationDir $dir -Fixture
+        $crlf = [IO.File]::ReadAllText((Join-Path $source 'V6__create_sites.sql')).Replace("`r`n", "`n").Replace("`n", "`r`n")
+        [IO.File]::WriteAllText((Join-Path $dir 'V6__create_sites.sql'), $crlf, (New-Object Text.UTF8Encoding($true)))
+        Assert-Migrations -MigrationDir $dir -Fixture # CRLF and UTF-8 BOM share the canonical LF text hash.
+        & $reset
+        & $pack $all
+        Assert-Migrations -Jar $jar -MigrationDir $dir -Fixture -Versions $packaged
+        foreach ($case in $sourceCases) {
+            & $reset
+            & $case.Do
+            Expect-Rejection { Assert-Migrations -MigrationDir $dir -Fixture } "Source migration self-test accepted: $($case.Why)"
+        }
+        foreach ($case in $jarCases) {
+            & $reset
+            & $case.Do
+            Expect-Rejection { Assert-Migrations -Jar $jar -MigrationDir $dir -Fixture -Versions $packaged } "JAR migration self-test accepted: $($case.Why)"
+        }
+    } finally {
+        if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
+        if (Test-Path -LiteralPath $jar) { Remove-Item -LiteralPath $jar -Force }
+    }
+    Pass "Migration hash self-tests: LF and CRLF+BOM accepted; $($sourceCases.Count) source and $($jarCases.Count) JAR negatives rejected; literals never derived from files"
+}
+function Overlay-SelfTest {
+    if (-not $IncludePendingSite) { Pass 'Overlay self-test not applicable: normal mode never overlays NEW'; return }
+    $root = Join-Path $tempRoot 'overlay-fixture'
+    $prepare = {
+        param([switch]$WithNew, [switch]$WithoutModified)
+        if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
+        # Synthetic stand-in for git archive HEAD: only the tracked overlay files exist.
+        $present = New-Object 'System.Collections.Generic.List[string]'
+        $present.AddRange([string[]]$overlayModifiedPaths)
+        if ($WithoutModified) { $present.RemoveAt(1) }
+        if ($WithNew) { $present.Add($newPaths[1]) }
+        foreach ($path in $present) {
+            $target = Join-Path $root $path
+            $null = New-Item -ItemType Directory -Force -Path (Split-Path $target)
+            [IO.File]::WriteAllText($target, 'synthetic HEAD placeholder', $utf8)
+        }
+    }
+    try {
+        & $prepare
+        Copy-Overlay $root
+        Assert-That (@(Get-ChildItem -LiteralPath $root -Recurse -File -Force).Count -eq $overlayPaths.Count) 'Overlay fixture must contain exactly the overlay files'
+        & $prepare -WithNew
+        Expect-Rejection { Copy-Overlay $root } 'Overlay accepted a new V6 file already present in NEW'
+        & $prepare -WithoutModified
+        Expect-Rejection { Copy-Overlay $root } 'Overlay accepted a missing tracked overlay file'
+    } finally { if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force } }
+    Pass "Overlay self-test: $($overlayPaths.Count) files copied with matching hashes; auxiliary files absent; pre-existing new and missing tracked targets rejected"
+}
+function New-SyntheticBackend([string]$Name, [string[]]$Lines, [int]$ExitCode, [bool]$Flyway, [switch]$WaitForStop) {
+    # Deterministic stand-in for a started backend: prints exact log lines, then either exits on its
+    # own (unexpected exit) or waits for a named event that plays the requested shutdown.
+    $eventName = "Local\f3-harness-$runId-" + [Guid]::NewGuid().ToString('N')
+    $stopEvent = New-Object Threading.EventWaitHandle($false, [Threading.EventResetMode]::ManualReset, $eventName)
+    $emit = @($Lines | ForEach-Object { "[Console]::Out.WriteLine('" + $_.Replace("'", "''") + "')" }) + @('[Console]::Out.Flush()')
+    if ($WaitForStop) { $emit += "[void][Threading.EventWaitHandle]::OpenExisting('$eventName').WaitOne(60000)" }
+    $command = (($emit + @("exit $ExitCode")) -join '; ')
+    $shell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $record = Start-Owned $Name $shell @('-NoProfile','-NonInteractive','-Command',$command) $tempRoot
+    $record.Jar='synthetic'; $record.Port=0; $record.Flyway=$Flyway; $record.State='Started'; $record.StopEvent=$stopEvent
+    return $record
+}
+function Backend-SelfTests {
+    # Synthetic processes only: no Docker, MariaDB, JMX or Maven. Stop request and history check are injected.
+    $count = $expectedVersions.Count
+    $started = 'Started SmartAuditsApplication in 4.2 seconds (process running for 5.0)'
+    $validated = "o.f.core.internal.command.DbValidate     : Successfully validated $count migrations (execution time 00:00.031s)"
+    $calls = @{ Stop=0; History=0 }
+    $request = { param($Target) $calls.Stop++; $null = $Target.StopEvent.Set() }
+    $history = { $calls.History++ }
+    $stop = { param($Target) Stop-Backend $Target $request $history }
+    $exited = { param($Target) Assert-That ($Target.Process.WaitForExit(30000)) 'Synthetic backend did not exit' }
+    # Case 1: started backend, requested shutdown, complete logs. Case 4: repeated cleanup is idempotent.
+    $normal = New-SyntheticBackend 'synthetic normal backend' @($started,$validated) 0 $true -WaitForStop
+    & $stop $normal
+    Assert-That ($normal.State -ceq 'Validated' -and $calls.Stop -eq 1 -and $calls.History -eq 1) 'Normal synthetic shutdown was not validated exactly once'
+    $off = New-SyntheticBackend 'synthetic Flyway OFF backend' @($started) 0 $false -WaitForStop
+    & $stop $off
+    Assert-That ($off.State -ceq 'Validated' -and $calls.Stop -eq 2 -and $calls.History -eq 2) 'Flyway OFF synthetic shutdown was not validated'
+    & $stop $normal
+    $errors = New-Object 'System.Collections.Generic.List[string]'
+    Cleanup-Backend $normal $errors
+    Assert-That ($calls.Stop -eq 2 -and $calls.History -eq 2 -and $errors.Count -eq 0 -and $normal.State -ceq 'Validated') 'Repeated cleanup of a validated backend was not idempotent'
+    Assert-BackendsValidated @($normal,$off) 2
+    # Cases 2, 3 and 7: any exit before the requested shutdown fails, including exit 0 and NEW return forward.
+    foreach ($case in @(@('synthetic crashed backend',3), @('synthetic silently exited backend',0), @('NEW return forward',0))) {
+        $lost = New-SyntheticBackend $case[0] @($started,$validated) $case[1] $true
+        & $exited $lost
+        $reason = ''
+        try { & $stop $lost } catch { $reason = $_.Exception.Message }
+        Assert-That ($reason -like "*exited unexpectedly before its requested shutdown (exit $($case[1]))*") "Unexpected exit accepted: $($case[0]) -> $reason"
+        Assert-That ($lost.State -ceq 'Failed' -and $calls.Stop -eq 2 -and $calls.History -eq 2) "Unexpected exit reached shutdown validation: $($case[0])"
+        $errors = New-Object 'System.Collections.Generic.List[string]'
+        Cleanup-Backend $lost $errors
+        Assert-That ($errors.Count -eq 0) "Cleanup added a secondary error after a reported failure: $($case[0])"
+        Expect-Rejection { Assert-BackendsValidated @($normal,$off,$lost) 3 } "Final lifecycle gate accepted: $($case[0])"
+    }
+    # Case 7, cleanup path: a started backend found dead during cleanup, without a prior failure, is an error.
+    $unseen = New-SyntheticBackend 'NEW return forward' @($started,$validated) 0 $true
+    & $exited $unseen
+    $errors = New-Object 'System.Collections.Generic.List[string]'
+    Cleanup-Backend $unseen $errors
+    Assert-That ($errors.Count -eq 1 -and $errors[0] -like '*exited without a validated shutdown' -and $calls.Stop -eq 2) 'Cleanup accepted a backend that died without validated shutdown'
+    Expect-Rejection { Assert-BackendsValidated @($normal,$off,$unseen) 3 } 'Final lifecycle gate accepted a never-stopped backend'
+    Expect-Rejection { Assert-BackendsValidated @($normal) 2 } 'Final lifecycle gate accepted a missing backend lifecycle'
+    # Case 5: start failed before a record existed, or before startup completed: no secondary error, no stop request.
+    & $stop $null
+    $errors = New-Object 'System.Collections.Generic.List[string]'
+    Cleanup-Backend $null $errors
+    $failedStart = New-SyntheticBackend 'synthetic failed startup' @('APPLICATION FAILED TO START') 1 $true
+    $failedStart.State = 'Starting'
+    & $exited $failedStart
+    Cleanup-Backend $failedStart $errors
+    Assert-That ($errors.Count -eq 0 -and $calls.Stop -eq 2) 'Failed startup produced a secondary cleanup error or stop request'
+    $reason = ''
+    try { & $stop $failedStart } catch { $reason = $_.Exception.Message }
+    Assert-That ($reason -like '*shutdown requires a started backend (state=Starting)') "Failed startup accepted by shutdown: $reason"
+    Force-Stop $failedStart
+    # Case 6: incomplete or contradictory shutdown evidence after a requested stop never validates.
+    $wrongCount = $validated.Replace("validated $count migrations", "validated $($count - 1) migrations")
+    $incomplete = @(
+        @{ Why='missing Started marker'; Lines=@($validated); Exit=0; Flyway=$true; Reason='Missing Spring startup confirmation' },
+        @{ Why='missing Flyway ON marker'; Lines=@($started); Exit=0; Flyway=$true; Reason='*no Flyway DbValidate success marker' },
+        @{ Why='wrong Flyway migration count'; Lines=@($started,$wrongCount); Exit=0; Flyway=$true; Reason='*no Flyway DbValidate success marker' },
+        @{ Why='Flyway marker while OFF'; Lines=@($started,$validated); Exit=0; Flyway=$false; Reason='*unexpected Flyway validation while OFF' },
+        @{ Why='nonzero exit after requested stop'; Lines=@($started,$validated); Exit=1; Flyway=$true; Reason='Backend shutdown returned nonzero' }
+    )
+    foreach ($case in $incomplete) {
+        $before = $calls.Stop
+        $partial = New-SyntheticBackend "synthetic $($case.Why)" $case.Lines $case.Exit $case.Flyway -WaitForStop
+        $reason = ''
+        try { & $stop $partial } catch { $reason = $_.Exception.Message }
+        Assert-That ($reason -like $case.Reason) "Incomplete shutdown evidence accepted: $($case.Why) -> $reason"
+        Assert-That ($partial.State -ceq 'StopRequested' -and $calls.Stop -eq $before + 1 -and $calls.History -eq 2) "Incomplete shutdown reached history validation: $($case.Why)"
+        Expect-Rejection { Assert-BackendsValidated @($normal,$off,$partial) 3 } "Final lifecycle gate accepted: $($case.Why)"
+    }
+    foreach ($record in @($children.ToArray() | Where-Object { $_.ContainsKey('StopEvent') })) {
+        Assert-That ($record.Process.HasExited) "Synthetic backend still running: $($record.Name)"
+        $record.StopEvent.Dispose()
+    }
+    Pass "Backend lifecycle self-tests: 2 normal shutdowns + idempotent repeat accepted; 3 unexpected exits, 1 dead-at-cleanup, 1 failed startup and $($incomplete.Count) incomplete logs rejected"
+}
+function Get-VersionInventory([string[]]$Files) {
     $versions = @{}
-    foreach ($file in $files) {
+    foreach ($file in $Files) {
         Assert-That ((Split-Path $file -Leaf) -cmatch '^V([0-9]+)__.+\.sql$') 'Unsupported migration filename/version'
         $version = [long]$Matches[1]
         Assert-That ($version -gt 0 -and $version -lt 9000 -and -not $versions.ContainsKey($version)) 'Duplicate/reserved migration version'
         $versions[$version] = $file
-        if ($version -ge 4) { Assert-Expansion (Join-Path $repo $file) -RequireTableOptions }
     }
-    Assert-That ((($versions.Keys | Sort-Object) -join ',') -ceq '1,2,3,4,5') 'Expected exactly versioned V1-V5 (plus explicit pending V5 only)'
+    Assert-That ((($versions.Keys | Sort-Object) -join ',') -ceq '1,2,3,4,5,6') 'Expected exactly versioned V1-V6 (pending V6 only with -IncludePendingSite)'
+    return $versions
+}
+function Real-Migrations {
+    $relative = 'smartaudits-backend/src/main/resources/db/migration'
+    $status = Native 'Git migration status' 'git' @('status','--porcelain','--untracked-files=all','--',$relative)
+    if ($IncludePendingSite) { Assert-That ($status -ceq "?? $migrationCandidate") 'Pending Site mode requires exactly the new V6 migration candidate' }
+    else { Assert-That (-not $status) 'Normal mode requires migrations equal to HEAD' }
+    $files = @((Native 'Git migration inventory' 'git' @('ls-tree','-r','--name-only',$head,'--',$relative)) -split '\r?\n')
+    if ($IncludePendingSite) {
+        Assert-That ($files -cnotcontains $migrationCandidate) 'Pending V6 candidate is already tracked'
+        $files += $migrationCandidate
+    }
+    $versions = Get-VersionInventory $files
+    foreach ($version in @($versions.Keys | Where-Object { $_ -ge 4 })) { Assert-Expansion (Join-Path $repo $versions[$version]) -RequireTableOptions }
     $real = @($versions.Keys | Where-Object { $_ -ge 4 } | Sort-Object)
     $script:expectedVersions = @(1,2,3) + $real + @(9000)
-    $found = if ($real.Count) { $real -join ',' } else { 'none' }
-    Pass "Real V4+: $found; pending candidates=$IncludePendingMembership; expected Flyway versions=$($expectedVersions -join ','); count=$($expectedVersions.Count)"
+    Pass "Real V4+: $($real -join ','); pending Site candidates=$IncludePendingSite; expected Flyway versions=$($expectedVersions -join ','); count=$($expectedVersions.Count)"
 }
 function Assert-VersionedSources {
     foreach ($path in @('smartaudits-backend/src/main/java/com/smartaudits/v2/time/UtcMicros.java',
@@ -557,41 +842,51 @@ function Assert-VersionedSources {
     }
     Pass 'UtcMicros and original probe equal HEAD; Git archive is the source of both'
 }
+function Assert-ScopeEntries([string[]]$Entries, [bool]$Pending) {
+    if (-not $Pending) {
+        Assert-That ($Entries.Count -eq 0) 'Normal mode requires a clean Git working tree and index; only -IncludePendingSite accepts the exact V6 candidate'
+        return
+    }
+    # Equal count + unique in-scope paths with exact states == exact set; staging, D and R never match.
+    Assert-That ($Entries.Count -eq $scopePaths.Count) "Pending Site mode requires exactly $($scopePaths.Count) Git entries"
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+    foreach ($entry in $Entries) {
+        Assert-That ($entry.Length -gt 3 -and $entry.Substring(2,1) -ceq ' ') 'Malformed Git status'
+        $state = $entry.Substring(0,2)
+        $path = $entry.Substring(3)
+        Assert-That ($scopePaths -ccontains $path) "Unexpected path outside V6 scope: $path"
+        $expectedState = if ($newPaths -ccontains $path) { '??' } else { ' M' }
+        Assert-That ($state -ceq $expectedState) "Unexpected Git status '$state' for $path"
+        Assert-That ($seen.Add($path)) "Duplicate Git status entry: $path"
+    }
+}
 function Assert-Candidates {
-    # The only other dirty files allowed are the four reviewed validation/documentation files.
-    $allowedChanges = $candidatePaths + @('scripts/Validate-SmartAudits20Harness.ps1',
-        'scripts/Validate-FlywayPhase08.ps1','smartaudits-frontend/e2e/run.mjs','docs/ADR-0001-smartaudits-2-core-model.md')
-    $status = Native 'Git exact V5 scope entries' 'git' @('-c','core.quotePath=false','status','--porcelain=v1','--untracked-files=all') -KeepLeadingWhitespace
-    $entries = @(if ($status) { $status -split '\r?\n' })
-    for ($i=0; $i -lt $entries.Count; $i++) {
-        $entry=$entries[$i]
-        Assert-That ($entry.Length -gt 3) 'Malformed Git status'
-        $path=$entry.Substring(3)
-        $state=$entry.Substring(0,2)
-        Assert-That ($allowedChanges -ccontains $path) "Unexpected file outside V5 scope: $path"
-        $newCandidate = $candidatePaths[0..5] -ccontains $path
-        Assert-That (($newCandidate -and $IncludePendingMembership -and $state -ceq '??') -or
-            (-not $newCandidate -and $state -ceq ' M')) "Unexpected index/candidate status: $path"
-        if (-not $IncludePendingMembership) {
-            Assert-That ($candidatePaths -cnotcontains $path) 'Membership sources must equal HEAD without IncludePendingMembership'
-        }
-    }
-    if ($IncludePendingMembership) {
-        foreach ($path in $candidatePaths[0..5]) {
-            Assert-That ((Native 'Pending candidate status' 'git' @('status','--porcelain=v1','--untracked-files=all','--',$path)) -ceq "?? $path") 'Pending Membership requires six exact untracked new files'
-        }
-    }
-    foreach ($path in $candidatePaths) {
+    $status = Native 'Git exact V6 scope entries' 'git' @('-c','core.quotePath=false','status','--porcelain=v1','--untracked-files=all') -KeepLeadingWhitespace
+    Assert-ScopeEntries @(if ($status) { $status -split '\r?\n' }) $IncludePendingSite.IsPresent
+    if (-not $IncludePendingSite) { return }
+    foreach ($path in $scopePaths) {
         $item=Get-Item -LiteralPath (Join-Path $repo $path) -Force
-        Assert-That (-not $item.PSIsContainer -and -not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) 'Candidate must be a regular file'
-        if (-not $IncludePendingMembership) {
-            $blob=Native 'Membership HEAD blob' 'git' @('rev-parse',"${head}:$path")
-            Assert-That ((Native 'Membership source blob' 'git' @('hash-object',"--path=$path",$path)) -ceq $blob) 'Membership source differs from HEAD'
+        Assert-That (-not $item.PSIsContainer -and -not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) "Scope entry must be a regular file: $path"
+        for ($dir=$item.Directory; $dir.FullName.Length -gt $repo.Length; $dir=$dir.Parent) {
+            Assert-That (-not ($dir.Attributes -band [IO.FileAttributes]::ReparsePoint)) "Reparse point in scope path: $path"
         }
         $hash=(Get-FileHash -LiteralPath (Join-Path $repo $path) -Algorithm SHA256).Hash
-        if ($candidateHashes.ContainsKey($path)) { Assert-That ($candidateHashes[$path] -ceq $hash) 'Candidate changed during validation' }
-        else { $candidateHashes[$path]=$hash; Pass "Candidate $path SHA256=$hash" }
+        if ($candidateHashes.ContainsKey($path)) { Assert-That ($candidateHashes[$path] -ceq $hash) "Scope file changed during validation: $path" }
+        else { $candidateHashes[$path]=$hash; Pass "Scope $path SHA256=$hash" }
     }
+}
+function Copy-Overlay([string]$Root) {
+    # NEW starts as git archive HEAD; only the seven reviewed overlay files are added.
+    Assert-That $IncludePendingSite 'Overlay requires -IncludePendingSite'
+    foreach ($path in $overlayPaths) {
+        $target=Join-Path $Root $path
+        if ($newPaths -ccontains $path) { Assert-That (-not (Test-Path -LiteralPath $target)) "New V6 file already present in NEW: $path" }
+        else { Assert-That (Test-Path -LiteralPath $target -PathType Leaf) "Tracked overlay file missing from NEW: $path" }
+        $null=New-Item -ItemType Directory -Force -Path (Split-Path $target)
+        Copy-Item -LiteralPath (Join-Path $repo $path) -Destination $target -Force
+        Assert-That ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ceq $candidateHashes[$path]) "Copied overlay hash mismatch: $path"
+    }
+    foreach ($path in $auxPaths) { Assert-That (-not (Test-Path -LiteralPath (Join-Path $Root $path))) "Auxiliary file must never enter NEW: $path" }
 }
 function Assert-History {
     Assert-That ((Sql 'SELECT GROUP_CONCAT(version ORDER BY installed_rank) FROM flyway_schema_history') -ceq ($expectedVersions -join ',')) 'Unexpected Flyway version set/order'
@@ -693,6 +988,7 @@ function Snapshot {
         $filters['organizations']='1=1'
     }
     $filters['organization_memberships']='1=1'
+    $filters['sites']='1=1'
     $snapshot = [ordered]@{}
     foreach ($table in $filters.Keys) {
         $columns = (Sql "SELECT COLUMN_NAME FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='$table' ORDER BY ORDINAL_POSITION").Split("`n")
@@ -782,6 +1078,30 @@ function Populated-V4-Upgrade {
     Membership-Probe 'upgrade' $upgradeEnv
     Pass 'Populated V4 upgrade schema belongs to this run and is removed with its container/volume'
 }
+function Site-Probe([string]$Mode, [hashtable]$DatabaseEnv = $dbEnv, [string]$Timezone = 'Europe/Madrid') {
+    Assert-That ($Mode -cin @('contracts','tenant','seed','upgrade')) 'Unexpected Site probe mode'
+    Assert-That ($Timezone -cin @('Asia/Kathmandu','Europe/Madrid')) 'Unexpected Site timezone'
+    $environment=@{} + $DatabaseEnv + @{F3_SITE_MODE=$Mode;F3_TIMEZONE=$Timezone;
+        F3_EXPECTED_VERSIONS=($expectedVersions -join ',');F3_SITE_HARNESS_RUN_ID=$runId}
+    $output=Maven $newBackend "-Dtest=com.smartaudits.v2.model.SiteMariaDbProbe -DargLine=-Duser.timezone=$Timezone test" $environment
+    Assert-That ($output -match 'Tests run: 1, Failures: 0, Errors: 0, Skipped: 0') 'Site MariaDB probe did not pass'
+    $marker = switch ($Mode) { 'contracts' {'SITE CONTRACTS PASS:'}; 'tenant' {'SITE TENANT FK PASS:'}; 'seed' {'SITE SENTINELS PASS:'}; 'upgrade' {'SITE UPGRADE PASS:'} }
+    Assert-That ($output.Contains($marker)) 'Missing Site proof marker'
+    foreach ($line in ($output -split '\r?\n')) { if ($line.StartsWith($marker)) { Pass $line } }
+}
+function Populated-V5-Upgrade {
+    $upgradeDb='f3_harness_' + [Guid]::NewGuid().ToString('N')
+    Assert-That ($upgradeDb -cmatch '^f3_harness_[a-f0-9]{32}$') 'Unsafe V5 upgrade schema'
+    $owner=Docker @('container','inspect','--format','{{index .Config.Labels "smartaudits.f3-harness"}}',$resource)
+    Assert-That ($owner -ceq $runId) 'V5 upgrade requires exact owned container label'
+    $null=Docker @('exec','-e','MYSQL_PWD',$resource,'mariadb','--host=127.0.0.1','-uroot','-e',
+        "CREATE DATABASE $upgradeDb; GRANT ALL ON $upgradeDb.* TO 'f3_harness_user'@'%';") @{MYSQL_PWD=$rootPassword}
+    $upgradeEnv=@{} + $dbEnv
+    $upgradeEnv.F3_DB_NAME=$upgradeDb
+    $upgradeEnv.F3_DB_URL="jdbc:mariadb://127.0.0.1:$dbPort/$upgradeDb"
+    Site-Probe 'upgrade' $upgradeEnv
+    Pass 'Populated V5 upgrade schema belongs to this run and is removed with its container/volume'
+}
 function Start-Backend([string]$Jar, [bool]$Flyway, [string]$Name) {
     $port = Free-Port
     $environment = @{
@@ -795,14 +1115,32 @@ function Start-Backend([string]$Jar, [bool]$Flyway, [string]$Name) {
     $record.Jar=$Jar
     $record.Port=$port
     $record.Flyway=$Flyway
+    # Lifecycle: Starting -> Started -> StopRequested -> Validated. Only Validated is a successful end.
+    $record.State='Starting'
+    $backends.Add($record)
     $script:backend=$record
     Wait-Ready $Name { (Http-Status $port '/usuarios') -eq 401 } $record
+    $record.State='Started'
     Pass "$Name Spring startup + Hibernate validate; loopback port=$port; Flyway=$Flyway"
     return $record
 }
-function Stop-Backend($Record) {
-    if ($null -eq $Record -or $Record.Process.HasExited) { return }
-    Probe 'stop' @{F3_BACKEND_PID=[string]$Record.Process.Id; F3_BACKEND_JAR=$Record.Jar; F3_TEMP_ROOT=$tempRoot}
+function Stop-Backend($Record,
+    [scriptblock]$RequestStop = { param($Target) Probe 'stop' @{F3_BACKEND_PID=[string]$Target.Process.Id; F3_BACKEND_JAR=$Target.Jar; F3_TEMP_ROOT=$tempRoot} },
+    [scriptblock]$CheckHistory = { Assert-History }) {
+    # No process was ever created: the start failure itself is the causal error.
+    if ($null -eq $Record) { return }
+    # Idempotent: this exact shutdown was already requested and fully validated.
+    if ($Record.State -ceq 'Validated') { return }
+    Assert-That ($Record.State -ceq 'Started') "$($Record.Name): shutdown requires a started backend (state=$($Record.State))"
+    if ($Record.Process.HasExited) {
+        # Any exit before the requested shutdown is a failure, even with exit code 0.
+        $Record.State='Failed'
+        $log = Output-Of $Record
+        $tail = $log.Substring([Math]::Max(0, $log.Length - 3000))
+        throw "$($Record.Name) exited unexpectedly before its requested shutdown (exit $($Record.Process.ExitCode)); final log: $(Protect $tail)"
+    }
+    $Record.State='StopRequested'
+    & $RequestStop $Record
     Assert-That ($Record.Process.WaitForExit(30000)) 'Backend did not complete graceful shutdown'
     $log = Output-Of $Record
     Assert-That ($log.Contains('Started SmartAuditsApplication')) 'Missing Spring startup confirmation'
@@ -821,8 +1159,24 @@ function Stop-Backend($Record) {
         Assert-That ($validation.Count -eq 0) "$($Record.Name): unexpected Flyway validation while OFF"
         Pass "$($Record.Name) Flyway OFF log: DbValidate success marker absent"
     }
-    Assert-History
+    & $CheckHistory
+    $Record.State='Validated'
     Pass "$($Record.Name) graceful shutdown"
+}
+function Cleanup-Backend($Record, $Errors = $cleanupErrors) {
+    # Never re-requests a shutdown already requested/validated and never masks the causal failure.
+    if ($null -eq $Record -or $Record.State -cne 'Started') { return }
+    if ($Record.Process.HasExited) {
+        if ($null -eq $failure) { $Errors.Add("$($Record.Name) exited without a validated shutdown") }
+        return
+    }
+    try { Stop-Backend $Record } catch { $Errors.Add("Graceful backend shutdown failed: $($Record.Name); attempting owned PID teardown") }
+}
+function Assert-BackendsValidated([object[]]$Records, [int]$Expected) {
+    Assert-That ($Records.Count -eq $Expected) "Expected $Expected backend lifecycles, found $($Records.Count)"
+    foreach ($record in $Records) {
+        Assert-That ($record.State -ceq 'Validated') "$($record.Name) has no validated shutdown (state=$($record.State))"
+    }
 }
 function Force-Stop($Record) {
     if (-not $Record.Process.HasExited) {
@@ -848,6 +1202,7 @@ try {
     $tempCreated=$true
     Self-Tests
     Real-Migrations
+    Backend-SelfTests
     if (-not $SelfTestOnly) {
     Preflight
     $dockerReady=$true
@@ -873,14 +1228,12 @@ try {
     $newBackend=Join-Path $tempRoot 'new/smartaudits-backend'
     $oldBackend=Join-Path $tempRoot 'old/smartaudits-backend'
     Assert-VersionedSources
-    if ($IncludePendingMembership) {
-        Assert-Candidates
-        foreach ($path in $candidatePaths) {
-            $target=Join-Path $tempRoot "new/$path"
-            $null=New-Item -ItemType Directory -Force -Path (Split-Path $target)
-            Copy-Item -LiteralPath (Join-Path $repo $path) -Destination $target
-            Assert-That ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ceq $candidateHashes[$path]) 'Copied candidate hash mismatch'
-        }
+    Assert-Candidates
+    if ($IncludePendingSite) {
+        Copy-Overlay (Join-Path $tempRoot 'new')
+        Pass "Overlay: exactly $($overlayPaths.Count) reviewed V6 files copied into NEW with matching hashes; $($auxPaths.Count) auxiliary files excluded"
+    } else {
+        Pass 'Normal mode: clean working tree and index; NEW is git archive HEAD without overlay'
     }
     if (-not $TimestampOnly) {
     $futureSql=@'
@@ -900,10 +1253,10 @@ CREATE TABLE f3_harness_future_probe (
     $null = Maven $oldBackend '-DskipTests package'
     Pass "Exact baseline built from Git archive: $baseline"
     $null = Maven $newBackend '-DskipTests package'
-    Pass "New JAR from HEAD $head + V9000; explicit Membership candidates=$IncludePendingMembership"
+    Pass "New JAR from HEAD $head + V9000; explicit Site candidates=$IncludePendingSite"
     $oldJar=Join-Path $oldBackend 'target/smartaudits-backend-1.0.0.jar'
     $newJar=Join-Path $newBackend 'target/smartaudits-backend-1.0.0.jar'
-    Assert-Migrations -Jar $newJar # OLD may have V1-V3 or V1-V4; never require V5 in OLD.
+    Assert-Migrations -Jar $newJar # OLD may have V1-V3, V1-V4 or V1-V5; never require V6 in OLD.
     }
     $volumeRegistered=$true
     $null = Docker @('volume','create','--label',"$label=$runId",$volume)
@@ -928,6 +1281,7 @@ CREATE TABLE f3_harness_future_probe (
     } else {
     Historical-Organization
     Populated-V4-Upgrade
+    Populated-V5-Upgrade
     $backend=Start-Backend $newJar $true 'NEW initial'
     Assert-History
     Stop-Backend $backend
@@ -935,10 +1289,17 @@ CREATE TABLE f3_harness_future_probe (
     foreach ($zone in @('Asia/Kathmandu','Europe/Madrid')) { Organization-Probe 'contracts' $dbEnv $zone }
     # Organization contracts delete their fixtures before Membership creates any dependent rows.
     foreach ($zone in @('Asia/Kathmandu','Europe/Madrid')) { Membership-Probe 'contracts' $dbEnv $zone }
+    # Site contracts follow Membership cleanup and remove their fixtures before any seed.
+    foreach ($zone in @('Asia/Kathmandu','Europe/Madrid')) { Site-Probe 'contracts' $dbEnv $zone }
+    Site-Probe 'tenant'
+    Assert-That ((Sql "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='f3_site_child_probe'") -eq '0') 'Synthetic Site child table remains'
+    Assert-That ((Sql 'SELECT COUNT(*) FROM sites') -eq '0') 'Site contract fixtures remain'
     Organization-Probe 'seed'
     Assert-That ((Sql 'SELECT COUNT(*) FROM organizations') -eq '1') 'Expected exactly one real Organization sentinel'
     Membership-Probe 'seed'
     Assert-That ((Sql 'SELECT COUNT(*) FROM organization_memberships') -eq '2') 'Expected ACTIVE and REVOKED Membership sentinels'
+    Site-Probe 'seed'
+    Assert-That ((Sql 'SELECT GROUP_CONCAT(status ORDER BY status) FROM sites') -ceq 'ACTIVE,ARCHIVED') 'Expected ACTIVE and ARCHIVED Site sentinels'
     $before=Snapshot
     foreach ($table in $before.Keys) { Pass "PRE $table count|data SHA256|structure SHA256=$($before[$table])" }
     $backend=Start-Backend $oldJar $true "OLD exact $RollbackRelease Flyway ON"
@@ -973,18 +1334,20 @@ CREATE TABLE f3_harness_future_probe (
     Assert-Snapshot $before 'POST timestamp'
     }
     }
+    # Every backend must end through a requested and validated shutdown, never a silent exit.
+    $expectedBackends = if ($SelfTestOnly -or $TimestampOnly) { 0 } else { 4 }
+    Assert-BackendsValidated $backends.ToArray() $expectedBackends
+    Pass "Backend lifecycles: $($backends.Count) started; $($backends.Count) shutdowns requested and validated"
     Assert-Migrations
     Assert-Candidates
     Assert-VersionedSources
     Assert-That ((Native 'Git HEAD verification' 'git' @('rev-parse','HEAD')) -ceq $head) 'Main checkout moved'
-    Pass 'V1/V2/V3/V4/V5 bytes and normalized hashes intact'
+    Pass 'V1/V2/V3/V4/V5/V6 bytes and normalized hashes intact'
 } catch {
     $failure=Protect $_.Exception.Message
     Write-Host "FAIL $failure"
 } finally {
-    if ($null -ne $backend -and -not $backend.Process.HasExited) {
-        try { Stop-Backend $backend } catch { $cleanupErrors.Add('Graceful backend shutdown failed; attempting owned PID teardown') }
-    }
+    Cleanup-Backend $backend
     foreach ($child in @($children.ToArray())) {
         try {
             Force-Stop $child

@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class OrganizationMembershipMariaDbProbe {
     private static final String[] LEGACY = {"usuarios", "roles", "usuarios_roles", "auditorias", "incidencias",
             "resultados", "historial_auditorias", "historial_acciones_admin"};
-    private static final String VERSIONS = "1,2,3,4,5,9000";
+    private static final String VERSIONS = "1,2,3,4,5,6,9000";
     private static final Instant CREATED = Instant.parse("2024-02-29T23:58:57.987654321Z");
     private static final Instant UPDATED = Instant.parse("2024-03-31T02:30:00.123456789Z");
 
@@ -299,6 +299,7 @@ class OrganizationMembershipMariaDbProbe {
         assertTrue(snapshot(c, "flyway_schema_history").get("flyway_schema_history").containsAll(oldHistory));
         var preserved = snapshot(c, "organizations", "organization_memberships", "flyway_schema_history");
         assertEquals(0, flyway.migrate().migrationsExecuted);
+        assertEquals("0", scalar(c, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='sites'"));
         assertEquals(preserved, snapshot(c, "organizations", "organization_memberships", "flyway_schema_history"));
         assertEquals(legacy, snapshot(c, LEGACY));
         try (SessionFactory ignored = factory(url, user, password)) { /* Hibernate validate on the real V5 schema. */ }
