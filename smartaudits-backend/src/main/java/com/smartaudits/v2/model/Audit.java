@@ -7,9 +7,11 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.Instant;
+import java.util.Objects;
 
 /** Structural logical evaluation request only. An Audit must never exist without its first
- * Scan, so V7 exposes no creation API: the atomic Audit + first Scan factory arrives with V8.
+ * Scan: the only creation path is the package-internal startWithFirstScan factory, used by
+ * AuditScanService to persist the Audit and its first Scan in one transaction (V8).
  * Audit has no own status (derived from its Scans) and no current_scan_id. createdBy records
  * the actor only and grants no access. The SQL composite FK (organization_id, site_id) ->
  * sites(organization_id, id) is the authoritative tenant guard; this mapping joins Site by
@@ -54,8 +56,31 @@ public class Audit {
     @Column(name = "row_version", nullable = false, columnDefinition = "BIGINT DEFAULT 0")
     private Long rowVersion;
 
-    /** JPA only. No public constructor or factory: creating an Audit requires its first Scan (V8). */
+    /** JPA only. No public constructor or factory: creating an Audit requires its first Scan. */
     protected Audit() { }
+
+    /** An Audit together with its first Scan; never separable outside this package. */
+    record AuditStart(Audit audit, Scan firstScan) { }
+
+    /** Package-internal V8 factory: the new Audit and its PENDING attempt 1 share one instant.
+     * Tenancy is compared by organization IDs, never by Java or proxy identity. */
+    static AuditStart startWithFirstScan(Organization organization, Site site, Usuario createdBy, Instant createdAt) {
+        Objects.requireNonNull(organization, "organization must not be null");
+        Objects.requireNonNull(site, "site must not be null");
+        Objects.requireNonNull(createdBy, "createdBy must not be null");
+        Long organizationId = Objects.requireNonNull(organization.getId(), "organization must be persistent");
+        Long siteOrganizationId = Objects.requireNonNull(site.getOrganization().getId(), "site organization must be persistent");
+        if (!organizationId.equals(siteOrganizationId)) {
+            throw new IllegalArgumentException("Site belongs to another organization");
+        }
+        Audit audit = new Audit();
+        audit.organization = organization;
+        audit.site = site;
+        audit.createdBy = createdBy;
+        audit.createdAt = UtcMicros.truncate(createdAt);
+        audit.updatedAt = audit.createdAt;
+        return new AuditStart(audit, Scan.first(audit, createdBy, audit.createdAt));
+    }
 
     @PrePersist
     protected void normalizeInsert() {

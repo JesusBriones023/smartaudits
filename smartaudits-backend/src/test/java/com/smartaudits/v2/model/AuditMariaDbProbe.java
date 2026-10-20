@@ -27,7 +27,7 @@ class AuditMariaDbProbe {
     private static final String[] LEGACY = {"usuarios", "roles", "usuarios_roles", "auditorias", "incidencias",
             "resultados", "historial_auditorias", "historial_acciones_admin"};
     private static final String[] PARENTS = {"organizations", "organization_memberships", "sites"};
-    private static final String VERSIONS = "1,2,3,4,5,6,7,9000";
+    private static final String VERSIONS = "1,2,3,4,5,6,7,8,9000";
     private static final Instant CREATED = Instant.parse("2024-02-29T23:58:57.987654321Z");
     private static final Instant UPDATED = Instant.parse("2024-03-31T02:30:00.123456789Z");
     private static final String RAW_TIME = "'2024-03-31 02:30:00.123456'";
@@ -351,6 +351,8 @@ class AuditMariaDbProbe {
         assertEquals(oldHistory.size() + 1, newHistory.size());
         assertTrue(newHistory.containsAll(oldHistory), "Historical Flyway rows changed");
         assertEquals("0", scalar(c, count("audits")), "V7 must not backfill Audits from Sites or legacy auditorias");
+        assertEquals("0", scalar(c, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='scans'"),
+                "Target 7 must not apply V8");
         assertEquals(legacy, snapshot(c, LEGACY));
         assertEquals(previous, snapshot(c, PARENTS));
         var preserved = snapshot(c, "organizations", "organization_memberships", "sites", "audits", "flyway_schema_history");
