@@ -20,18 +20,66 @@ class AuditTest {
     private static final Instant NANOS = Instant.parse("2024-02-29T23:58:57.987654321Z");
     private static final Instant MICROS = Instant.parse("2024-02-29T23:58:57.987654Z");
 
-    @Test void exposesNoPublicConstructorOrCreationApi() throws Exception {
-        assertEquals(0, Audit.class.getConstructors().length, "An Audit without its first Scan must not be creatable (V8 factory)");
+    @Test void exposesNoPublicConstructorOrPublicCreationApi() throws Exception {
+        assertEquals(0, Audit.class.getConstructors().length, "An Audit without its first Scan must not be creatable");
         Constructor<?>[] declared = Audit.class.getDeclaredConstructors();
         assertEquals(1, declared.length);
         assertTrue(Modifier.isProtected(declared[0].getModifiers()));
         assertEquals(0, declared[0].getParameterCount());
+        List<String> statics = new ArrayList<>();
         for (Method method : Audit.class.getDeclaredMethods()) {
             if (method.isSynthetic()) continue;
-            assertFalse(Modifier.isStatic(method.getModifiers()), "No static factory: " + method.getName());
-            assertFalse(Audit.class.isAssignableFrom(method.getReturnType()), "No method returns an Audit: " + method.getName());
+            assertFalse(Audit.class.isAssignableFrom(method.getReturnType()), "No method returns a bare Audit: " + method.getName());
+            if (Modifier.isStatic(method.getModifiers())) statics.add(method.getName());
         }
+        // V8: the only creation path is the package-private Audit + first Scan factory.
+        assertEquals(List.of("startWithFirstScan"), statics);
+        Method factory = Audit.class.getDeclaredMethod("startWithFirstScan", Organization.class, Site.class, Usuario.class, Instant.class);
+        int modifiers = factory.getModifiers();
+        assertFalse(Modifier.isPublic(modifiers) || Modifier.isProtected(modifiers) || Modifier.isPrivate(modifiers), "Factory must be package-private");
+        assertEquals(Audit.AuditStart.class, factory.getReturnType());
+        Class<?> start = Audit.AuditStart.class;
+        assertTrue(start.isRecord());
+        assertFalse(Modifier.isPublic(start.getModifiers()) || Modifier.isProtected(start.getModifiers()), "AuditStart must be package-private");
+        assertEquals(List.of(Audit.class, Scan.class), Arrays.stream(start.getRecordComponents()).map(c -> c.getType()).toList());
         assertFalse(Modifier.isFinal(Audit.class.getModifiers()), "LAZY proxies require a non-final entity");
+    }
+
+    @Test void factoryCreatesTheAuditWithItsFirstScanAtOneInstant() throws Exception {
+        Organization organization = ScanTest.organization(11L);
+        Site site = ScanTest.site(organization);
+        Usuario creator = ScanTest.user(3L);
+        Audit.AuditStart start = Audit.startWithFirstScan(organization, site, creator, NANOS);
+        Audit audit = start.audit();
+        assertSame(organization, audit.getOrganization());
+        assertSame(site, audit.getSite());
+        assertSame(creator, audit.getCreatedBy());
+        assertEquals(MICROS, audit.getCreatedAt());
+        assertEquals(MICROS, audit.getUpdatedAt());
+        assertNull(audit.getId());
+        assertNull(audit.getRowVersion());
+        assertSame(audit, start.firstScan().getAudit());
+        assertEquals(1, start.firstScan().getAttemptNumber());
+        assertEquals(ScanStatus.PENDING, start.firstScan().getStatus());
+        assertEquals(audit.getCreatedAt(), start.firstScan().getCreatedAt());
+    }
+
+    @Test void factoryComparesTenancyByOrganizationIdNotObjectIdentity() throws Exception {
+        Organization organization = ScanTest.organization(11L);
+        Organization sameIdOtherInstance = ScanTest.organization(11L);
+        assertNotSame(organization, sameIdOtherInstance);
+        Audit.AuditStart start = Audit.startWithFirstScan(organization, ScanTest.site(sameIdOtherInstance), ScanTest.user(3L), NANOS);
+        assertNotNull(start.firstScan());
+        Organization foreign = ScanTest.organization(12L);
+        assertThrows(IllegalArgumentException.class,
+                () -> Audit.startWithFirstScan(organization, ScanTest.site(foreign), ScanTest.user(3L), NANOS));
+        Organization transientOrganization = new Organization("Transient", null, NANOS);
+        assertThrows(NullPointerException.class,
+                () -> Audit.startWithFirstScan(transientOrganization, ScanTest.site(organization), ScanTest.user(3L), NANOS));
+        assertThrows(NullPointerException.class, () -> Audit.startWithFirstScan(null, ScanTest.site(organization), ScanTest.user(3L), NANOS));
+        assertThrows(NullPointerException.class, () -> Audit.startWithFirstScan(organization, null, ScanTest.user(3L), NANOS));
+        assertThrows(NullPointerException.class, () -> Audit.startWithFirstScan(organization, ScanTest.site(organization), null, NANOS));
+        assertThrows(NullPointerException.class, () -> Audit.startWithFirstScan(organization, ScanTest.site(organization), ScanTest.user(3L), null));
     }
 
     @Test void exposesOnlyGettersAndProtectedCallbacks() {
@@ -43,7 +91,7 @@ class AuditTest {
         Set<String> otherMethods = Arrays.stream(Audit.class.getDeclaredMethods())
                 .filter(m -> !m.isSynthetic() && !Modifier.isPublic(m.getModifiers()))
                 .map(m -> Modifier.toString(m.getModifiers()) + " " + m.getName()).collect(Collectors.toSet());
-        assertEquals(Set.of("protected normalizeInsert", "protected normalizeUpdate"), otherMethods);
+        assertEquals(Set.of("protected normalizeInsert", "protected normalizeUpdate", "static startWithFirstScan"), otherMethods);
     }
 
     @Test void hasNoStatusScanReferenceCollectionsOrPublicState() {
@@ -63,6 +111,7 @@ class AuditTest {
         }
         assertEquals(List.of("id", "organization", "site", "createdBy", "createdAt", "updatedAt", "rowVersion"), fields);
         for (Method method : Audit.class.getDeclaredMethods()) {
+            if (method.getName().equals("startWithFirstScan")) continue; // The single approved V8 factory.
             String name = method.getName().toLowerCase(Locale.ROOT);
             assertFalse(name.contains("status") || name.contains("state") || name.contains("scan"), method.getName());
             assertFalse(name.startsWith("set") || name.startsWith("create") || name.startsWith("start")

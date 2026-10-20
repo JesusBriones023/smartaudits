@@ -70,7 +70,7 @@ $expectedDomainTables = @(
     'usuarios_roles'
 ) | Sort-Object
 
-# The historical snapshot above stays pre-Flyway; current startup includes V7.
+# The historical snapshot above stays pre-Flyway; current startup includes V8.
 $expectedManagedTables = @(
     'audits',
     'auditorias',
@@ -82,6 +82,7 @@ $expectedManagedTables = @(
     'organizations',
     'resultados',
     'roles',
+    'scans',
     'sites',
     'usuarios',
     'usuarios_roles'
@@ -706,7 +707,7 @@ function Start-ValidationBackend {
             '--spring.flyway.enabled=true',
             "--spring.flyway.baseline-on-migrate=$($Baseline.ToString().ToLowerInvariant())",
             '--spring.flyway.baseline-version=1',
-            '--spring.flyway.target=7',
+            '--spring.flyway.target=8',
             '--spring.flyway.locations=classpath:db/migration',
             '--spring.flyway.validate-on-migrate=true',
             '--spring.flyway.clean-disabled=true',
@@ -1011,10 +1012,11 @@ function Assert-MigrationContents {
         'V5__create_organization_memberships.sql' = 'CE5A10EF0E1074B337971AF4ABA0DFECEC410A55A0A4BA469C479798F956C498'
         'V6__create_sites.sql' = '62AF26386433E7F8316D0559294A85F00197926AFF3EA6DB114A2EFA46F55804'
         'V7__create_audits.sql' = '93ECB485513247CEF614238A614F7AD76CD2793062B03183A83B2E70C8B7ACA5'
+        'V8__create_scans.sql' = '1E6EE50CAFC5D26DCBD0BD2E2E28B8904A1CED6AE5C0E5CE302D1CD5F27B774C'
     }
     $names = @($frozen.Keys | Sort-Object)
     $actualNames = @(Get-ChildItem -LiteralPath $migrationDir -Force | ForEach-Object { $_.Name } | Sort-Object)
-    Assert-Condition -Condition (($actualNames -join ',') -ceq ($names -join ',')) -Message 'Expected exactly V1-V7 source migrations.'
+    Assert-Condition -Condition (($actualNames -join ',') -ceq ($names -join ',')) -Message 'Expected exactly V1-V8 source migrations.'
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $archive = [IO.Compression.ZipFile]::OpenRead($jar)
     try {
@@ -1022,7 +1024,7 @@ function Assert-MigrationContents {
             $_.FullName.StartsWith('BOOT-INF/classes/db/migration/') -and -not $_.FullName.EndsWith('/')
         } | ForEach-Object { $_.FullName } | Sort-Object)
         $expectedEntries = @($names | ForEach-Object { "BOOT-INF/classes/db/migration/$_" })
-        Assert-Condition -Condition (($packagedNames -join ',') -ceq ($expectedEntries -join ',')) -Message 'Expected exactly V1-V7 packaged migrations (no duplicates).'
+        Assert-Condition -Condition (($packagedNames -join ',') -ceq ($expectedEntries -join ',')) -Message 'Expected exactly V1-V8 packaged migrations (no duplicates).'
         foreach ($name in $names) {
             $source = Get-Content -LiteralPath (Join-Path $migrationDir $name) -Raw -Encoding UTF8
             $hash = Get-MigrationHash -Text $source
@@ -1037,7 +1039,7 @@ function Assert-MigrationContents {
         }
     }
     finally { $archive.Dispose() }
-    Write-Host 'V1 + V2 + V3 + V4 + V5 + V6 + V7 FROZEN; PACKAGED MIGRATION CONTENTS OK'
+    Write-Host 'V1 + V2 + V3 + V4 + V5 + V6 + V7 + V8 FROZEN; PACKAGED MIGRATION CONTENTS OK'
 }
 
 function New-HistoricalIncidentSentinels {
@@ -1336,13 +1338,15 @@ SELECT CONCAT(
     (SELECT COUNT(*) FROM flyway_schema_history WHERE version='5'),'|',
     (SELECT COUNT(*) FROM flyway_schema_history WHERE version='6'),'|',
     (SELECT COUNT(*) FROM flyway_schema_history WHERE version='7'),'|',
+    (SELECT COUNT(*) FROM flyway_schema_history WHERE version='8'),'|',
     (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='organizations'),'|',
     (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='organization_memberships'),'|',
     (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='sites'),'|',
-    (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='audits'));
+    (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='audits'),'|',
+    (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='scans'));
 '@)
-    Assert-Condition -Condition ($state.Count -eq 1 -and $state[0] -ceq '0|0|1|0|0|0|0|0|0|0|0') `
-        -Message 'Expected no V3 columns, exactly one failed Flyway V3 row and no V4/V5/V6/V7 history/tables after pre-DDL rejection.'
+    Assert-Condition -Condition ($state.Count -eq 1 -and $state[0] -ceq '0|0|1|0|0|0|0|0|0|0|0|0|0') `
+        -Message 'Expected no V3 columns, exactly one failed Flyway V3 row and no V4/V5/V6/V7/V8 history/tables after pre-DDL rejection.'
     Write-Host 'V3 PRE-DDL REJECTION: COLUMNS=0, SUCCESS=0, FAILED_HISTORY=1, OLD DATA UNCHANGED'
 
     $blocked = Start-ValidationBackend -DbUrl "jdbc:mariadb://127.0.0.1:${dbPort}/sa08_unknown_validation" `
@@ -1377,7 +1381,7 @@ SELECT CONCAT(
     Assert-AuditDataSnapshot -ContainerId $container -Expected $corrected
     Assert-IncidentProvenance -ContainerId $container -ExpectedHistorical @('900001|R01|LEGAL_TEXT|1')
     $retryHistory = @(Invoke-DockerSql -ContainerId $container -Sql "SELECT CONCAT(version,'|',type,'|',success) FROM flyway_schema_history ORDER BY installed_rank;")
-    Assert-Condition -Condition (($retryHistory -join ',') -ceq '1|BASELINE|1,2|SQL|1,3|SQL|1,4|SQL|1,5|SQL|1,6|SQL|1,7|SQL|1') -Message 'Unexpected history after repaired retry.'
+    Assert-Condition -Condition (($retryHistory -join ',') -ceq '1|BASELINE|1,2|SQL|1,3|SQL|1,4|SQL|1,5|SQL|1,6|SQL|1,7|SQL|1,8|SQL|1') -Message 'Unexpected history after repaired retry.'
     Stop-ProcessTree -ProcessId $retry.Process.Id
     Write-Host 'UNKNOWN CATEGORY CORRECTED + FLYWAY REPAIR + CLEAN RETRY OK'
 }
@@ -1518,16 +1522,17 @@ try {
 
     Assert-Condition `
         -Condition (
-            $sourceMigrations.Count -eq 7 -and
+            $sourceMigrations.Count -eq 8 -and
             $sourceMigrations[0] -ceq 'V1__initial_schema.sql' -and
             $sourceMigrations[1] -ceq 'V2__audit_analysis_provenance.sql' -and
             $sourceMigrations[2] -ceq 'V3__incident_rule_provenance.sql' -and
             $sourceMigrations[3] -ceq 'V4__create_organizations.sql' -and
             $sourceMigrations[4] -ceq 'V5__create_organization_memberships.sql' -and
             $sourceMigrations[5] -ceq 'V6__create_sites.sql' -and
-            $sourceMigrations[6] -ceq 'V7__create_audits.sql'
+            $sourceMigrations[6] -ceq 'V7__create_audits.sql' -and
+            $sourceMigrations[7] -ceq 'V8__create_scans.sql'
         ) `
-        -Message 'Migration validation requires exactly frozen V1 + V2 + V3 + V4 + V5 + V6 + V7.'
+        -Message 'Migration validation requires exactly frozen V1 + V2 + V3 + V4 + V5 + V6 + V7 + V8.'
 
     $jarEntries = @(
         & jar tf $jar
@@ -1552,16 +1557,17 @@ try {
 
     Assert-Condition `
         -Condition (
-            $jarMigrations.Count -eq 7 -and
+            $jarMigrations.Count -eq 8 -and
             @($jarMigrations | Sort-Object)[0] -ceq 'BOOT-INF/classes/db/migration/V1__initial_schema.sql' -and
             @($jarMigrations | Sort-Object)[1] -ceq 'BOOT-INF/classes/db/migration/V2__audit_analysis_provenance.sql' -and
             @($jarMigrations | Sort-Object)[2] -ceq 'BOOT-INF/classes/db/migration/V3__incident_rule_provenance.sql' -and
             @($jarMigrations | Sort-Object)[3] -ceq 'BOOT-INF/classes/db/migration/V4__create_organizations.sql' -and
             @($jarMigrations | Sort-Object)[4] -ceq 'BOOT-INF/classes/db/migration/V5__create_organization_memberships.sql' -and
             @($jarMigrations | Sort-Object)[5] -ceq 'BOOT-INF/classes/db/migration/V6__create_sites.sql' -and
-            @($jarMigrations | Sort-Object)[6] -ceq 'BOOT-INF/classes/db/migration/V7__create_audits.sql'
+            @($jarMigrations | Sort-Object)[6] -ceq 'BOOT-INF/classes/db/migration/V7__create_audits.sql' -and
+            @($jarMigrations | Sort-Object)[7] -ceq 'BOOT-INF/classes/db/migration/V8__create_scans.sql'
         ) `
-        -Message 'Backend JAR must contain exactly frozen V1 + V2 + V3 + V4 + V5 + V6 + V7.'
+        -Message 'Backend JAR must contain exactly frozen V1 + V2 + V3 + V4 + V5 + V6 + V7 + V8.'
 
     Assert-MigrationContents
 
@@ -1641,20 +1647,21 @@ try {
 
     Assert-Condition `
         -Condition (
-            $emptyHistory.Count -eq 7 -and
+            $emptyHistory.Count -eq 8 -and
             $emptyHistory[0] -ceq '1|1|initial schema|SQL|1' -and
             $emptyHistory[1] -ceq '2|2|audit analysis provenance|SQL|1' -and
             $emptyHistory[2] -ceq '3|3|incident rule provenance|SQL|1' -and
             $emptyHistory[3] -ceq '4|4|create organizations|SQL|1' -and
             $emptyHistory[4] -ceq '5|5|create organization memberships|SQL|1' -and
             $emptyHistory[5] -ceq '6|6|create sites|SQL|1' -and
-            $emptyHistory[6] -ceq '7|7|create audits|SQL|1'
+            $emptyHistory[6] -ceq '7|7|create audits|SQL|1' -and
+            $emptyHistory[7] -ceq '8|8|create scans|SQL|1'
         ) `
         -Message 'Unexpected Flyway history for empty installation.'
 
     Assert-ProvenanceSchema -ContainerId $emptyContainerId
     Assert-IncidentProvenance -ContainerId $emptyContainerId
-    Write-Host 'FRESH V1 -> V2 -> V3 -> V4 -> V5 -> V6 -> V7 OK'
+    Write-Host 'FRESH V1 -> V2 -> V3 -> V4 -> V5 -> V6 -> V7 -> V8 OK'
     Write-Host 'HIBERNATE VALIDATE OK WITH UNMAPPED LEGACY RESULTADOS TABLE'
 
     $emptyHttp = Get-HttpStatus `
@@ -1784,14 +1791,15 @@ VALUES (900001,'historical-admin@example.invalid','Historical admin','Original a
 
     Assert-Condition `
         -Condition (
-            $baselineHistory.Count -eq 7 -and
+            $baselineHistory.Count -eq 8 -and
             $baselineHistory[0] -ceq '1|1|Legacy SmartAudits schema|BASELINE|1' -and
             $baselineHistory[1] -ceq '2|2|audit analysis provenance|SQL|1' -and
             $baselineHistory[2] -ceq '3|3|incident rule provenance|SQL|1' -and
             $baselineHistory[3] -ceq '4|4|create organizations|SQL|1' -and
             $baselineHistory[4] -ceq '5|5|create organization memberships|SQL|1' -and
             $baselineHistory[5] -ceq '6|6|create sites|SQL|1' -and
-            $baselineHistory[6] -ceq '7|7|create audits|SQL|1'
+            $baselineHistory[6] -ceq '7|7|create audits|SQL|1' -and
+            $baselineHistory[7] -ceq '8|8|create scans|SQL|1'
         ) `
         -Message 'Unexpected Flyway history after historical baseline.'
 
@@ -1803,7 +1811,7 @@ VALUES (900001,'historical-admin@example.invalid','Historical admin','Original a
     Assert-AuditDataSnapshot -ContainerId $legacyContainerId -Expected $legacyAuditSnapshot
     Assert-NewAuditViaApi -ContainerId $legacyContainerId -ApiPort $legacyBaselineApiPort -JwtSecret $legacyJwt
     $upgradedAuditSnapshot = @(Get-AuditDataSnapshot -ContainerId $legacyContainerId -IncludeProvenance)
-    Write-Host 'HISTORICAL BASELINE 1 -> V2 -> V3 -> V4 -> V5 -> V6 -> V7 + DATA PRESERVATION OK'
+    Write-Host 'HISTORICAL BASELINE 1 -> V2 -> V3 -> V4 -> V5 -> V6 -> V7 -> V8 + DATA PRESERVATION OK'
 
     Assert-Sentinel `
         -ContainerId $legacyContainerId
@@ -1844,14 +1852,15 @@ VALUES (900001,'historical-admin@example.invalid','Historical admin','Original a
 
     Assert-Condition `
         -Condition (
-            $secondHistory.Count -eq 7 -and
+            $secondHistory.Count -eq 8 -and
             $secondHistory[0] -ceq '1|1|Legacy SmartAudits schema|BASELINE|1' -and
             $secondHistory[1] -ceq '2|2|audit analysis provenance|SQL|1' -and
             $secondHistory[2] -ceq '3|3|incident rule provenance|SQL|1' -and
             $secondHistory[3] -ceq '4|4|create organizations|SQL|1' -and
             $secondHistory[4] -ceq '5|5|create organization memberships|SQL|1' -and
             $secondHistory[5] -ceq '6|6|create sites|SQL|1' -and
-            $secondHistory[6] -ceq '7|7|create audits|SQL|1'
+            $secondHistory[6] -ceq '7|7|create audits|SQL|1' -and
+            $secondHistory[7] -ceq '8|8|create scans|SQL|1'
         ) `
         -Message 'Flyway history changed unexpectedly on second historical startup.'
 

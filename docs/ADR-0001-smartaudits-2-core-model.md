@@ -410,6 +410,140 @@ primer Scan llega con V8, junto con el mecanismo de concurrencia de reintentos q
 usará `row_version`. No hay backfill desde `auditorias` legacy ni dual-write; la
 tabla legacy y su API (propietario + ADMIN, 403) permanecen intactas.
 
+### Contrato estructural V8 — Fase 3.7
+
+Decisión aprobada el 2026-10-19. V8 crea `scans` con once columnas ordinarias y una
+columna generada, en una única sentencia `CREATE TABLE`:
+
+| Columna | Contrato SQL |
+| --- | --- |
+| `id` | BIGINT NOT NULL AUTO_INCREMENT, PK |
+| `organization_id` | BIGINT NOT NULL, FK directa a `organizations(id)` |
+| `audit_id` | BIGINT NOT NULL, FK compuesta con `organization_id` |
+| `attempt_number` | INT NOT NULL, CHECK `>= 1`, inmutable en el mapping |
+| `status` | VARCHAR(16) NOT NULL; CHECK binario PENDING, RUNNING, SUCCEEDED, FAILED, CANCELLED |
+| `created_by_user_id` | BIGINT NOT NULL, FK a `usuarios(id)` |
+| `created_at` | DATETIME(6) NOT NULL, UTC, inmutable en el mapping |
+| `updated_at` | DATETIME(6) NOT NULL, UTC, instante de la última transición |
+| `started_at` | DATETIME(6) NULL, UTC |
+| `finished_at` | DATETIME(6) NULL, UTC |
+| `row_version` | BIGINT NOT NULL DEFAULT 0, versión optimista JPA |
+| `active_audit_id` | BIGINT GENERATED ALWAYS AS (CASE WHEN BINARY status IN ('PENDING','RUNNING') THEN audit_id ELSE NULL END) STORED |
+
+Hay exactamente cinco índices: PRIMARY, `uq_scans_audit_attempt (audit_id,
+attempt_number)`, `uq_scans_one_active (active_audit_id)`, `ix_scans_org_audit
+(organization_id, audit_id)` e `ix_scans_created_by (created_by_user_id)`. Las tres FK
+(`fk_scans_organization`, `fk_scans_audit (organization_id, audit_id) →
+audits(organization_id, id)` y `fk_scans_created_by`) usan ON DELETE RESTRICT y ON
+UPDATE RESTRICT. Hay cuatro CHECK: `ck_scans_status`, `ck_scans_attempt`,
+`ck_scans_lifecycle` (PENDING sin fechas de inicio ni fin; RUNNING con inicio y sin
+fin; SUCCEEDED y FAILED con ambas; CANCELLED con fin y con inicio opcional, según se
+cancele desde PENDING o desde RUNNING) y `ck_scans_chronology` (inicio y fin no
+anteriores a la creación, fin no anterior al inicio y `updated_at` no anterior a la
+creación ni al último evento). La tabla usa InnoDB, utf8mb4 y utf8mb4_unicode_520_ci.
+
+**Un único Scan activo por Audit.** MariaDB no tiene índices parciales. La columna
+generada STORED vale `audit_id` solo mientras el Scan está PENDING o RUNNING y NULL en
+estados terminales; como UNIQUE admite varios NULL, `uq_scans_one_active` impide en
+SQL un segundo Scan activo de la misma Audit. Esta protección es obligatoria, no se
+debilita y no se sustituye por la lógica del servicio. `uq_scans_audit_attempt` impide
+números de intento duplicados. La columna generada no se mapea en JPA.
+
+**JPA.** `Scan` usa `Long` con IDENTITY, relaciones LAZY obligatorias hacia
+Organization, Audit y Usuario sin cascadas ni colecciones, columnas no actualizables
+para la identidad (`organization`, `audit`, `attempt_number`, `created_by_user_id`,
+`created_at`), `ScanStatus` con STRING y VARCHAR explícito, Instant con TIMESTAMP_UTC,
+DATETIME(6), UtcMicros y `@Version Long`. La organización del Scan se toma siempre de
+su Audit. Las factorías (`first`, `retry`) y las transiciones (`start`, `succeed`,
+`fail`, `cancel`) son de paquete; solo los getters son públicos. Cada transición valida
+estado e instante antes de mutar: un instante anterior a `updated_at` se rechaza, los
+instantes se truncan a microsegundos, un estado terminal no cambia nunca y una segunda
+cancelación se rechaza sin modificar nada.
+
+**Factory Audit + primer Scan.** Esta decisión sustituye la regla de V7 "V7 no permite
+crear Audits". `Audit.startWithFirstScan(Organization, Site, Usuario, Instant)` es de
+paquete y devuelve el record anidado de paquete `AuditStart(audit, firstScan)`; no
+existe un archivo `AuditStart.java` ni API pública de creación. El factory compara la
+organización del Site con la de la Audit por ID, nunca por identidad de objeto, y crea
+la Audit y el Scan 1 PENDING con el mismo instante truncado.
+
+**Servicio interno `AuditScanService`.** Vive en `com.smartaudits.v2.model`, no tiene
+controller, endpoint ni repositorio CRUD público y devuelve solo records inmutables
+(`AuditCreation`, `ScanOutcome`), nunca entidades. Operaciones:
+
+- `createAudit`: autorizar → Site acotado por organización y ACTIVE (consulta escalar)
+  → reloj → Audit + Scan 1 → persistir ambos → flush → commit.
+- `retryScan`: autorizar → cargar la Audit acotada por organización con
+  PESSIMISTIC_WRITE → reautorizar → Site ACTIVE → leer los intentos actuales después
+  del bloqueo con una consulta escalar → rechazar un Scan activo, cualquier SUCCEEDED o
+  un último intento que no sea FAILED ni CANCELLED → siguiente número desde
+  `attempt_number`, rechazando el desbordamiento de INT → persistir → flush → commit. El
+  llamante no aporta historial.
+- `cancelScan`: autorizar → obtener por consulta escalar el `audit_id` del Scan acotado
+  por organización (nunca se carga antes la entidad Scan) → bloquear la Audit →
+  reautorizar → cargar el Scan acotado por Scan, organización y Audit → refrescarlo →
+  cancelar → flush → commit. Se permite con el Site ARCHIVED; crear y reintentar no.
+
+**Frontera transaccional.** Cada operación pública es una transacción completa de un
+TransactionTemplate sobre el JpaTransactionManager existente de la aplicación, con
+READ_COMMITTED, timeout finito de 10 segundos (Spring lo aplica también a cada
+consulta) y sin modo de solo lectura. Si ya hay una transacción real activa, la
+operación se rechaza antes de leer o escribir: nunca se une en silencio a la del
+llamante. Cualquier violación UNIQUE, conflicto optimista, deadlock, timeout de
+bloqueo o error de persistencia termina la operación con rollback; no se continúa, no
+se reutiliza un contexto Hibernate fallido y una creación no se reintenta nunca
+automáticamente. No se cambia configuración legacy.
+
+**Open EntityManager in View.** `spring.jpa.open-in-view` no está configurado, así que
+vale `true`: en una petición web existe un EntityManager ligado al hilo sin
+transacción. El guard no lo confunde con una transacción y no rechaza esas peticiones;
+JpaTransactionManager inicia la transacción sobre ese mismo EntityManager. Para que el
+contexto compartido no altere el resultado, la operación se niega a empezar si el
+contexto tiene cambios sin volcar (los confirmaría), lee todos los valores decisivos
+con consultas escalares o con un refresh posterior al bloqueo y no devuelve entidades.
+Tras un rollback Spring limpia el EntityManager preligado, por lo que el contexto
+fallido no se reutiliza; las pruebas H2 lo demuestran simulando OSIV.
+
+**Política de invocación para futuros endpoints y workers.** Llamar a estos métodos
+directamente, fuera de cualquier transacción y sin `@Transactional` alrededor; pasar
+el id del actor autenticado de confianza; traducir EntityNotFoundException a 404 e
+IllegalStateException a petición rechazada; no reintentar nunca una creación cuyo
+resultado sea incierto. Las transiciones de ejecución (start, succeed, fail) del worker
+de F4 necesitarán métodos propios con esta misma frontera; V8 no los expone.
+
+**Autorización.** Cada operación exige usuario activo y Membership OWNER ACTIVE en la
+organización, comprobados con una consulta escalar, y en retry y cancel se repite la
+comprobación después de obtener el bloqueo. ADMIN legacy no tiene bypass. Recurso
+inexistente, ajeno o sin acceso producen la misma respuesta de no encontrado (futuro
+404). La revocación se aplica a la siguiente llamada; una operación que ya superó la
+reautorización posterior al bloqueo no se revoca retroactivamente.
+
+**Concurrencia.** Retry y cancel se serializan con PESSIMISTIC_WRITE sobre la fila de
+la Audit, cargada en una única SELECT ... FOR UPDATE acotada por organización que
+nunca bloquea filas de otro tenant. Con READ_COMMITTED, quien espera el bloqueo ve lo
+confirmado por el anterior. `@Version` en Scan detecta actualizaciones concurrentes de
+caminos que no toman el bloqueo de la Audit (por ejemplo un start de worker) y el
+perdedor termina sin efecto. Las dos UNIQUE son el respaldo SQL aunque un camino
+omitiera el bloqueo. Las pruebas aceptan cualquier resultado serial válido: dos
+reintentos simultáneos producen exactamente un Scan activo; retry frente a cancel
+termina en "cancel y después retry" o "retry rechazado y cancel"; start frente a cancel
+termina con el Scan cancelado después de iniciado, cancelado sin iniciar o iniciado con
+la cancelación perdedora por versión.
+
+**D3 superada en V8.** En V7 las Audits solo existían como fixtures revertidas. Desde
+V8 una Audit solo se confirma junto con su Scan 1 y solo mediante el servicio. Las
+sondas crean Audits confirmadas exclusivamente con `AuditScanService` y eliminan sus
+fixtures Scan + Audit en una única transacción; el harness siembra los centinelas por
+el servicio y cada snapshot comprueba que no existe ninguna Audit sin Scan.
+
+**Fallos de Scan en F4.** Esta decisión precisa la frase anterior sobre `failure_code`
+y detalle saneado. Como cada migración es un único `CREATE TABLE` y no se altera
+`scans`, F4 creará una tabla `scan_failures` con como máximo un registro final por
+Scan (UNIQUE sobre `scan_id`), FK RESTRICT hacia `scans`, código estable con CHECK
+binario (por ejemplo DNS, TIMEOUT, TLS, SSRF o INTERRUPTED), detalle saneado de
+longitud acotada sin secretos ni trazas, y confirmación en la misma transacción que
+la transición a FAILED. V8 no crea esa tabla ni ninguna lógica de ejecución.
+
 ## 9. Future acquisition/content model
 
 Esta sección congela conceptos, **no tablas para Fase 3**.
@@ -600,6 +734,16 @@ artefactos 2.0 aditivos, por lo que la equivalencia estructural de V6 se extiend
 a V7. La matriz de conservación no contiene Audits: `audits` debe estar vacía antes
 y después del rollback.
 
+**Matrices de rollback de V8, 2026-10-19.** V8 prueba tres matrices: NEW → OLD
+`d5dac955a0d0404b8dacc59012775ec4d6003cdd` (V7 publicada, V1–V7) → NEW, NEW → OLD
+a201582 (V1–V3) → NEW y la tercera matriz histórica NEW → OLD bbd02ff (V1–V4) → NEW.
+Cada una incluye OLD Flyway ON/OFF, Hibernate validate, legacy E2E 4/4, cuatro ciclos
+de backend con cierre validado y conservación de organizations, memberships, sites,
+audits, scans e historial Flyway. Los centinelas Audit + Scan se crean con el servicio
+y cada snapshot exige cero Audits sin Scan. El catálogo cerrado conserva `ca75674` y
+`9bd3ccc`. Ningún OLD mapea Scan: la tabla `scans` es desconocida para ellos y se
+conserva intacta.
+
 Rollback de aplicación conserva el esquema y los datos nuevos. No significa
 DROP automático ni rollback transaccional de toda una secuencia DDL. Cuando
 existan despliegues productivos, el baseline operativo será el último release
@@ -717,13 +861,115 @@ se aplazan a V8 junto con el factory Audit + primer Scan. El harness pasa a
 `-IncludePendingAudit` (cuatro archivos nuevos y siete modificados) y conserva el
 gate de cuatro ciclos de backend validados.
 
+En V8 se prueban por fin las Audits confirmadas, siempre junto con su Scan. `ScanTest`
+cubre sin MariaDB las factorías, `nextAttemptAfter`, la matriz completa de transiciones
+sin cambios ante rechazo, el espejo de los CHECK, el truncado, el rechazo de tiempo
+hacia atrás, la segunda cancelación, la API visible y el mapping sin
+`active_audit_id`. `AuditTest` cubre el factory de paquete y la comparación de tenancy
+por ID. `AuditScanServiceTest` (H2, transacciones confirmadas reales) cubre la
+creación conjunta; el rollback de la Audit cuando falla el INSERT del primer Scan,
+provocado por un trigger de test que comprueba en la misma transacción que la Audit ya
+existía y que se identifica por SQLSTATE 45000, código 1644 y un marcador propio,
+seguido de una creación válida del mismo actor; las reglas de retry y cancel; el Site
+ARCHIVED; la autorización (ADMIN, REVOKED, usuario inactivo, otro tenant); el rechazo
+de transacciones externas; la simulación OSIV; el contrato del TransactionTemplate
+(propagación, READ_COMMITTED, timeout, escritura y gestor de la aplicación); y la
+contención sobre la fila de la Audit. En H2 la espera de bloqueo la demuestra el propio
+motor: `INFORMATION_SCHEMA.SESSIONS` muestra la sesión del servicio con
+`SESSION_STATE='BLOCKED'`, `BLOCKER_ID` igual a la sesión que retiene la Audit y
+`EXECUTING_STATEMENT` igual a su `SELECT … FOR UPDATE`. Así se prueban un cancel en
+espera, dos retries que producen exactamente un intento, un retry que lee la
+cancelación confirmada mientras esperaba y la reautorización tras la espera (Membership
+revocada durante la espera: no encontrado y sin escrituras). El retentor del bloqueo se
+libera con ROLLBACK y cierre físico, nunca con COMMIT (en H2 2.2.224 `abort(Executor)` es
+un método vacío y no se usa); la liberación se comprueba en `INFORMATION_SCHEMA.SESSIONS`,
+con `ABORT_SESSION` como alternativa. Pruebas de fallos simulados (aserción tras
+bloquear, sentencia fallida, ROLLBACK fallido, ROLLBACK y cierre fallidos, cierre fallido
+tras un COMMIT confirmado, worker en espera y worker bloqueado que hay que interrumpir)
+verifican que el error original se conserva, que los fallos de limpieza quedan como
+suppressed y que no queda ninguna sesión ni bloqueo; ninguna sesión H2 sobrevive a un
+test. El cierre de los workers de test se prueba también desde el hilo que cierra:
+interrumpido durante la primera espera o durante la espera posterior a `shutdownNow()`,
+un worker que termina al ser interrumpido, uno que sobrevive al plazo (las filas se dejan
+en su sitio y el test falla), uno que falla mientras se le espera y un error anterior que
+debe seguir siendo el primario.
+`ScanMariaDbProbe`, fuera del descubrimiento normal de Surefire, tiene los modos
+contracts, tenant, service, concurrency, upgrade y seed, y comprueba primero que el
+propio template del servicio aplica READ_COMMITTED en el driver MariaDB (la
+SessionFactory de la sonda usa el mismo `DELAYED_ACQUISITION_AND_HOLD` que Spring Boot
+configura para HibernateJpaDialect): esquema exacto con la columna
+generada STORED, 1062 en las dos UNIQUE, 1452/1451 por constraint, 1048, 4025 por cada
+CHECK, UTC en ambas zonas, versión optimista entre sesiones, aislamiento de tenant,
+creación conjunta observada desde otra conexión, rollback de un segundo INSERT fallido
+mediante un trigger temporal eliminado en `finally` (identificado por SQLSTATE 45000,
+código 1644 y el marcador de la ejecución) seguido de una creación válida del mismo
+actor, upgrade de V7 poblada a V8 sin backfill y centinelas creados por el servicio.
+
+Las conexiones de la sonda se liberan con evidencia y su propiedad es el handle JDBC.
+Toda conexión que abre la sonda, directamente, a través de Hibernate o a través de Flyway,
+se registra con su identificador de sesión antes de usarse, y solo su propietario la
+libera, mediante su propio handle: `close()` tras un COMMIT o ROLLBACK confirmados y, si
+el final es incierto o `close()` falla, `abort()` desde el hilo que la usa (en
+Connector/J 3.2.0 eso envía COM_QUIT; su rama KILL solo se ejecuta si otro hilo está a
+mitad de una sentencia en esa conexión, situación que la sonda no provoca). Ninguna
+liberación hace COMMIT. Un proveedor de conexiones de test sin pool registra cada
+conexión entregada y cada error de liberación, que Spring o Hibernate podrían limitarse
+a registrar en el log, y la sonda falla si hubo alguno o si alguna conexión no se liberó.
+Los identificadores de sesión solo sirven para observar: la liberación cuenta cuando el
+servidor deja de listar la sesión (consulta de solo lectura a PROCESSLIST), y la sonda no
+ejecuta KILL ni actúa nunca sobre una sesión por su identificador. Una sesión del mismo
+usuario que la sonda no abrió nunca se cierra: se informa de su presencia, y hace fallar
+de forma explícita los escenarios dirigidos 1205, porque invalida su precondición de
+aislamiento. Lo que la sonda no puede liberar mediante sus handles se registra como fallo
+y se deja al harness, que elimina el servidor aislado; al terminar cada modo no puede
+seguir abierta ninguna sesión que la sonda haya abierto.
+
+Los workers de los escenarios concurrentes son hilos daemon y su cierre resiste la
+interrupción del hilo que cierra: espera acotada, `shutdownNow()` (las tareas no
+iniciadas se cancelan), segunda espera acotada que continúa pese a nuevas interrupciones
+hasta su plazo, y restauración del estado de interrupción. La interrupción, las tareas
+fallidas y los workers que siguen vivos se informan como fallos, con el primero como
+primario; nunca se usa `Thread.stop()`. Mientras quede un worker vivo no se limpian los
+fixtures ni se aborta ninguna conexión que pueda estar usando: ambos se dejan al harness
+y la ejecución falla con la limpieza no validada.
+
+La concurrencia MariaDB tiene diez escenarios dirigidos con resultados duraderos: dos
+retries; un retry que lee la cancelación confirmada mientras esperaba; un cancel que ve
+un SUCCEEDED confirmado mientras esperaba; retry y cancel a la vez (cualquier orden
+serial válido); un cancel que pierde por versión frente a un start sin confirmar; un
+start obsoleto frente a un cancel confirmado; start seguido de cancel; dos sesiones con
+la misma versión; y la revocación de Membership durante la espera, para retry y para
+cancel. En ellos `information_schema.PROCESSLIST` solo coordina: indica que la sentencia
+de bloqueo llegó al motor y sigue ejecutándose, pero no identifica la fila ni la sesión
+que la retiene (`TIME_MS` mide el comando, no la espera, e `INNODB_LOCK_WAITS` exigiría
+el privilegio PROCESS, que el harness no concede). Que el PESSIMISTIC_WRITE del servicio
+espera sobre la fila de la Audit retenida por otra transacción lo prueban dos escenarios
+dirigidos que no dependen de PROCESSLIST: con la Audit bloqueada por un
+`SELECT … FOR UPDATE` sin confirmar y `innodb_lock_wait_timeout` reducido solo en las
+conexiones de ese escenario, por debajo del timeout de 10 s del servicio, cancel y retry
+deben fallar con ER_LOCK_WAIT_TIMEOUT (1205, SQLSTATE HY000) sobre la sentencia de
+bloqueo de `audits`, sin escribir nada, y la misma llamada del mismo actor debe tener
+éxito una vez liberado el bloqueo. Antes de publicar V8 se completaron las validaciones
+reales: la suite completa compilada con javac limpio, con los mutantes productivos
+detectados; las tres matrices históricas del harness (d5dac95, a201582 y bbd02ff) sobre
+MariaDB 11.2 aislada, NEW -> OLD -> NEW, incluidos los dos escenarios 1205 (código 1205 y
+SQLSTATE HY000 a través de Connector/J sobre la sentencia de bloqueo de `audits`); Phase08
+con V1–V8; y el E2E independiente. Los E2E son regresión legacy, no pruebas de endpoints
+de Scans: V8 sigue siendo un componente interno sin endpoints públicos. La ejecución de
+GitHub CI sobre el commit de V8 queda pendiente al redactar esta nota.
+
+El harness pasa a `-IncludePendingScan` (siete archivos nuevos y diez
+modificados; trece en el overlay), exige V1–V8 con el hash congelado de V8 también en
+Phase08 y en `run.mjs`, y conserva el gate de cuatro ciclos de backend validados.
+
 No se anticipan pruebas funcionales de crawler, extracción, consentimiento,
 informes persistentes o scheduler antes de sus respectivas fases.
 
 ## 17. API / frontend compatibility
 
 Fase 3 no expone endpoints públicos 2.0 y no crea `/v2` por anticipación.
-Servicios/repositorios internos pueden existir para probar invariantes.
+Servicios/repositorios internos pueden existir para probar invariantes; V8 añade el
+servicio interno `AuditScanService`, sin controller ni endpoint.
 La primera capacidad pública llegará cuando una fase funcional la necesite;
 Site no se expondrá antes de fijar su identidad en F4.
 

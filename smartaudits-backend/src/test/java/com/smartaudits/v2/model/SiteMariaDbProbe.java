@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class SiteMariaDbProbe {
     private static final String[] LEGACY = {"usuarios", "roles", "usuarios_roles", "auditorias", "incidencias",
             "resultados", "historial_auditorias", "historial_acciones_admin"};
-    private static final String VERSIONS = "1,2,3,4,5,6,7,9000";
+    private static final String VERSIONS = "1,2,3,4,5,6,7,8,9000";
     private static final String CHILD = "f3_site_child_probe";
     private static final String CHILD_FK = "fk_f3_site_child_probe_site";
     private static final Instant CREATED = Instant.parse("2024-02-29T23:58:57.987654321Z");
@@ -490,6 +490,7 @@ class SiteMariaDbProbe {
         assertTrue(newHistory.containsAll(oldHistory), "Historical Flyway rows changed");
         assertEquals("1", countTable(c, "sites"));
         assertEquals("0", countTable(c, "audits"), "Target 6 must not apply V7");
+        assertEquals("0", countTable(c, "scans"), "Target 6 must not apply V8");
         assertEquals("0", scalar(c, "SELECT COUNT(*) FROM sites")); // No backfill from organizations or memberships.
         assertEquals(legacy, snapshot(c, LEGACY));
         assertEquals(previous, snapshot(c, "organizations", "organization_memberships"));
