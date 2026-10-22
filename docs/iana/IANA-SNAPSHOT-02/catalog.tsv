@@ -1,0 +1,371 @@
+#format	smartaudits-destination-catalog-candidate/1
+#file	catalog.tsv
+#policy	ADR-0002 sha256:E77382356F026F946E855B3FDDDA10006ED06A7DA52CA2D57DCB99AB9146C717
+#source	IANA-IPV4-SPACE	updated=2025-10-10	sha256=013BF87DF7B24401AB6143BCAD83BD61EEAF0F9C976D2CF1AEDCDD5795865222	https://www.iana.org/assignments/ipv4-address-space/ipv4-address-space.xml
+#source	IANA-IPV4-SPECIAL	updated=2025-10-09	sha256=37F334466C842387A8AEE8D1AE7A6D5B2208EF27EB8964072538B73EE2F5B21D	https://www.iana.org/assignments/iana-ipv4-special-registry/iana-ipv4-special-registry.xml
+#source	IANA-IPV6-SPECIAL	updated=2025-10-09	sha256=660ACF0201B462B8D820605BA1CB20C4ED216ACD883EE4A55A17453D73D4C3AA	https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xml
+#source	IANA-IPV6-UNICAST	updated=2025-10-10	sha256=22F9A545E020EA6B9ADEA9EA0276F3157E32C838682459A45BFE7760DE0AEFC3	https://www.iana.org/assignments/ipv6-unicast-address-assignments/ipv6-unicast-address-assignments.xml
+#source	IANA-SUDN	updated=2026-05-22	sha256=2659DEC6FDB0377BA1F12D7418EB34E38B312E5F739574AEB868E00E1BCDF1E4	https://www.iana.org/assignments/special-use-domain-names/special-use-domain-names.xml
+#columns	kind	layer	family	network	prefix_len	network_hex	origin	source_id	record_ref	label	attrs
+ADDR	NEGATIVE	4	0.0.0.0	8	00000000	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#1	"This network"	destination=False;forwardable=False;global=False;raw=0.0.0.0/8;reserved=True;source=True;spec=rfc791
+ADDR	NEGATIVE	4	0.0.0.0	32	00000000	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#2	"This host on this network"	destination=False;forwardable=False;global=False;raw=0.0.0.0/32;reserved=True;source=True;spec=rfc1122
+ADDR	POSITIVE	4	1.0.0.0	8	01000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#2	APNIC	raw=001/8;status=ALLOCATED
+ADDR	POSITIVE	4	2.0.0.0	8	02000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#3	RIPE NCC	raw=002/8;status=ALLOCATED
+ADDR	POSITIVE	4	3.0.0.0	8	03000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#4	Administered by ARIN	raw=003/8;status=LEGACY
+ADDR	POSITIVE	4	4.0.0.0	8	04000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#5	Administered by ARIN	raw=004/8;status=LEGACY
+ADDR	POSITIVE	4	5.0.0.0	8	05000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#6	RIPE NCC	raw=005/8;status=ALLOCATED
+ADDR	POSITIVE	4	6.0.0.0	8	06000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#7	Army Information Systems Center	raw=006/8;status=LEGACY
+ADDR	POSITIVE	4	7.0.0.0	8	07000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#8	Administered by ARIN	raw=007/8;status=LEGACY
+ADDR	POSITIVE	4	8.0.0.0	8	08000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#9	Administered by ARIN	raw=008/8;status=LEGACY
+ADDR	POSITIVE	4	9.0.0.0	8	09000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#10	Administered by ARIN	raw=009/8;status=LEGACY
+ADDR	NEGATIVE	4	10.0.0.0	8	0a000000	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#3	Private-Use	destination=True;forwardable=True;global=False;raw=10.0.0.0/8;reserved=False;source=True;spec=rfc1918
+ADDR	POSITIVE	4	11.0.0.0	8	0b000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#12	DoD Intel Information Systems	raw=011/8;status=LEGACY
+ADDR	POSITIVE	4	12.0.0.0	8	0c000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#13	AT&T Bell Laboratories	raw=012/8;status=LEGACY
+ADDR	POSITIVE	4	13.0.0.0	8	0d000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#14	Administered by ARIN	raw=013/8;status=LEGACY
+ADDR	POSITIVE	4	14.0.0.0	8	0e000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#15	APNIC	raw=014/8;status=ALLOCATED
+ADDR	POSITIVE	4	15.0.0.0	8	0f000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#16	Administered by ARIN	raw=015/8;status=LEGACY
+ADDR	POSITIVE	4	16.0.0.0	8	10000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#17	Administered by ARIN	raw=016/8;status=LEGACY
+ADDR	POSITIVE	4	17.0.0.0	8	11000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#18	Apple Computer Inc.	raw=017/8;status=LEGACY
+ADDR	POSITIVE	4	18.0.0.0	8	12000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#19	Administered by ARIN	raw=018/8;status=LEGACY
+ADDR	POSITIVE	4	19.0.0.0	8	13000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#20	Ford Motor Company	raw=019/8;status=LEGACY
+ADDR	POSITIVE	4	20.0.0.0	8	14000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#21	Administered by ARIN	raw=020/8;status=LEGACY
+ADDR	POSITIVE	4	21.0.0.0	8	15000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#22	DDN-RVN	raw=021/8;status=LEGACY
+ADDR	POSITIVE	4	22.0.0.0	8	16000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#23	Defense Information Systems Agency	raw=022/8;status=LEGACY
+ADDR	POSITIVE	4	23.0.0.0	8	17000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#24	ARIN	raw=023/8;status=ALLOCATED
+ADDR	POSITIVE	4	24.0.0.0	8	18000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#25	ARIN	raw=024/8;status=ALLOCATED
+ADDR	POSITIVE	4	25.0.0.0	8	19000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#26	Administered by RIPE NCC	raw=025/8;status=LEGACY
+ADDR	POSITIVE	4	26.0.0.0	8	1a000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#27	Defense Information Systems Agency	raw=026/8;status=LEGACY
+ADDR	POSITIVE	4	27.0.0.0	8	1b000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#28	APNIC	raw=027/8;status=ALLOCATED
+ADDR	POSITIVE	4	28.0.0.0	8	1c000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#29	DSI-North	raw=028/8;status=LEGACY
+ADDR	POSITIVE	4	29.0.0.0	8	1d000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#30	Defense Information Systems Agency	raw=029/8;status=LEGACY
+ADDR	POSITIVE	4	30.0.0.0	8	1e000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#31	Defense Information Systems Agency	raw=030/8;status=LEGACY
+ADDR	POSITIVE	4	31.0.0.0	8	1f000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#32	RIPE NCC	raw=031/8;status=ALLOCATED
+ADDR	POSITIVE	4	32.0.0.0	8	20000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#33	Administered by ARIN	raw=032/8;status=LEGACY
+ADDR	POSITIVE	4	33.0.0.0	8	21000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#34	DLA Systems Automation Center	raw=033/8;status=LEGACY
+ADDR	POSITIVE	4	34.0.0.0	8	22000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#35	Administered by ARIN	raw=034/8;status=LEGACY
+ADDR	POSITIVE	4	35.0.0.0	8	23000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#36	Administered by ARIN	raw=035/8;status=LEGACY
+ADDR	POSITIVE	4	36.0.0.0	8	24000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#37	APNIC	raw=036/8;status=ALLOCATED
+ADDR	POSITIVE	4	37.0.0.0	8	25000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#38	RIPE NCC	raw=037/8;status=ALLOCATED
+ADDR	POSITIVE	4	38.0.0.0	8	26000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#39	PSINet, Inc.	raw=038/8;status=LEGACY
+ADDR	POSITIVE	4	39.0.0.0	8	27000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#40	APNIC	raw=039/8;status=ALLOCATED
+ADDR	POSITIVE	4	40.0.0.0	8	28000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#41	Administered by ARIN	raw=040/8;status=LEGACY
+ADDR	POSITIVE	4	41.0.0.0	8	29000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#42	AFRINIC	raw=041/8;status=ALLOCATED
+ADDR	POSITIVE	4	42.0.0.0	8	2a000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#43	APNIC	raw=042/8;status=ALLOCATED
+ADDR	POSITIVE	4	43.0.0.0	8	2b000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#44	Administered by APNIC	raw=043/8;status=LEGACY
+ADDR	POSITIVE	4	44.0.0.0	8	2c000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#45	Administered by ARIN	raw=044/8;status=LEGACY
+ADDR	POSITIVE	4	45.0.0.0	8	2d000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#46	Administered by ARIN	raw=045/8;status=LEGACY
+ADDR	POSITIVE	4	46.0.0.0	8	2e000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#47	RIPE NCC	raw=046/8;status=ALLOCATED
+ADDR	POSITIVE	4	47.0.0.0	8	2f000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#48	Administered by ARIN	raw=047/8;status=LEGACY
+ADDR	POSITIVE	4	48.0.0.0	8	30000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#49	Administered by ARIN	raw=048/8;status=LEGACY
+ADDR	POSITIVE	4	49.0.0.0	8	31000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#50	APNIC	raw=049/8;status=ALLOCATED
+ADDR	POSITIVE	4	50.0.0.0	8	32000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#51	ARIN	raw=050/8;status=ALLOCATED
+ADDR	POSITIVE	4	51.0.0.0	8	33000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#52	Administered by RIPE NCC	raw=051/8;status=LEGACY
+ADDR	POSITIVE	4	52.0.0.0	8	34000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#53	Administered by ARIN	raw=052/8;status=LEGACY
+ADDR	POSITIVE	4	53.0.0.0	8	35000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#54	Daimler AG	raw=053/8;status=LEGACY
+ADDR	POSITIVE	4	54.0.0.0	8	36000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#55	Administered by ARIN	raw=054/8;status=LEGACY
+ADDR	POSITIVE	4	55.0.0.0	8	37000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#56	DoD Network Information Center	raw=055/8;status=LEGACY
+ADDR	POSITIVE	4	56.0.0.0	8	38000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#57	Administered by ARIN	raw=056/8;status=LEGACY
+ADDR	POSITIVE	4	57.0.0.0	8	39000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#58	Administered by RIPE NCC	raw=057/8;status=LEGACY
+ADDR	POSITIVE	4	58.0.0.0	8	3a000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#59	APNIC	raw=058/8;status=ALLOCATED
+ADDR	POSITIVE	4	59.0.0.0	8	3b000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#60	APNIC	raw=059/8;status=ALLOCATED
+ADDR	POSITIVE	4	60.0.0.0	8	3c000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#61	APNIC	raw=060/8;status=ALLOCATED
+ADDR	POSITIVE	4	61.0.0.0	8	3d000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#62	APNIC	raw=061/8;status=ALLOCATED
+ADDR	POSITIVE	4	62.0.0.0	8	3e000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#63	RIPE NCC	raw=062/8;status=ALLOCATED
+ADDR	POSITIVE	4	63.0.0.0	8	3f000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#64	ARIN	raw=063/8;status=ALLOCATED
+ADDR	POSITIVE	4	64.0.0.0	8	40000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#65	ARIN	raw=064/8;status=ALLOCATED
+ADDR	POSITIVE	4	65.0.0.0	8	41000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#66	ARIN	raw=065/8;status=ALLOCATED
+ADDR	POSITIVE	4	66.0.0.0	8	42000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#67	ARIN	raw=066/8;status=ALLOCATED
+ADDR	POSITIVE	4	67.0.0.0	8	43000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#68	ARIN	raw=067/8;status=ALLOCATED
+ADDR	POSITIVE	4	68.0.0.0	8	44000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#69	ARIN	raw=068/8;status=ALLOCATED
+ADDR	POSITIVE	4	69.0.0.0	8	45000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#70	ARIN	raw=069/8;status=ALLOCATED
+ADDR	POSITIVE	4	70.0.0.0	8	46000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#71	ARIN	raw=070/8;status=ALLOCATED
+ADDR	POSITIVE	4	71.0.0.0	8	47000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#72	ARIN	raw=071/8;status=ALLOCATED
+ADDR	POSITIVE	4	72.0.0.0	8	48000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#73	ARIN	raw=072/8;status=ALLOCATED
+ADDR	POSITIVE	4	73.0.0.0	8	49000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#74	ARIN	raw=073/8;status=ALLOCATED
+ADDR	POSITIVE	4	74.0.0.0	8	4a000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#75	ARIN	raw=074/8;status=ALLOCATED
+ADDR	POSITIVE	4	75.0.0.0	8	4b000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#76	ARIN	raw=075/8;status=ALLOCATED
+ADDR	POSITIVE	4	76.0.0.0	8	4c000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#77	ARIN	raw=076/8;status=ALLOCATED
+ADDR	POSITIVE	4	77.0.0.0	8	4d000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#78	RIPE NCC	raw=077/8;status=ALLOCATED
+ADDR	POSITIVE	4	78.0.0.0	8	4e000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#79	RIPE NCC	raw=078/8;status=ALLOCATED
+ADDR	POSITIVE	4	79.0.0.0	8	4f000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#80	RIPE NCC	raw=079/8;status=ALLOCATED
+ADDR	POSITIVE	4	80.0.0.0	8	50000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#81	RIPE NCC	raw=080/8;status=ALLOCATED
+ADDR	POSITIVE	4	81.0.0.0	8	51000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#82	RIPE NCC	raw=081/8;status=ALLOCATED
+ADDR	POSITIVE	4	82.0.0.0	8	52000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#83	RIPE NCC	raw=082/8;status=ALLOCATED
+ADDR	POSITIVE	4	83.0.0.0	8	53000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#84	RIPE NCC	raw=083/8;status=ALLOCATED
+ADDR	POSITIVE	4	84.0.0.0	8	54000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#85	RIPE NCC	raw=084/8;status=ALLOCATED
+ADDR	POSITIVE	4	85.0.0.0	8	55000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#86	RIPE NCC	raw=085/8;status=ALLOCATED
+ADDR	POSITIVE	4	86.0.0.0	8	56000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#87	RIPE NCC	raw=086/8;status=ALLOCATED
+ADDR	POSITIVE	4	87.0.0.0	8	57000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#88	RIPE NCC	raw=087/8;status=ALLOCATED
+ADDR	POSITIVE	4	88.0.0.0	8	58000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#89	RIPE NCC	raw=088/8;status=ALLOCATED
+ADDR	POSITIVE	4	89.0.0.0	8	59000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#90	RIPE NCC	raw=089/8;status=ALLOCATED
+ADDR	POSITIVE	4	90.0.0.0	8	5a000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#91	RIPE NCC	raw=090/8;status=ALLOCATED
+ADDR	POSITIVE	4	91.0.0.0	8	5b000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#92	RIPE NCC	raw=091/8;status=ALLOCATED
+ADDR	POSITIVE	4	92.0.0.0	8	5c000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#93	RIPE NCC	raw=092/8;status=ALLOCATED
+ADDR	POSITIVE	4	93.0.0.0	8	5d000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#94	RIPE NCC	raw=093/8;status=ALLOCATED
+ADDR	POSITIVE	4	94.0.0.0	8	5e000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#95	RIPE NCC	raw=094/8;status=ALLOCATED
+ADDR	POSITIVE	4	95.0.0.0	8	5f000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#96	RIPE NCC	raw=095/8;status=ALLOCATED
+ADDR	POSITIVE	4	96.0.0.0	8	60000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#97	ARIN	raw=096/8;status=ALLOCATED
+ADDR	POSITIVE	4	97.0.0.0	8	61000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#98	ARIN	raw=097/8;status=ALLOCATED
+ADDR	POSITIVE	4	98.0.0.0	8	62000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#99	ARIN	raw=098/8;status=ALLOCATED
+ADDR	POSITIVE	4	99.0.0.0	8	63000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#100	ARIN	raw=099/8;status=ALLOCATED
+ADDR	POSITIVE	4	100.0.0.0	8	64000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#101	ARIN	raw=100/8;status=ALLOCATED
+ADDR	NEGATIVE	4	100.64.0.0	10	64400000	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#4	Shared Address Space	destination=True;forwardable=True;global=False;raw=100.64.0.0/10;reserved=False;source=True;spec=rfc6598
+ADDR	POSITIVE	4	101.0.0.0	8	65000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#102	APNIC	raw=101/8;status=ALLOCATED
+ADDR	POSITIVE	4	102.0.0.0	8	66000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#103	AFRINIC	raw=102/8;status=ALLOCATED
+ADDR	POSITIVE	4	103.0.0.0	8	67000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#104	APNIC	raw=103/8;status=ALLOCATED
+ADDR	POSITIVE	4	104.0.0.0	8	68000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#105	ARIN	raw=104/8;status=ALLOCATED
+ADDR	POSITIVE	4	105.0.0.0	8	69000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#106	AFRINIC	raw=105/8;status=ALLOCATED
+ADDR	POSITIVE	4	106.0.0.0	8	6a000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#107	APNIC	raw=106/8;status=ALLOCATED
+ADDR	POSITIVE	4	107.0.0.0	8	6b000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#108	ARIN	raw=107/8;status=ALLOCATED
+ADDR	POSITIVE	4	108.0.0.0	8	6c000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#109	ARIN	raw=108/8;status=ALLOCATED
+ADDR	POSITIVE	4	109.0.0.0	8	6d000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#110	RIPE NCC	raw=109/8;status=ALLOCATED
+ADDR	POSITIVE	4	110.0.0.0	8	6e000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#111	APNIC	raw=110/8;status=ALLOCATED
+ADDR	POSITIVE	4	111.0.0.0	8	6f000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#112	APNIC	raw=111/8;status=ALLOCATED
+ADDR	POSITIVE	4	112.0.0.0	8	70000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#113	APNIC	raw=112/8;status=ALLOCATED
+ADDR	POSITIVE	4	113.0.0.0	8	71000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#114	APNIC	raw=113/8;status=ALLOCATED
+ADDR	POSITIVE	4	114.0.0.0	8	72000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#115	APNIC	raw=114/8;status=ALLOCATED
+ADDR	POSITIVE	4	115.0.0.0	8	73000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#116	APNIC	raw=115/8;status=ALLOCATED
+ADDR	POSITIVE	4	116.0.0.0	8	74000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#117	APNIC	raw=116/8;status=ALLOCATED
+ADDR	POSITIVE	4	117.0.0.0	8	75000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#118	APNIC	raw=117/8;status=ALLOCATED
+ADDR	POSITIVE	4	118.0.0.0	8	76000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#119	APNIC	raw=118/8;status=ALLOCATED
+ADDR	POSITIVE	4	119.0.0.0	8	77000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#120	APNIC	raw=119/8;status=ALLOCATED
+ADDR	POSITIVE	4	120.0.0.0	8	78000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#121	APNIC	raw=120/8;status=ALLOCATED
+ADDR	POSITIVE	4	121.0.0.0	8	79000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#122	APNIC	raw=121/8;status=ALLOCATED
+ADDR	POSITIVE	4	122.0.0.0	8	7a000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#123	APNIC	raw=122/8;status=ALLOCATED
+ADDR	POSITIVE	4	123.0.0.0	8	7b000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#124	APNIC	raw=123/8;status=ALLOCATED
+ADDR	POSITIVE	4	124.0.0.0	8	7c000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#125	APNIC	raw=124/8;status=ALLOCATED
+ADDR	POSITIVE	4	125.0.0.0	8	7d000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#126	APNIC	raw=125/8;status=ALLOCATED
+ADDR	POSITIVE	4	126.0.0.0	8	7e000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#127	APNIC	raw=126/8;status=ALLOCATED
+ADDR	NEGATIVE	4	127.0.0.0	8	7f000000	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#5	Loopback	destination=False;forwardable=False;global=False;raw=127.0.0.0/8;reserved=True;source=False;spec=rfc1122,1,1,1,1
+ADDR	POSITIVE	4	128.0.0.0	8	80000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#129	Administered by ARIN	raw=128/8;status=LEGACY
+ADDR	POSITIVE	4	129.0.0.0	8	81000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#130	Administered by ARIN	raw=129/8;status=LEGACY
+ADDR	POSITIVE	4	130.0.0.0	8	82000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#131	Administered by ARIN	raw=130/8;status=LEGACY
+ADDR	POSITIVE	4	131.0.0.0	8	83000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#132	Administered by ARIN	raw=131/8;status=LEGACY
+ADDR	POSITIVE	4	132.0.0.0	8	84000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#133	Administered by ARIN	raw=132/8;status=LEGACY
+ADDR	POSITIVE	4	133.0.0.0	8	85000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#134	Administered by APNIC	raw=133/8;status=LEGACY
+ADDR	POSITIVE	4	134.0.0.0	8	86000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#135	Administered by ARIN	raw=134/8;status=LEGACY
+ADDR	POSITIVE	4	135.0.0.0	8	87000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#136	Administered by ARIN	raw=135/8;status=LEGACY
+ADDR	POSITIVE	4	136.0.0.0	8	88000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#137	Administered by ARIN	raw=136/8;status=LEGACY
+ADDR	POSITIVE	4	137.0.0.0	8	89000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#138	Administered by ARIN	raw=137/8;status=LEGACY
+ADDR	POSITIVE	4	138.0.0.0	8	8a000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#139	Administered by ARIN	raw=138/8;status=LEGACY
+ADDR	POSITIVE	4	139.0.0.0	8	8b000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#140	Administered by ARIN	raw=139/8;status=LEGACY
+ADDR	POSITIVE	4	140.0.0.0	8	8c000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#141	Administered by ARIN	raw=140/8;status=LEGACY
+ADDR	POSITIVE	4	141.0.0.0	8	8d000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#142	Administered by RIPE NCC	raw=141/8;status=LEGACY
+ADDR	POSITIVE	4	142.0.0.0	8	8e000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#143	Administered by ARIN	raw=142/8;status=LEGACY
+ADDR	POSITIVE	4	143.0.0.0	8	8f000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#144	Administered by ARIN	raw=143/8;status=LEGACY
+ADDR	POSITIVE	4	144.0.0.0	8	90000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#145	Administered by ARIN	raw=144/8;status=LEGACY
+ADDR	POSITIVE	4	145.0.0.0	8	91000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#146	Administered by RIPE NCC	raw=145/8;status=LEGACY
+ADDR	POSITIVE	4	146.0.0.0	8	92000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#147	Administered by ARIN	raw=146/8;status=LEGACY
+ADDR	POSITIVE	4	147.0.0.0	8	93000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#148	Administered by ARIN	raw=147/8;status=LEGACY
+ADDR	POSITIVE	4	148.0.0.0	8	94000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#149	Administered by ARIN	raw=148/8;status=LEGACY
+ADDR	POSITIVE	4	149.0.0.0	8	95000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#150	Administered by ARIN	raw=149/8;status=LEGACY
+ADDR	POSITIVE	4	150.0.0.0	8	96000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#151	Administered by APNIC	raw=150/8;status=LEGACY
+ADDR	POSITIVE	4	151.0.0.0	8	97000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#152	Administered by RIPE NCC	raw=151/8;status=LEGACY
+ADDR	POSITIVE	4	152.0.0.0	8	98000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#153	Administered by ARIN	raw=152/8;status=LEGACY
+ADDR	POSITIVE	4	153.0.0.0	8	99000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#154	Administered by APNIC	raw=153/8;status=LEGACY
+ADDR	POSITIVE	4	154.0.0.0	8	9a000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#155	Administered by AFRINIC	raw=154/8;status=LEGACY
+ADDR	POSITIVE	4	155.0.0.0	8	9b000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#156	Administered by ARIN	raw=155/8;status=LEGACY
+ADDR	POSITIVE	4	156.0.0.0	8	9c000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#157	Administered by ARIN	raw=156/8;status=LEGACY
+ADDR	POSITIVE	4	157.0.0.0	8	9d000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#158	Administered by ARIN	raw=157/8;status=LEGACY
+ADDR	POSITIVE	4	158.0.0.0	8	9e000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#159	Administered by ARIN	raw=158/8;status=LEGACY
+ADDR	POSITIVE	4	159.0.0.0	8	9f000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#160	Administered by ARIN	raw=159/8;status=LEGACY
+ADDR	POSITIVE	4	160.0.0.0	8	a0000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#161	Administered by ARIN	raw=160/8;status=LEGACY
+ADDR	POSITIVE	4	161.0.0.0	8	a1000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#162	Administered by ARIN	raw=161/8;status=LEGACY
+ADDR	POSITIVE	4	162.0.0.0	8	a2000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#163	Administered by ARIN	raw=162/8;status=LEGACY
+ADDR	POSITIVE	4	163.0.0.0	8	a3000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#164	Administered by APNIC	raw=163/8;status=LEGACY
+ADDR	POSITIVE	4	164.0.0.0	8	a4000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#165	Administered by ARIN	raw=164/8;status=LEGACY
+ADDR	POSITIVE	4	165.0.0.0	8	a5000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#166	Administered by ARIN	raw=165/8;status=LEGACY
+ADDR	POSITIVE	4	166.0.0.0	8	a6000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#167	Administered by ARIN	raw=166/8;status=LEGACY
+ADDR	POSITIVE	4	167.0.0.0	8	a7000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#168	Administered by ARIN	raw=167/8;status=LEGACY
+ADDR	POSITIVE	4	168.0.0.0	8	a8000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#169	Administered by ARIN	raw=168/8;status=LEGACY
+ADDR	NEGATIVE	4	168.63.129.16	32	a83f8110	PRODUCT	ADR-0002	product-addr#2 ADR-0002 s11 minimo IPv4	Azure platform IP	note=Public address forbidden for the crawler;policy=ADR-0002 sha256:E77382356F026F946E855B3FDDDA10006ED06A7DA52CA2D57DCB99AB9146C717;review=pending-astra
+ADDR	POSITIVE	4	169.0.0.0	8	a9000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#170	Administered by ARIN	raw=169/8;status=LEGACY
+ADDR	NEGATIVE	4	169.254.0.0	16	a9fe0000	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#6	Link Local	destination=True;forwardable=False;global=False;raw=169.254.0.0/16;reserved=True;source=True;spec=rfc3927
+ADDR	POSITIVE	4	170.0.0.0	8	aa000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#171	Administered by ARIN	raw=170/8;status=LEGACY
+ADDR	POSITIVE	4	171.0.0.0	8	ab000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#172	Administered by APNIC	raw=171/8;status=LEGACY
+ADDR	POSITIVE	4	172.0.0.0	8	ac000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#173	Administered by ARIN	raw=172/8;status=LEGACY
+ADDR	NEGATIVE	4	172.16.0.0	12	ac100000	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#7	Private-Use	destination=True;forwardable=True;global=False;raw=172.16.0.0/12;reserved=False;source=True;spec=rfc1918
+ADDR	POSITIVE	4	173.0.0.0	8	ad000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#174	ARIN	raw=173/8;status=ALLOCATED
+ADDR	POSITIVE	4	174.0.0.0	8	ae000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#175	ARIN	raw=174/8;status=ALLOCATED
+ADDR	POSITIVE	4	175.0.0.0	8	af000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#176	APNIC	raw=175/8;status=ALLOCATED
+ADDR	POSITIVE	4	176.0.0.0	8	b0000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#177	RIPE NCC	raw=176/8;status=ALLOCATED
+ADDR	POSITIVE	4	177.0.0.0	8	b1000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#178	LACNIC	raw=177/8;status=ALLOCATED
+ADDR	POSITIVE	4	178.0.0.0	8	b2000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#179	RIPE NCC	raw=178/8;status=ALLOCATED
+ADDR	POSITIVE	4	179.0.0.0	8	b3000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#180	LACNIC	raw=179/8;status=ALLOCATED
+ADDR	POSITIVE	4	180.0.0.0	8	b4000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#181	APNIC	raw=180/8;status=ALLOCATED
+ADDR	POSITIVE	4	181.0.0.0	8	b5000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#182	LACNIC	raw=181/8;status=ALLOCATED
+ADDR	POSITIVE	4	182.0.0.0	8	b6000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#183	APNIC	raw=182/8;status=ALLOCATED
+ADDR	POSITIVE	4	183.0.0.0	8	b7000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#184	APNIC	raw=183/8;status=ALLOCATED
+ADDR	POSITIVE	4	184.0.0.0	8	b8000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#185	ARIN	raw=184/8;status=ALLOCATED
+ADDR	POSITIVE	4	185.0.0.0	8	b9000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#186	RIPE NCC	raw=185/8;status=ALLOCATED
+ADDR	POSITIVE	4	186.0.0.0	8	ba000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#187	LACNIC	raw=186/8;status=ALLOCATED
+ADDR	POSITIVE	4	187.0.0.0	8	bb000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#188	LACNIC	raw=187/8;status=ALLOCATED
+ADDR	POSITIVE	4	188.0.0.0	8	bc000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#189	Administered by RIPE NCC	raw=188/8;status=LEGACY
+ADDR	POSITIVE	4	189.0.0.0	8	bd000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#190	LACNIC	raw=189/8;status=ALLOCATED
+ADDR	POSITIVE	4	190.0.0.0	8	be000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#191	LACNIC	raw=190/8;status=ALLOCATED
+ADDR	POSITIVE	4	191.0.0.0	8	bf000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#192	Administered by LACNIC	raw=191/8;status=LEGACY
+ADDR	POSITIVE	4	192.0.0.0	8	c0000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#193	Administered by ARIN	raw=192/8;status=LEGACY
+ADDR	NEGATIVE	4	192.0.0.0	24	c0000000	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#8	IETF Protocol Assignments	destination=False;forwardable=False;global=False;raw=192.0.0.0/24;reserved=False;source=False;spec=2,rfc6890
+ADDR	NEGATIVE	4	192.0.0.0	29	c0000000	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#9	IPv4 Service Continuity Prefix	destination=True;forwardable=True;global=False;raw=192.0.0.0/29;reserved=False;source=True;spec=rfc7335
+ADDR	NEGATIVE	4	192.0.0.8	32	c0000008	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#10	IPv4 dummy address	destination=False;forwardable=False;global=False;raw=192.0.0.8/32;reserved=False;source=True;spec=rfc7600
+ADDR	NEGATIVE	4	192.0.0.9	32	c0000009	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#11	Port Control Protocol Anycast	destination=True;forwardable=True;global=True;raw=192.0.0.9/32;reserved=False;source=True;spec=rfc7723
+ADDR	NEGATIVE	4	192.0.0.10	32	c000000a	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#12	Traversal Using Relays around NAT Anycast	destination=True;forwardable=True;global=True;raw=192.0.0.10/32;reserved=False;source=True;spec=rfc8155
+ADDR	NEGATIVE	4	192.0.0.170	32	c00000aa	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#13	NAT64/DNS64 Discovery	destination=False;forwardable=False;global=False;raw=192.0.0.170/32, 192.0.0.171/32;reserved=True;source=False;spec=rfc8880,rfc7050
+ADDR	NEGATIVE	4	192.0.0.171	32	c00000ab	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#13	NAT64/DNS64 Discovery	destination=False;forwardable=False;global=False;raw=192.0.0.170/32, 192.0.0.171/32;reserved=True;source=False;spec=rfc8880,rfc7050
+ADDR	NEGATIVE	4	192.0.2.0	24	c0000200	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#14	Documentation (TEST-NET-1)	destination=False;forwardable=False;global=False;raw=192.0.2.0/24;reserved=False;source=False;spec=rfc5737
+ADDR	NEGATIVE	4	192.31.196.0	24	c01fc400	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#15	AS112-v4	destination=True;forwardable=True;global=True;raw=192.31.196.0/24;reserved=False;source=True;spec=rfc7535
+ADDR	NEGATIVE	4	192.52.193.0	24	c034c100	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#16	AMT	destination=True;forwardable=True;global=True;raw=192.52.193.0/24;reserved=False;source=True;spec=rfc7450
+ADDR	NEGATIVE	4	192.88.99.0	24	c0586300	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#17	Deprecated (6to4 Relay Anycast)	destination=;forwardable=;global=;raw=192.88.99.0/24;reserved=;source=;spec=rfc7526;termination=2015-03
+ADDR	NEGATIVE	4	192.88.99.2	32	c0586302	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#18	6a44-relay anycast address	destination=True;forwardable=True;global=False;raw=192.88.99.2/32;reserved=False;source=True;spec=rfc6751
+ADDR	NEGATIVE	4	192.168.0.0	16	c0a80000	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#19	Private-Use	destination=True;forwardable=True;global=False;raw=192.168.0.0/16;reserved=False;source=True;spec=rfc1918
+ADDR	NEGATIVE	4	192.175.48.0	24	c0af3000	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#20	Direct Delegation AS112 Service	destination=True;forwardable=True;global=True;raw=192.175.48.0/24;reserved=False;source=True;spec=rfc7534
+ADDR	POSITIVE	4	193.0.0.0	8	c1000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#194	RIPE NCC	raw=193/8;status=ALLOCATED
+ADDR	POSITIVE	4	194.0.0.0	8	c2000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#195	RIPE NCC	raw=194/8;status=ALLOCATED
+ADDR	POSITIVE	4	195.0.0.0	8	c3000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#196	RIPE NCC	raw=195/8;status=ALLOCATED
+ADDR	POSITIVE	4	196.0.0.0	8	c4000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#197	Administered by AFRINIC	raw=196/8;status=LEGACY
+ADDR	POSITIVE	4	197.0.0.0	8	c5000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#198	AFRINIC	raw=197/8;status=ALLOCATED
+ADDR	POSITIVE	4	198.0.0.0	8	c6000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#199	Administered by ARIN	raw=198/8;status=LEGACY
+ADDR	NEGATIVE	4	198.18.0.0	15	c6120000	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#21	Benchmarking	destination=True;forwardable=True;global=False;raw=198.18.0.0/15;reserved=False;source=True;spec=rfc2544
+ADDR	NEGATIVE	4	198.51.100.0	24	c6336400	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#22	Documentation (TEST-NET-2)	destination=False;forwardable=False;global=False;raw=198.51.100.0/24;reserved=False;source=False;spec=rfc5737
+ADDR	POSITIVE	4	199.0.0.0	8	c7000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#200	ARIN	raw=199/8;status=ALLOCATED
+ADDR	POSITIVE	4	200.0.0.0	8	c8000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#201	LACNIC	raw=200/8;status=ALLOCATED
+ADDR	POSITIVE	4	201.0.0.0	8	c9000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#202	LACNIC	raw=201/8;status=ALLOCATED
+ADDR	POSITIVE	4	202.0.0.0	8	ca000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#203	APNIC	raw=202/8;status=ALLOCATED
+ADDR	POSITIVE	4	203.0.0.0	8	cb000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#204	APNIC	raw=203/8;status=ALLOCATED
+ADDR	NEGATIVE	4	203.0.113.0	24	cb007100	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#23	Documentation (TEST-NET-3)	destination=False;forwardable=False;global=False;raw=203.0.113.0/24;reserved=False;source=False;spec=rfc5737
+ADDR	POSITIVE	4	204.0.0.0	8	cc000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#205	ARIN	raw=204/8;status=ALLOCATED
+ADDR	POSITIVE	4	205.0.0.0	8	cd000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#206	ARIN	raw=205/8;status=ALLOCATED
+ADDR	POSITIVE	4	206.0.0.0	8	ce000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#207	ARIN	raw=206/8;status=ALLOCATED
+ADDR	POSITIVE	4	207.0.0.0	8	cf000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#208	ARIN	raw=207/8;status=ALLOCATED
+ADDR	POSITIVE	4	208.0.0.0	8	d0000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#209	ARIN	raw=208/8;status=ALLOCATED
+ADDR	POSITIVE	4	209.0.0.0	8	d1000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#210	ARIN	raw=209/8;status=ALLOCATED
+ADDR	POSITIVE	4	210.0.0.0	8	d2000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#211	APNIC	raw=210/8;status=ALLOCATED
+ADDR	POSITIVE	4	211.0.0.0	8	d3000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#212	APNIC	raw=211/8;status=ALLOCATED
+ADDR	POSITIVE	4	212.0.0.0	8	d4000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#213	RIPE NCC	raw=212/8;status=ALLOCATED
+ADDR	POSITIVE	4	213.0.0.0	8	d5000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#214	RIPE NCC	raw=213/8;status=ALLOCATED
+ADDR	POSITIVE	4	214.0.0.0	8	d6000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#215	US-DOD	raw=214/8;status=LEGACY
+ADDR	POSITIVE	4	215.0.0.0	8	d7000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#216	US-DOD	raw=215/8;status=LEGACY
+ADDR	POSITIVE	4	216.0.0.0	8	d8000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#217	ARIN	raw=216/8;status=ALLOCATED
+ADDR	POSITIVE	4	217.0.0.0	8	d9000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#218	RIPE NCC	raw=217/8;status=ALLOCATED
+ADDR	POSITIVE	4	218.0.0.0	8	da000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#219	APNIC	raw=218/8;status=ALLOCATED
+ADDR	POSITIVE	4	219.0.0.0	8	db000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#220	APNIC	raw=219/8;status=ALLOCATED
+ADDR	POSITIVE	4	220.0.0.0	8	dc000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#221	APNIC	raw=220/8;status=ALLOCATED
+ADDR	POSITIVE	4	221.0.0.0	8	dd000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#222	APNIC	raw=221/8;status=ALLOCATED
+ADDR	POSITIVE	4	222.0.0.0	8	de000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#223	APNIC	raw=222/8;status=ALLOCATED
+ADDR	POSITIVE	4	223.0.0.0	8	df000000	IANA	IANA-IPV4-SPACE	ipv4-address-space#224	APNIC	raw=223/8;status=ALLOCATED
+ADDR	NEGATIVE	4	224.0.0.0	4	e0000000	PRODUCT	ADR-0002	product-addr#1 ADR-0002 s11 minimo IPv4	Multicast	note=Not in IPv4 special-purpose registry\\; IPv4 Address Space lists 224-239/8 as RESERVED (Multicast);policy=ADR-0002 sha256:E77382356F026F946E855B3FDDDA10006ED06A7DA52CA2D57DCB99AB9146C717;review=pending-astra
+ADDR	NEGATIVE	4	240.0.0.0	4	f0000000	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#24	Reserved	destination=False;forwardable=False;global=False;raw=240.0.0.0/4;reserved=True;source=False;spec=rfc1112
+ADDR	NEGATIVE	4	255.255.255.255	32	ffffffff	IANA	IANA-IPV4-SPECIAL	iana-ipv4-special-registry-1#25	Limited Broadcast	destination=True;forwardable=False;global=False;raw=255.255.255.255/32;reserved=True;source=False;spec=rfc8190,rfc919
+ADDR	NEGATIVE	6	::	96	00000000000000000000000000000000	PRODUCT	ADR-0002	product-addr#3 ADR-0002 s11 minimo IPv6	IPv4-compatible (deprecated)	note=Product rule\\; not in IPv6 special-purpose registry;policy=ADR-0002 sha256:E77382356F026F946E855B3FDDDA10006ED06A7DA52CA2D57DCB99AB9146C717;review=pending-astra
+ADDR	NEGATIVE	6	::	128	00000000000000000000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#2	Unspecified Address	destination=False;forwardable=False;global=False;raw=::/128;reserved=True;source=True;spec=rfc4291
+ADDR	NEGATIVE	6	::1	128	00000000000000000000000000000001	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#1	Loopback Address	destination=False;forwardable=False;global=False;raw=::1/128;reserved=True;source=False;spec=rfc4291
+ADDR	NEGATIVE	6	::ffff:0.0.0.0	96	00000000000000000000ffff00000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#3	IPv4-mapped Address	destination=False;forwardable=False;global=False;raw=::ffff:0:0/96;reserved=True;source=False;spec=rfc4291
+ADDR	NEGATIVE	6	64:ff9b::	96	0064ff9b000000000000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#4	IPv4-IPv6 Translat.	destination=True;forwardable=True;global=True;raw=64:ff9b::/96;reserved=False;source=True;spec=rfc6052
+ADDR	NEGATIVE	6	64:ff9b:1::	48	0064ff9b000100000000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#5	IPv4-IPv6 Translat.	destination=True;forwardable=True;global=False;raw=64:ff9b:1::/48;reserved=False;source=True;spec=rfc8215
+ADDR	NEGATIVE	6	100::	64	01000000000000000000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#6	Discard-Only Address Block	destination=True;forwardable=True;global=False;raw=100::/64;reserved=False;source=True;spec=rfc6666
+ADDR	NEGATIVE	6	100:0:0:1::	64	01000000000000010000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#7	Dummy IPv6 Prefix	destination=False;forwardable=False;global=False;raw=100:0:0:1::/64;reserved=False;source=True;spec=rfc9780
+ADDR	NEGATIVE	6	2001::	23	20010000000000000000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#8	IETF Protocol Assignments	destination=False;forwardable=False;global=False;raw=2001::/23;reserved=False;source=False;spec=rfc2928,1,1,1,1
+ADDR	NEGATIVE	6	2001::	32	20010000000000000000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#9	TEREDO	destination=True;forwardable=True;global=N/A;raw=2001::/32;reserved=False;source=True;spec=rfc4380,rfc8190,2
+ADDR	NEGATIVE	6	2001:1::1	128	20010001000000000000000000000001	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#10	Port Control Protocol Anycast	destination=True;forwardable=True;global=True;raw=2001:1::1/128;reserved=False;source=True;spec=rfc7723
+ADDR	NEGATIVE	6	2001:1::2	128	20010001000000000000000000000002	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#11	Traversal Using Relays around NAT Anycast	destination=True;forwardable=True;global=True;raw=2001:1::2/128;reserved=False;source=True;spec=rfc8155
+ADDR	NEGATIVE	6	2001:1::3	128	20010001000000000000000000000003	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#12	DNS-SD Service Registration Protocol Anycast	destination=True;forwardable=True;global=True;raw=2001:1::3/128;reserved=False;source=True;spec=rfc9665
+ADDR	NEGATIVE	6	2001:2::	48	20010002000000000000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#13	Benchmarking	destination=True;forwardable=True;global=False;raw=2001:2::/48;reserved=False;source=True;spec=rfc5180,1752
+ADDR	NEGATIVE	6	2001:3::	32	20010003000000000000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#14	AMT	destination=True;forwardable=True;global=True;raw=2001:3::/32;reserved=False;source=True;spec=rfc7450
+ADDR	NEGATIVE	6	2001:4:112::	48	20010004011200000000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#15	AS112-v6	destination=True;forwardable=True;global=True;raw=2001:4:112::/48;reserved=False;source=True;spec=rfc7535
+ADDR	NEGATIVE	6	2001:10::	28	20010010000000000000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#16	Deprecated (previously ORCHID)	destination=;forwardable=;global=;raw=2001:10::/28;reserved=;source=;spec=rfc4843;termination=2014-03
+ADDR	NEGATIVE	6	2001:20::	28	20010020000000000000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#17	ORCHIDv2	destination=True;forwardable=True;global=True;raw=2001:20::/28;reserved=False;source=True;spec=rfc7343
+ADDR	NEGATIVE	6	2001:30::	28	20010030000000000000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#18	Drone Remote ID Protocol Entity Tags (DETs) Prefix	destination=True;forwardable=True;global=True;raw=2001:30::/28;reserved=False;source=True;spec=rfc9374
+ADDR	POSITIVE	6	2001:200::	23	20010200000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#2	APNIC	raw=2001:200::/23;status=ALLOCATED
+ADDR	POSITIVE	6	2001:400::	23	20010400000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#3	ARIN	raw=2001:400::/23;status=ALLOCATED
+ADDR	POSITIVE	6	2001:600::	23	20010600000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#4	RIPE NCC	raw=2001:600::/23;status=ALLOCATED
+ADDR	POSITIVE	6	2001:800::	22	20010800000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#5	RIPE NCC	raw=2001:800::/22;status=ALLOCATED
+ADDR	POSITIVE	6	2001:c00::	23	20010c00000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#6	APNIC	raw=2001:c00::/23;status=ALLOCATED
+ADDR	NEGATIVE	6	2001:db8::	32	20010db8000000000000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#19	Documentation	destination=False;forwardable=False;global=False;raw=2001:db8::/32;reserved=False;source=False;spec=rfc3849
+ADDR	POSITIVE	6	2001:e00::	23	20010e00000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#7	APNIC	raw=2001:e00::/23;status=ALLOCATED
+ADDR	POSITIVE	6	2001:1200::	23	20011200000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#8	LACNIC	raw=2001:1200::/23;status=ALLOCATED
+ADDR	POSITIVE	6	2001:1400::	22	20011400000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#9	RIPE NCC	raw=2001:1400::/22;status=ALLOCATED
+ADDR	POSITIVE	6	2001:1800::	23	20011800000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#10	ARIN	raw=2001:1800::/23;status=ALLOCATED
+ADDR	POSITIVE	6	2001:1a00::	23	20011a00000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#11	RIPE NCC	raw=2001:1a00::/23;status=ALLOCATED
+ADDR	POSITIVE	6	2001:1c00::	22	20011c00000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#12	RIPE NCC	raw=2001:1c00::/22;status=ALLOCATED
+ADDR	POSITIVE	6	2001:2000::	19	20012000000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#13	RIPE NCC	raw=2001:2000::/19;status=ALLOCATED
+ADDR	POSITIVE	6	2001:4000::	23	20014000000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#14	RIPE NCC	raw=2001:4000::/23;status=ALLOCATED
+ADDR	POSITIVE	6	2001:4200::	23	20014200000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#15	AFRINIC	raw=2001:4200::/23;status=ALLOCATED
+ADDR	POSITIVE	6	2001:4400::	23	20014400000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#16	APNIC	raw=2001:4400::/23;status=ALLOCATED
+ADDR	POSITIVE	6	2001:4600::	23	20014600000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#17	RIPE NCC	raw=2001:4600::/23;status=ALLOCATED
+ADDR	POSITIVE	6	2001:4800::	23	20014800000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#18	ARIN	raw=2001:4800::/23;status=ALLOCATED
+ADDR	POSITIVE	6	2001:4a00::	23	20014a00000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#19	RIPE NCC	raw=2001:4a00::/23;status=ALLOCATED
+ADDR	POSITIVE	6	2001:4c00::	23	20014c00000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#20	RIPE NCC	raw=2001:4c00::/23;status=ALLOCATED
+ADDR	POSITIVE	6	2001:5000::	20	20015000000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#21	RIPE NCC	raw=2001:5000::/20;status=ALLOCATED
+ADDR	POSITIVE	6	2001:8000::	19	20018000000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#22	APNIC	raw=2001:8000::/19;status=ALLOCATED
+ADDR	POSITIVE	6	2001:a000::	20	2001a000000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#23	APNIC	raw=2001:a000::/20;status=ALLOCATED
+ADDR	POSITIVE	6	2001:b000::	20	2001b000000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#24	APNIC	raw=2001:b000::/20;status=ALLOCATED
+ADDR	NEGATIVE	6	2002::	16	20020000000000000000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#20	6to4	destination=True;forwardable=True;global=N/A;raw=2002::/16;reserved=False;source=True;spec=3,rfc3056,3
+ADDR	POSITIVE	6	2003::	18	20030000000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#26	RIPE NCC	raw=2003::/18;status=ALLOCATED
+ADDR	POSITIVE	6	2400::	12	24000000000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#27	APNIC	raw=2400::/12;status=ALLOCATED
+ADDR	POSITIVE	6	2410::	12	24100000000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#28	APNIC	raw=2410::/12;status=ALLOCATED
+ADDR	POSITIVE	6	2600::	12	26000000000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#29	ARIN	raw=2600::/12;status=ALLOCATED
+ADDR	POSITIVE	6	2610::	23	26100000000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#30	ARIN	raw=2610::/23;status=ALLOCATED
+ADDR	POSITIVE	6	2620::	23	26200000000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#31	ARIN	raw=2620::/23;status=ALLOCATED
+ADDR	NEGATIVE	6	2620:4f:8000::	48	2620004f800000000000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#21	Direct Delegation AS112 Service	destination=True;forwardable=True;global=True;raw=2620:4f:8000::/48;reserved=False;source=True;spec=rfc7534
+ADDR	POSITIVE	6	2630::	12	26300000000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#32	ARIN	raw=2630::/12;status=ALLOCATED
+ADDR	POSITIVE	6	2800::	12	28000000000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#33	LACNIC	raw=2800::/12;status=ALLOCATED
+ADDR	POSITIVE	6	2a00::	12	2a000000000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#34	RIPE NCC	raw=2a00::/12;status=ALLOCATED
+ADDR	POSITIVE	6	2a10::	12	2a100000000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#35	RIPE NCC	raw=2a10::/12;status=ALLOCATED
+ADDR	POSITIVE	6	2c00::	12	2c000000000000000000000000000000	IANA	IANA-IPV6-UNICAST	ipv6-unicast-address-assignments#36	AFRINIC	raw=2c00::/12;status=ALLOCATED
+ADDR	NEGATIVE	6	3fff::	20	3fff0000000000000000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#22	Documentation	destination=False;forwardable=False;global=False;raw=3fff::/20;reserved=False;source=False;spec=rfc9637
+ADDR	NEGATIVE	6	5f00::	16	5f000000000000000000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#23	Segment Routing (SRv6) SIDs	destination=True;forwardable=True;global=False;raw=5f00::/16;reserved=False;source=True;spec=rfc9602
+ADDR	NEGATIVE	6	fc00::	7	fc000000000000000000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#24	Unique-Local	destination=True;forwardable=True;global=False;raw=fc00::/7;reserved=False;source=True;spec=rfc4193,rfc8190,4
+ADDR	NEGATIVE	6	fe80::	10	fe800000000000000000000000000000	IANA	IANA-IPV6-SPECIAL	iana-ipv6-special-registry-1#25	Link-Local Unicast	destination=True;forwardable=False;global=False;raw=fe80::/10;reserved=True;source=True;spec=rfc4291
+ADDR	NEGATIVE	6	fec0::	10	fec00000000000000000000000000000	PRODUCT	ADR-0002	product-addr#4 ADR-0002 s11 minimo IPv6	Site-local (deprecated)	note=Not in IPv6 special-purpose registry;policy=ADR-0002 sha256:E77382356F026F946E855B3FDDDA10006ED06A7DA52CA2D57DCB99AB9146C717;review=pending-astra
+ADDR	NEGATIVE	6	ff00::	8	ff000000000000000000000000000000	PRODUCT	ADR-0002	product-addr#5 ADR-0002 s11 minimo IPv6	Multicast	note=Not in IPv6 special-purpose registry;policy=ADR-0002 sha256:E77382356F026F946E855B3FDDDA10006ED06A7DA52CA2D57DCB99AB9146C717;review=pending-astra
+NAME	NEGATIVE	-	10.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#6	10.in-addr.arpa.	classification=covered by product rule arpa;raw=10.in-addr.arpa.;spec=rfc6761
+NAME	NEGATIVE	-	16.172.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#8	16.172.in-addr.arpa.	classification=covered by product rule arpa;raw=16.172.in-addr.arpa.;spec=rfc6761
+NAME	NEGATIVE	-	168.192.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#26	168.192.in-addr.arpa.	classification=covered by product rule arpa;raw=168.192.in-addr.arpa.;spec=rfc6761
+NAME	NEGATIVE	-	17.172.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#9	17.172.in-addr.arpa.	classification=covered by product rule arpa;raw=17.172.in-addr.arpa.;spec=rfc6761
+NAME	NEGATIVE	-	170.0.0.192.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#24	170.0.0.192.in-addr.arpa.	classification=covered by product rule arpa;raw=170.0.0.192.in-addr.arpa.;spec=rfc8880
+NAME	NEGATIVE	-	171.0.0.192.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#25	171.0.0.192.in-addr.arpa.	classification=covered by product rule arpa;raw=171.0.0.192.in-addr.arpa.;spec=rfc8880
+NAME	NEGATIVE	-	18.172.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#10	18.172.in-addr.arpa.	classification=covered by product rule arpa;raw=18.172.in-addr.arpa.;spec=rfc6761
+NAME	NEGATIVE	-	19.172.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#11	19.172.in-addr.arpa.	classification=covered by product rule arpa;raw=19.172.in-addr.arpa.;spec=rfc6761
+NAME	NEGATIVE	-	20.172.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#12	20.172.in-addr.arpa.	classification=covered by product rule arpa;raw=20.172.in-addr.arpa.;spec=rfc6761
+NAME	NEGATIVE	-	21.172.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#13	21.172.in-addr.arpa.	classification=covered by product rule arpa;raw=21.172.in-addr.arpa.;spec=rfc6761
+NAME	NEGATIVE	-	22.172.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#14	22.172.in-addr.arpa.	classification=covered by product rule arpa;raw=22.172.in-addr.arpa.;spec=rfc6761
+NAME	NEGATIVE	-	23.172.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#15	23.172.in-addr.arpa.	classification=covered by product rule arpa;raw=23.172.in-addr.arpa.;spec=rfc6761
+NAME	NEGATIVE	-	24.172.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#16	24.172.in-addr.arpa.	classification=covered by product rule arpa;raw=24.172.in-addr.arpa.;spec=rfc6761
+NAME	NEGATIVE	-	25.172.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#17	25.172.in-addr.arpa.	classification=covered by product rule arpa;raw=25.172.in-addr.arpa.;spec=rfc6761
+NAME	NEGATIVE	-	254.169.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#7	254.169.in-addr.arpa.	classification=covered by product rule arpa;raw=254.169.in-addr.arpa.;spec=rfc6762
+NAME	NEGATIVE	-	26.172.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#18	26.172.in-addr.arpa.	classification=covered by product rule arpa;raw=26.172.in-addr.arpa.;spec=rfc6761
+NAME	NEGATIVE	-	27.172.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#19	27.172.in-addr.arpa.	classification=covered by product rule arpa;raw=27.172.in-addr.arpa.;spec=rfc6761
+NAME	NEGATIVE	-	28.172.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#20	28.172.in-addr.arpa.	classification=covered by product rule arpa;raw=28.172.in-addr.arpa.;spec=rfc6761
+NAME	NEGATIVE	-	29.172.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#21	29.172.in-addr.arpa.	classification=covered by product rule arpa;raw=29.172.in-addr.arpa.;spec=rfc6761
+NAME	NEGATIVE	-	30.172.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#22	30.172.in-addr.arpa.	classification=covered by product rule arpa;raw=30.172.in-addr.arpa.;spec=rfc6761
+NAME	NEGATIVE	-	31.172.in-addr.arpa	-	-	IANA	IANA-SUDN	special-use-domain#23	31.172.in-addr.arpa.	classification=covered by product rule arpa;raw=31.172.in-addr.arpa.;spec=rfc6761
+NAME	NEGATIVE	-	6tisch.arpa	-	-	IANA	IANA-SUDN	special-use-domain#2	6tisch.arpa.	classification=covered by product rule arpa;raw=6tisch.arpa.;spec=rfc9031
+NAME	NEGATIVE	-	8.e.f.ip6.arpa	-	-	IANA	IANA-SUDN	special-use-domain#27	8.e.f.ip6.arpa.	classification=covered by product rule arpa;raw=8.e.f.ip6.arpa.;spec=rfc6762
+NAME	NEGATIVE	-	9.e.f.ip6.arpa	-	-	IANA	IANA-SUDN	special-use-domain#28	9.e.f.ip6.arpa.	classification=covered by product rule arpa;raw=9.e.f.ip6.arpa.;spec=rfc6762
+NAME	NEGATIVE	-	a.e.f.ip6.arpa	-	-	IANA	IANA-SUDN	special-use-domain#29	a.e.f.ip6.arpa.	classification=covered by product rule arpa;raw=a.e.f.ip6.arpa.;spec=rfc6762
+NAME	NEGATIVE	-	alt	-	-	IANA	IANA-SUDN	special-use-domain#1	alt.	classification=ADR-0002 s11 forbidden-names table;raw=alt.;spec=rfc9476
+NAME	NEGATIVE	-	arpa	-	-	PRODUCT	ADR-0002	product-name#1 ADR-0002 s11	Whole TLD (infrastructure; includes home.arpa)	policy=ADR-0002 sha256:E77382356F026F946E855B3FDDDA10006ED06A7DA52CA2D57DCB99AB9146C717;review=pending-astra
+NAME	NEGATIVE	-	b.e.f.ip6.arpa	-	-	IANA	IANA-SUDN	special-use-domain#30	b.e.f.ip6.arpa.	classification=covered by product rule arpa;raw=b.e.f.ip6.arpa.;spec=rfc6762
+NAME	NEGATIVE	-	corp	-	-	PRODUCT	ADR-0002	product-name#4 ADR-0002 s11	Private network convention / name collision	policy=ADR-0002 sha256:E77382356F026F946E855B3FDDDA10006ED06A7DA52CA2D57DCB99AB9146C717;review=pending-astra
+NAME	NEGATIVE	-	eap-noob.arpa	-	-	IANA	IANA-SUDN	special-use-domain#4	eap-noob.arpa. (DEPRECATED)	classification=covered by product rule arpa;raw=eap-noob.arpa. (DEPRECATED);spec=rfc9140,rfc9965;status=DEPRECATED
+NAME	NEGATIVE	-	eap.arpa	-	-	IANA	IANA-SUDN	special-use-domain#3	eap.arpa.	classification=covered by product rule arpa;raw=eap.arpa.;spec=rfc9965
+NAME	NEGATIVE	-	example	-	-	IANA	IANA-SUDN	special-use-domain#34	example.	classification=unclassified by ADR: forbidden by default (ADR-0002 s11, s12 step 8);raw=example.;spec=rfc6761
+NAME	NOT_FORBIDDEN	-	example.com	-	-	IANA	IANA-SUDN	special-use-domain#35	example.com.	classification=ADR-0002 s11 documentation names;raw=example.com.;spec=rfc6761
+NAME	NOT_FORBIDDEN	-	example.net	-	-	IANA	IANA-SUDN	special-use-domain#36	example.net.	classification=ADR-0002 s11 documentation names;raw=example.net.;spec=rfc6761
+NAME	NOT_FORBIDDEN	-	example.org	-	-	IANA	IANA-SUDN	special-use-domain#37	example.org.	classification=ADR-0002 s11 documentation names;raw=example.org.;spec=rfc6761
+NAME	NEGATIVE	-	home	-	-	PRODUCT	ADR-0002	product-name#3 ADR-0002 s11	Private network convention / name collision	policy=ADR-0002 sha256:E77382356F026F946E855B3FDDDA10006ED06A7DA52CA2D57DCB99AB9146C717;review=pending-astra
+NAME	NEGATIVE	-	home.arpa	-	-	IANA	IANA-SUDN	special-use-domain#5	home.arpa.	classification=covered by product rule arpa;raw=home.arpa.;spec=rfc8375
+NAME	NEGATIVE	-	internal	-	-	PRODUCT	ADR-0002	product-name#2 ADR-0002 s11	Private use	policy=ADR-0002 sha256:E77382356F026F946E855B3FDDDA10006ED06A7DA52CA2D57DCB99AB9146C717;review=pending-astra
+NAME	NEGATIVE	-	intranet	-	-	PRODUCT	ADR-0002	product-name#7 ADR-0002 s11	Private network convention	policy=ADR-0002 sha256:E77382356F026F946E855B3FDDDA10006ED06A7DA52CA2D57DCB99AB9146C717;review=pending-astra
+NAME	NEGATIVE	-	invalid	-	-	IANA	IANA-SUDN	special-use-domain#38	invalid.	classification=ADR-0002 s11 forbidden-names table;raw=invalid.;spec=rfc6761
+NAME	NEGATIVE	-	ipv4only.arpa	-	-	IANA	IANA-SUDN	special-use-domain#31	ipv4only.arpa.	classification=covered by product rule arpa;raw=ipv4only.arpa.;spec=rfc8880
+NAME	NEGATIVE	-	lan	-	-	PRODUCT	ADR-0002	product-name#6 ADR-0002 s11	Private network convention	policy=ADR-0002 sha256:E77382356F026F946E855B3FDDDA10006ED06A7DA52CA2D57DCB99AB9146C717;review=pending-astra
+NAME	NEGATIVE	-	local	-	-	IANA	IANA-SUDN	special-use-domain#39	local.	classification=ADR-0002 s11 forbidden-names table;raw=local.;spec=rfc6762
+NAME	NEGATIVE	-	localdomain	-	-	PRODUCT	ADR-0002	product-name#9 ADR-0002 s11	Private network convention	policy=ADR-0002 sha256:E77382356F026F946E855B3FDDDA10006ED06A7DA52CA2D57DCB99AB9146C717;review=pending-astra
+NAME	NEGATIVE	-	localhost	-	-	IANA	IANA-SUDN	special-use-domain#40	localhost.	classification=ADR-0002 s11 forbidden-names table;raw=localhost.;spec=rfc6761
+NAME	NEGATIVE	-	mail	-	-	PRODUCT	ADR-0002	product-name#5 ADR-0002 s11	Private network convention / name collision	policy=ADR-0002 sha256:E77382356F026F946E855B3FDDDA10006ED06A7DA52CA2D57DCB99AB9146C717;review=pending-astra
+NAME	NEGATIVE	-	onion	-	-	IANA	IANA-SUDN	special-use-domain#41	onion.	classification=ADR-0002 s11 forbidden-names table;raw=onion.;spec=rfc7686
+NAME	NEGATIVE	-	private	-	-	PRODUCT	ADR-0002	product-name#8 ADR-0002 s11	Private network convention	policy=ADR-0002 sha256:E77382356F026F946E855B3FDDDA10006ED06A7DA52CA2D57DCB99AB9146C717;review=pending-astra
+NAME	NEGATIVE	-	resolver.arpa	-	-	IANA	IANA-SUDN	special-use-domain#32	resolver.arpa.	classification=covered by product rule arpa;raw=resolver.arpa.;spec=rfc9462
+NAME	NEGATIVE	-	service.arpa	-	-	IANA	IANA-SUDN	special-use-domain#33	service.arpa.	classification=covered by product rule arpa;raw=service.arpa.;spec=rfc9665
+NAME	NEGATIVE	-	test	-	-	IANA	IANA-SUDN	special-use-domain#42	test.	classification=ADR-0002 s11 forbidden-names table;raw=test.;spec=rfc6761
