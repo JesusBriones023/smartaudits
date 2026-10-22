@@ -1,1 +1,5 @@
 scripts/fixtures/legacy-schema.sql text eol=lf
+docs/ADR-0002-acquisition-destination-policy.md text eol=lf
+docs/iana/IANA-SNAPSHOT-02/catalog.tsv text eol=lf
+docs/iana/IANA-SNAPSHOT-02/SERIALIZATION.md text eol=lf
+docs/iana/IANA-SNAPSHOT-02/APPROVAL.md text eol=lf
