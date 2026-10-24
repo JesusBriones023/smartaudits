@@ -38,14 +38,16 @@ class DestinationPackageStaticTest {
             CatalogEntry.class, CatalogEntry.Kind.class, CatalogEntry.Layer.class, CatalogEntry.Origin.class,
             AddressCatalog.class, AddressCatalog.Source.class, AddressCategory.class, AddressPolicy.class,
             CatalogSerialization.class, AddressCatalogData.class, RejectionCode.class, ValidatedHost.class,
-            DestinationUrl.class, UrlParseResult.Parsed.class, UrlParseResult.Rejected.class, DestinationUrlParser.class);
+            DestinationUrl.class, UrlParseResult.Parsed.class, UrlParseResult.Rejected.class, DestinationUrlParser.class,
+            DnsAnswer.class, DnsAnswer.Status.class, DnsAnswer.FamilyAnswer.class, DestinationPolicy.class,
+            DestinationDecision.Approved.class, DestinationDecision.Rejected.class);
 
     @Test void productionSourcesUseNoForbiddenApi() throws IOException {
         List<Path> files;
         try (Stream<Path> stream = Files.list(SOURCES)) {
             files = stream.filter(p -> p.toString().endsWith(".java")).sorted().collect(Collectors.toList());
         }
-        assertEquals(14, files.size(), "unexpected number of production sources");
+        assertEquals(18, files.size(), "unexpected number of production sources");
         List<String> violations = new ArrayList<>();
         for (Path file : files) {
             String code = stripComments(Files.readString(file, StandardCharsets.UTF_8));
