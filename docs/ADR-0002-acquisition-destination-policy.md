@@ -993,6 +993,27 @@ paso ni se ha descargado nada.
 Las fuentes obtenidas se conservan como evidencia fuera del build y no se leen en
 runtime. El hash del catálogo se registra en el código y en una nota de este ADR.
 
+**Nota de congelación — IANA-SNAPSHOT-02.** Catálogo congelado el 2026-10-21,
+run `20261021T135838Z-a273b428`, aprobado según
+`docs/iana/IANA-SNAPSHOT-02/APPROVAL.md`. Su SHA-256 es:
+
+`75987A6CB1B520F172B454E7E1D8646ECDA08A95908B7C4D392ADFFC9CDF6F6D`
+
+El digest corresponde a los 55 420 bytes completos de
+`docs/iana/IANA-SNAPSHOT-02/catalog.tsv`: UTF-8 sin BOM, finales LF y un LF final,
+nueve líneas de cabecera y 362 filas de datos, en el orden y con los escapes de
+`SERIALIZATION.md` revisión 2. Incluye las cabeceras, también `#policy`; no es un
+hash de las filas aisladas, de la especificación de serialización ni de Java.
+`CatalogSerialization` reconstruye esos mismos bytes desde las constantes y
+`AddressCatalog.CANONICAL_SHA256` conserva el valor anterior.
+
+El SHA-256 de ADR-0002 registrado al congelar el snapshot es
+`E77382356F026F946E855B3FDDDA10006ED06A7DA52CA2D57DCB99AB9146C717`.
+Identifica la versión normativa histórica incorporada al catálogo, recuperable
+en el commit `5918febc`. Una actualización editorial posterior del ADR tiene
+su propio hash; no cambia retrospectivamente `#policy`, los datos congelados
+ni las constantes Java aprobadas.
+
 **Mantenimiento.**
 
 - **Revisión mensual.** Los registros se comparan con la revisión vigente, y
@@ -1017,11 +1038,10 @@ revisiones:
 La revisión mensual y la revisión antes de cada release acotan ese riesgo, pero no
 lo eliminan.
 
-**Datos no inventados.** Este ADR no contiene un snapshot de los registros ni
-ningún SHA-256. Las tablas de la sección 11 son mínimos de producto con referencias
-informativas, más las siete entradas confirmadas documentalmente. El snapshot
-completo y su congelación criptográfica solo existirán tras el procedimiento
-anterior.
+**Datos de procedencia.** Las tablas de la sección 11 siguen siendo mínimos de
+producto y referencias informativas, más las siete entradas confirmadas.
+El snapshot completo y sus hashes son los artefactos congelados identificados
+en la nota anterior; este ADR no sustituye esos datos ni los actualiza.
 
 ## 13. Modelo interno
 
