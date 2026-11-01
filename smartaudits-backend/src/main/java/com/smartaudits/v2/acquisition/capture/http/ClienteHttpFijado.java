@@ -21,6 +21,11 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.function.IntUnaryOperator;
 
 /**
  * One GET over one connection to one approved address, with nothing automatic: no DNS (the
@@ -33,15 +38,31 @@ public final class ClienteHttpFijado {
 
     static final String USER_AGENT = "SmartAudits/2.0 (auditoria legal; +https://smartaudits.es)";
     private static final List<String> PROTOCOLOS = List.of("TLSv1.3", "TLSv1.2");
+    private static final ScheduledExecutorService VIGILANTE = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread hilo = new Thread(r, "smartaudits-plazo-http");
+        hilo.setDaemon(true);
+        return hilo;
+    });
 
     private final Conector conector;
     private final SSLSocketFactory fabricaTls;
     private final LimitesHttp limites;
+    private final IntUnaryOperator puertoTcp;
 
     public ClienteHttpFijado(Conector conector, SSLSocketFactory fabricaTls, LimitesHttp limites) {
+        this(conector, fabricaTls, limites, IntUnaryOperator.identity());
+    }
+
+    /**
+     * Package-private seam for loopback tests of this layer only: the TCP port actually dialled for
+     * the URL's effective port. The observation keeps the dialled port, so TransporteHttpReal (which
+     * requires it to equal the URL port) rejects any mapping: it cannot be used through the product flow.
+     */
+    ClienteHttpFijado(Conector conector, SSLSocketFactory fabricaTls, LimitesHttp limites, IntUnaryOperator puertoTcp) {
         this.conector = Objects.requireNonNull(conector, "conector");
         this.fabricaTls = Objects.requireNonNull(fabricaTls, "fabricaTls");
         this.limites = Objects.requireNonNull(limites, "limites");
+        this.puertoTcp = Objects.requireNonNull(puertoTcp, "puertoTcp");
     }
 
     public LimitesHttp limites() {
@@ -50,17 +71,22 @@ public final class ClienteHttpFijado {
 
     public RespuestaHttp obtener(DestinationUrl url, IpAddress ip) {
         long limite = System.nanoTime() + limites.total().toNanos();
+        int puerto = puertoTcp.applyAsInt(url.port());
         Conexion conexion;
         try {
-            conexion = conector.conectar(ip, url.port(), limites.conexion());
+            conexion = conector.conectar(ip, puerto, limites.conexion());
         } catch (IOException e) {
             throw new CapturaException(Motivo.TRANSPORTE, "No se pudo conectar con la dirección aprobada", e);
         }
         Socket socket = conexion.socket();
+        // Per-read timeouts alone let a server drip a TLS handshake (or anything) forever: at the
+        // absolute deadline the underlying socket is closed, which aborts any blocked read or write.
+        ScheduledFuture<?> alarma = VIGILANTE.schedule(() -> cerrar(conexion.socket()),
+                Math.max(1, limite - System.nanoTime()), TimeUnit.NANOSECONDS);
         try {
             byte[] bytesPeer = conexion.peer().getAddress().getAddress();
             IpAddress peer = bytesPeer.length == 4 ? IpAddress.ipv4(bytesPeer) : IpAddress.ipv6(bytesPeer);
-            if (!peer.equals(ip) || conexion.peer().getPort() != url.port()) {
+            if (!peer.equals(ip) || conexion.peer().getPort() != puerto) {
                 throw new CapturaException(Motivo.TRANSPORTE, "La conexión no llegó a la dirección aprobada");
             }
             String host = url.host().name();
@@ -93,15 +119,19 @@ public final class ClienteHttpFijado {
             byte[] cuerpo = cabecera.estado() == 200 && esHtml(cabecera) ? lector.leerCuerpo(cabecera) : new byte[0];
             return new RespuestaHttp(cabecera.estado(), cabecera.cabeceras(), cuerpo, new ObservacionConexion(url, peer,
                     conexion.peer().getPort(), conexion.peerObservado(), tls, sni, identidad, protocolo, host));
-        } catch (SSLException e) {
-            throw new CapturaException(Motivo.TRANSPORTE, "La identidad TLS del servidor no es válida para el host autorizado", e);
-        } catch (SocketTimeoutException e) {
-            throw new CapturaException(Motivo.TRANSPORTE, "Tiempo de espera agotado", e);
-        } catch (ErrorRespuesta e) {
-            throw new CapturaException(Motivo.RESPUESTA_NO_VALIDA, "Respuesta HTTP no válida: " + e.getMessage(), e);
         } catch (IOException e) {
+            if (e instanceof SocketTimeoutException || System.nanoTime() - limite >= 0) {
+                throw new CapturaException(Motivo.TRANSPORTE, "Tiempo de espera agotado", e);
+            }
+            if (e instanceof ErrorRespuesta) {
+                throw new CapturaException(Motivo.RESPUESTA_NO_VALIDA, "Respuesta HTTP no válida: " + e.getMessage(), e);
+            }
+            if (e instanceof SSLException) {
+                throw new CapturaException(Motivo.TRANSPORTE, "La identidad TLS del servidor no es válida para el host autorizado", e);
+            }
             throw new CapturaException(Motivo.TRANSPORTE, "Error de comunicación con el servidor", e);
         } finally {
+            alarma.cancel(false);
             cerrar(socket);
             cerrar(conexion.socket());
         }

@@ -410,7 +410,7 @@ class TransporteHttpRealTest {
                 base + " plegada: si\r\nContent-Length: 0\r\n\r\n",
                 "HTTP/1.1 100 Continue\r\n\r\n",
                 "HTTP/2 200\r\n\r\n")) {
-            var s = servido(ServidorHttpDePrueba.fija(respuesta));
+            var s = servido(ServidorHttpDePrueba.fija(respuesta)).cerrandoTrasResponder(); // truncations need the server's EOF
             assertThatThrownBy(() -> transporte(RAPIDOS).capturar(url(URL))).as(respuesta)
                     .isInstanceOf(CapturaException.class)
                     .satisfies(e -> assertThat(((CapturaException) e).motivo()).isEqualTo(Motivo.RESPUESTA_NO_VALIDA));

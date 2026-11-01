@@ -40,6 +40,9 @@ final class ServidorHttpDePrueba implements AutoCloseable {
     private final List<String> sniVistos = Collections.synchronizedList(new ArrayList<>());
     private final AtomicInteger conexiones = new AtomicInteger();
     private final AtomicInteger handshakesFallidos = new AtomicInteger();
+    private final AtomicInteger cerradasPorCliente = new AtomicInteger();
+    private final AtomicInteger abiertasTrasRespuesta = new AtomicInteger();
+    private volatile boolean cerrarTrasResponder;
 
     private ServidorHttpDePrueba(ServerSocket servidor, Manejador manejador) {
         this.servidor = servidor;
@@ -50,15 +53,30 @@ final class ServidorHttpDePrueba implements AutoCloseable {
     }
 
     static ServidorHttpDePrueba plano(Manejador manejador) throws IOException {
+        return plano(InetAddress.getLoopbackAddress(), manejador);
+    }
+
+    static ServidorHttpDePrueba plano(InetAddress loopback, Manejador manejador) throws IOException {
         ServerSocket s = new ServerSocket();
-        s.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+        s.bind(new InetSocketAddress(soloLoopback(loopback), 0));
         return new ServidorHttpDePrueba(s, manejador);
     }
 
     static ServidorHttpDePrueba tls(SSLContext contexto, Manejador manejador) throws IOException {
+        return tls(contexto, InetAddress.getLoopbackAddress(), manejador);
+    }
+
+    static ServidorHttpDePrueba tls(SSLContext contexto, InetAddress loopback, Manejador manejador) throws IOException {
         ServerSocket s = contexto.getServerSocketFactory().createServerSocket();
-        s.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+        s.bind(new InetSocketAddress(soloLoopback(loopback), 0));
         return new ServidorHttpDePrueba(s, manejador);
+    }
+
+    private static InetAddress soloLoopback(InetAddress direccion) {
+        if (!direccion.isLoopbackAddress()) {
+            throw new IllegalArgumentException("los servidores de prueba solo escuchan en loopback");
+        }
+        return direccion;
     }
 
     /** Fixed raw response (ISO-8859-1 text). */
@@ -73,6 +91,12 @@ final class ServidorHttpDePrueba implements AutoCloseable {
                     + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.ISO_8859_1));
             out.write(cuerpo);
         };
+    }
+
+    /** The server closes right after answering (EOF-delimited and truncated bodies): no leak accounting. */
+    ServidorHttpDePrueba cerrandoTrasResponder() {
+        this.cerrarTrasResponder = true;
+        return this;
     }
 
     int puerto() {
@@ -93,6 +117,16 @@ final class ServidorHttpDePrueba implements AutoCloseable {
 
     int handshakesFallidos() {
         return handshakesFallidos.get();
+    }
+
+    /** Connections whose client closed its side after the exchange (or before it, on failure). */
+    int cerradasPorCliente() {
+        return cerradasPorCliente.get();
+    }
+
+    /** Connections still open by the client 3 s after the server finished: a leaked client socket. */
+    int abiertasTrasRespuesta() {
+        return abiertasTrasRespuesta.get();
     }
 
     private void aceptar() {
@@ -118,6 +152,7 @@ final class ServidorHttpDePrueba implements AutoCloseable {
                     ssl.startHandshake();
                 } catch (IOException e) {
                     handshakesFallidos.incrementAndGet();
+                    cerradasPorCliente.incrementAndGet();
                     return;
                 }
                 List<String> nombres = new ArrayList<>();
@@ -129,6 +164,7 @@ final class ServidorHttpDePrueba implements AutoCloseable {
             }
             String cabeza = leerCabeza(s.getInputStream());
             if (cabeza == null) {
+                cerradasPorCliente.incrementAndGet(); // the client hung up before sending a request
                 return;
             }
             String[] lineas = cabeza.split("\r\n");
@@ -142,10 +178,33 @@ final class ServidorHttpDePrueba implements AutoCloseable {
             Peticion peticion = new Peticion(lineas[0], cabeceras, sni);
             peticiones.add(peticion);
             OutputStream out = s.getOutputStream();
-            manejador.responder(peticion, out);
-            out.flush();
+            try {
+                manejador.responder(peticion, out);
+                out.flush();
+            } catch (IOException e) {
+                cerradasPorCliente.incrementAndGet(); // the client went away while we were writing
+                return;
+            }
+            if (!cerrarTrasResponder) {
+                esperarCierre(s);
+            }
         } catch (Exception e) {
             // the client may close first (limits, timeouts): nothing to report
+        }
+    }
+
+    private void esperarCierre(Socket s) {
+        try {
+            s.setSoTimeout(3_000);
+            InputStream in = s.getInputStream();
+            while (in.read() >= 0) {
+                // drain until the client closes
+            }
+            cerradasPorCliente.incrementAndGet();
+        } catch (java.net.SocketTimeoutException e) {
+            abiertasTrasRespuesta.incrementAndGet();
+        } catch (IOException e) {
+            cerradasPorCliente.incrementAndGet(); // reset by the client
         }
     }
 

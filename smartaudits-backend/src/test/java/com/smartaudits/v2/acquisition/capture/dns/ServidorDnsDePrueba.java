@@ -36,18 +36,21 @@ final class ServidorDnsDePrueba implements AutoCloseable {
         this.guion = guion;
         DatagramSocket u = null;
         ServerSocket t = null;
+        IOException ultimo = null;
         for (int intento = 0; intento < 20 && t == null; intento++) {
             u = new DatagramSocket(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
+            ServerSocket candidato = new ServerSocket();
             try {
-                t = new ServerSocket();
-                t.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), u.getLocalPort()));
+                candidato.bind(new InetSocketAddress(InetAddress.getLoopbackAddress(), u.getLocalPort()));
+                t = candidato;
             } catch (IOException e) {
+                ultimo = e;
+                candidato.close();
                 u.close();
-                t = null;
             }
         }
         if (t == null) {
-            throw new IOException("no hay puerto libre UDP+TCP");
+            throw new IOException("no hay puerto libre UDP+TCP", ultimo);
         }
         this.udp = u;
         this.tcp = t;

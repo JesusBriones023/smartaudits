@@ -5,9 +5,12 @@ import java.net.Socket;
 import java.util.Objects;
 
 /**
- * A connected socket and the peer it is connected to. When the peer comes from the socket itself
- * ({@link #delSocket}) it is an observation of the operating system; a test double can only
- * declare one ({@link #declarada}), and a capture through a declared peer is never REAL.
+ * A connected socket and the peer it is connected to. {@link #delSocket} reads the peer from the
+ * connected socket: the address and port the JDK socket is connected to (Java offers no
+ * getpeername; it is the endpoint the OS accepted for this connect, not an independent kernel
+ * measurement). It proves the connection was made to the approved IP and not to a proxy, but a
+ * transparent interception on the egress path is invisible here: that is R-EGR's domain. A test
+ * double can only declare a peer ({@link #declarada}); a capture through a declared peer is never REAL.
  */
 public final class Conexion {
 
@@ -21,7 +24,7 @@ public final class Conexion {
         this.peerObservado = peerObservado;
     }
 
-    /** Peer read from the connected socket (the address the OS actually connected to). */
+    /** Peer read from the connected socket (the endpoint of this connection, as the JDK reports it). */
     static Conexion delSocket(Socket socket) {
         if (!(socket.getRemoteSocketAddress() instanceof InetSocketAddress remoto) || remoto.getAddress() == null) {
             throw new IllegalStateException("socket sin peer conectado");

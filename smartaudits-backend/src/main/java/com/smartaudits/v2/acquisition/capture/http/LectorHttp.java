@@ -153,7 +153,7 @@ final class LectorHttp {
         while (true) {
             String linea = linea(false);
             int fin = linea.indexOf(';');
-            String hex = (fin >= 0 ? linea.substring(0, fin) : linea).strip();
+            String hex = fin >= 0 ? linea.substring(0, fin) : linea; // RFC 9112: 1*HEXDIG, no surrounding spaces
             if (hex.isEmpty() || hex.length() > 8 || !hex.chars().allMatch(c -> Character.digit(c, 16) >= 0)) {
                 throw new ErrorRespuesta("tamaño de trozo no válido");
             }

@@ -155,6 +155,52 @@ class ResolvedorDnsDirectoTest {
     }
 
     @Test
+    void chainAndRecordLimitsReachThePolicyAsDnsLimit() throws IOException {
+        for (int largo : new int[]{9, 12}) {
+            Registro[] cadena = new Registro[largo + 1];
+            String actual = "www.ejemplo.es";
+            for (int i = 0; i < largo; i++) {
+                String siguiente = "c" + i + ".ejemplo.net";
+                cadena[i] = Registro.cname(actual, siguiente);
+                actual = siguiente;
+            }
+            cadena[largo] = Registro.a(actual, 8, 8, 8, 8);
+            Registro[] soloCnames = java.util.Arrays.copyOf(cadena, largo);
+            assertThat(codigo(politica(con(cadena), con(soloCnames)).evaluate(URL))).as("cadena de " + largo).isEqualTo(RejectionCode.DNS_LIMIT);
+            cerrar();
+        }
+        Registro[] muchos = new Registro[33];
+        for (int i = 0; i < muchos.length; i++) {
+            muchos[i] = Registro.a("www.ejemplo.es", 8, 8, 8, i + 1);
+        }
+        assertThat(codigo(politica(con(muchos), rcode(0)).evaluate(URL))).isEqualTo(RejectionCode.DNS_LIMIT);
+    }
+
+    @Test
+    void truncatedOrStillTruncatedTcpAnswersFail() throws IOException {
+        // TC=1 over UDP, and again TC=1 over TCP: never a partial answer.
+        servidor = new ServidorDnsDePrueba((q, tcp) -> ServidorDnsDePrueba.tipo(q) == TYPE_AAAA
+                ? List.of(respuesta(q, 0, List.of()))
+                : List.of(respuesta(q, ServidorDnsDePrueba.id(q), 0, true, List.of(Registro.a("www.ejemplo.es", 8, 8, 8, 8)))));
+        var p = DestinationPolicy.using(new ResolvedorDnsDirecto(new byte[]{127, 0, 0, 1}, servidor.puerto(), Duration.ofMillis(800)));
+        assertThat(codigo(p.evaluate(URL))).isEqualTo(RejectionCode.DNS_FAILURE);
+        cerrar();
+        // The TCP frame ends before the announced length (the response is cut in half).
+        servidor = new ServidorDnsDePrueba((q, tcp) -> {
+            if (ServidorDnsDePrueba.tipo(q) == TYPE_AAAA) {
+                return List.of(respuesta(q, 0, List.of()));
+            }
+            if (!tcp) {
+                return List.of(respuesta(q, ServidorDnsDePrueba.id(q), 0, true, List.of()));
+            }
+            byte[] completa = respuesta(q, 0, List.of(Registro.a("www.ejemplo.es", 8, 8, 8, 8)));
+            return List.of(java.util.Arrays.copyOf(completa, completa.length - 6));
+        });
+        p = DestinationPolicy.using(new ResolvedorDnsDirecto(new byte[]{127, 0, 0, 1}, servidor.puerto(), Duration.ofMillis(800)));
+        assertThat(codigo(p.evaluate(URL))).isEqualTo(RejectionCode.DNS_FAILURE);
+    }
+
+    @Test
     void responsesToAnotherQuestionAreIgnored() throws IOException {
         Function<byte[], List<byte[]>> otraPregunta = q -> {
             byte[] r = respuesta(q, 0, List.of(Registro.a("www.ejemplo.es", 8, 8, 8, 8)));
