@@ -7,6 +7,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -21,12 +22,13 @@ class IncidentRuleProvenanceTest {
             new ObjectMapper().readTree(input).path("rules").fields()
                     .forEachRemaining(rule -> expected.put(rule.getKey(), rule.getValue().path("titulo").asText()));
         }
-        // Rules v2: a missing DPO mention is not verifiable (no finding), and a legal notice is not
-        // asked for the privacy information; a complete document still shows the other 18 with v1 titles.
-        expected.remove("R03");
+        // Rules v2/v3: missing DPO, cookie, consent and security texts are not verifiable (no finding),
+        // and a legal notice is not asked for privacy information; a complete document shows the other
+        // 15 with their v1 titles.
+        List.of("R03", "R10", "R12", "R15").forEach(expected::remove);
         var result = motor.analyze(new EntradaAnalisis("zzz", "Documento Completo"));
         Map<String, String> actual = new LinkedHashMap<>();
-        assertThat(result.getErrores()).hasSize(18).allSatisfy(error -> {
+        assertThat(result.getErrores()).hasSize(15).allSatisfy(error -> {
             assertThat(actual.put(error.getRuleId(), error.getTitulo())).isNull();
             assertThat(error.getMotor()).isEqualTo("LEGAL_TEXT");
             assertThat(error.getVersion()).isEqualTo(motor.version().versionReglas());
@@ -64,7 +66,7 @@ class IncidentRuleProvenanceTest {
     @Test
     void contextAwareRulesAreRulesVersionTwoWithTheSameOutputContract() {
         // The output only gained optional fields (estado, evaluaciones); stored audits keep their own versions.
-        assertThat(motor.version()).isEqualTo(new VersionAnalizador("2", "2"));
+        assertThat(motor.version()).isEqualTo(new VersionAnalizador("2", "3"));
     }
 
     @ParameterizedTest

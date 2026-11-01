@@ -31,12 +31,18 @@ import java.util.stream.Collectors;
  *   - No cumplirla no suma nada.
  *   - Resultado final = suma de puntos obtenidos (0-100). Nunca negativo.
  *
- * Reglas versión 2: R03, R05, R06, R07 y R08 (y los riesgos G01 y G02) se evalúan por cláusulas,
- * con palabras completas y negaciones ({@link ReglasContextuales}). Cada una termina en un estado
+ * Reglas versión 3: R02, R03, R05, R06, R07, R08, R10, R12 y R15 (y los riesgos G01, G02 y G03) se
+ * evalúan por cláusulas, con palabras completas y negaciones ({@link ReglasContextuales}); la versión 2
+ * cubría R03, R05, R06, R07, R08, G01 y G02. Cada una termina en un estado
  * de evidencia y suma: su peso si es SUFICIENTE; la mitad si es INSUFICIENTE o si la cláusula
  * suficiente tiene redacción problemática; nada en otro caso. NO_APLICABLE y NO_VERIFICABLE no
  * suman ni generan incidencia: la puntuación sigue siendo la suma de pesos acreditados sobre 100,
  * sin redistribuir pesos (eso exigiría recalibrar todas las reglas).
+ *
+ * Limitación conocida, pendiente de rediseñar la puntuación: como NO_APLICABLE y NO_VERIFICABLE suman
+ * cero, la cifra no es comparable entre tipos de documento (un aviso legal correcto nunca se acerca a 100)
+ * ni entre documentos con distinta información no verificable (un texto sin cookies ni consentimiento
+ * pierde esos pesos aunque no los necesite).
  *
  * No utiliza APIs externas. Todo el análisis se realiza mediante reglas en Java.
  */
@@ -44,7 +50,7 @@ import java.util.stream.Collectors;
 public class MotorAnalisisLegal implements AnalizadorLegal {
 
     private static final String MOTOR = "LEGAL_TEXT";
-    private static final VersionAnalizador VERSION = new VersionAnalizador("2", "2");
+    private static final VersionAnalizador VERSION = new VersionAnalizador("2", "3");
 
     @Override
     public VersionAnalizador version() {
@@ -138,7 +144,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
                 "para cualquier consulta", "ante cualquier duda"
             ),
             Collections.emptyList(),
-            "Incumplimiento del Art. 13.1.a RGPD. El interesado no puede ejercer sus derechos por falta de contacto claro.",
+            "Posible incumplimiento del Art. 13.1.a RGPD: sin un medio de contacto concreto el interesado no puede dirigirse al responsable ni ejercer sus derechos.",
             "Proporcionar al menos una dirección de correo electrónico de contacto y, preferiblemente, dirección postal.",
             "RGPD Art. 13.1.a — Datos de contacto del responsable",
             "\"Para cualquier consulta sobre el tratamiento de sus datos puede contactar con nosotros en: [email] o en [dirección postal].\"",
@@ -345,7 +351,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
                 "no puede rechazar las cookies",
                 "continuar navegando implica aceptar"
             ),
-            "Incumplimiento del Art. 22.2 LSSI-CE y Directiva ePrivacy. Multas de hasta 300.000€. La AEPD exige en 2025 que los botones de aceptar y rechazar estén al mismo nivel de visibilidad.",
+            "Posible incumplimiento del Art. 22.2 LSSI-CE: el usuario debe recibir información clara y completa sobre las cookies y sus finalidades. La Guía sobre el uso de las cookies de la AEPD indica que rechazar debe ser tan sencillo como aceptar.",
             "Implementar política de cookies completa con listado, mecanismo de consentimiento previo y panel de preferencias con botón de rechazo igual de visible que el de aceptación.",
             "LSSI-CE Art. 22.2 — Cookies / Directiva ePrivacy / Guía AEPD 2025",
             "\"Utilizamos cookies propias y de terceros. Cookies técnicas (exentas): [listado]. Cookies analíticas y publicitarias: requieren consentimiento previo. [Botón Aceptar] [Botón Rechazar] [Configurar].\"",
@@ -399,7 +405,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
                 "continuar navegando implica consentimiento",
                 "al usar este sitio acepta"
             ),
-            "Incumplimiento del Art. 7 y 4.11 RGPD. El consentimiento debe ser libre, específico, informado e inequívoco.",
+            "Posible incumplimiento del deber de información sobre el consentimiento (Arts. 4.11 y 7 RGPD): debe ser libre, específico, informado e inequívoco, y poder retirarse en cualquier momento.",
             "Describir el mecanismo de consentimiento: qué acción lo constituye, para qué tratamientos se pide y cómo puede retirarse en cualquier momento.",
             "RGPD Art. 7 — Condiciones para el consentimiento / Art. 4.11",
             "\"Su consentimiento se solicita mediante casilla de verificación desmarcada por defecto. Puede retirarlo en cualquier momento sin que ello afecte a la licitud del tratamiento anterior.\"",
@@ -479,7 +485,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
                 "no somos responsables de brechas de seguridad",
                 "transmision de datos no es segura", "transmision no garantizada"
             ),
-            "Incumplimiento del Art. 32 RGPD. El responsable debe implementar medidas técnicas y organizativas apropiadas.",
+            "El documento no concreta las medidas aplicadas. El Art. 32 RGPD exige aplicar medidas técnicas y organizativas apropiadas; su implantación real no puede verificarse con el texto.",
             "Mencionar las principales medidas de seguridad: cifrado en tránsito (HTTPS/TLS), control de accesos, copias de seguridad y procedimientos ante brechas.",
             "RGPD Art. 32 — Seguridad del tratamiento",
             "\"Aplicamos medidas técnicas y organizativas apropiadas: cifrado SSL/TLS, control de acceso basado en roles, copias de seguridad periódicas y procedimientos de notificación de brechas (Art. 33 RGPD).\"",
@@ -780,9 +786,13 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             String descripRiesgo = patron.descripcion();
             String severidadRiesgo = patron.severidad();
 
-            if (patron.id().equals("G01") || patron.id().equals("G02")) {
-                // Negation-aware and tied to a clause about personal data: "no vendemos sus datos" is not a risk.
-                var clausula = patron.id().equals("G01") ? ReglasContextuales.g01(clausulas) : ReglasContextuales.g02(clausulas);
+            if (patron.id().equals("G01") || patron.id().equals("G02") || patron.id().equals("G03")) {
+                // Negation-aware: "no vendemos sus datos" or a quoted example of implied consent is not a risk.
+                var clausula = switch (patron.id()) {
+                    case "G01" -> ReglasContextuales.g01(clausulas);
+                    case "G02" -> ReglasContextuales.g02(clausulas);
+                    default -> ReglasContextuales.g03(clausulas);
+                };
                 if (clausula != null) {
                     ErrorAuditoria error = nuevoError(patron.id());
                     error.setTitulo(nombreRiesgo);
@@ -880,7 +890,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
         Map<EstadoEvidencia, Long> cuenta = evaluaciones.stream()
                 .collect(Collectors.groupingBy(EvaluacionRegla::estado, () -> new EnumMap<>(EstadoEvidencia.class),
                         Collectors.counting()));
-        return String.format(" Información de privacidad evaluada por contexto (R03, R05, R06, R07 y R08): "
+        return String.format(" Información evaluada por contexto (R02, R03, R05, R06, R07, R08, R10, R12 y R15): "
                         + "%d con evidencia suficiente, %d con evidencia insuficiente, %d con posible incidencia, "
                         + "%d no verificables con el texto y %d no aplicables a este tipo de documento.",
                 cuenta.getOrDefault(EstadoEvidencia.SUFICIENTE, 0L), cuenta.getOrDefault(EstadoEvidencia.INSUFICIENTE, 0L),

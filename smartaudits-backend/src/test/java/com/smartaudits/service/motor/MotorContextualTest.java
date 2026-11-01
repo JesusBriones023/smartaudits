@@ -265,7 +265,7 @@ class MotorContextualTest {
         var r = analizar(aviso, "Aviso Legal");
         assertThat(r.getEvaluaciones()).extracting(EvaluacionRegla::estado).containsOnly(NO_APLICABLE);
         assertThat(r.getErrores()).extracting(ErrorAuditoria::getRuleId).doesNotContain("R03", "R05", "R06", "R07", "R08");
-        assertThat(r.getResumen()).contains("5 no aplicables a este tipo de documento");
+        assertThat(r.getResumen()).contains("9 no aplicables a este tipo de documento");
         // Not applicable earns nothing, exactly like the missing clause: no silent change of the score.
         assertThat(r.getPuntuacionRiesgo()).isEqualTo(analizar(aviso, "Documento Completo").getPuntuacionRiesgo());
         assertThat(evaluacion(aviso, null, "R05").estado()).isEqualTo(POSIBLE_INCIDENCIA);
@@ -315,7 +315,7 @@ class MotorContextualTest {
         String json = mapper.writeValueAsString(nuevo);
         assertThat(json).contains("\"evaluaciones\"", "\"estado\":\"INSUFICIENTE\"");
         assertThat(mapper.readValue(json, ResultadoAuditoria.class)).isEqualTo(nuevo);
-        assertThat(motor.version()).isEqualTo(new VersionAnalizador("2", "2"));
-        assertThat(nuevo.getErrores()).allSatisfy(e -> assertThat(e.getVersion()).isEqualTo("2"));
+        assertThat(motor.version()).isEqualTo(new VersionAnalizador("2", "3"));
+        assertThat(nuevo.getErrores()).allSatisfy(e -> assertThat(e.getVersion()).isEqualTo("3"));
     }
 }

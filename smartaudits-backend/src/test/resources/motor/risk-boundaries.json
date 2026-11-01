@@ -16,27 +16,27 @@
   },
   {
     "score": 64,
-    "text": "Responsable del tratamiento. Finalidad. Base legal: ejecución del contrato. Derechos de acceso, rectificación, supresión y oposición. DPO: dpo@example.invalid. Transferencias internacionales. Contacto. Plazo de conservacion: cinco años. Destinatarios: proveedores. AEPD. Medidas de seguridad.",
+    "text": "Responsable del tratamiento. Finalidad. Base legal: ejecución del contrato. Derechos de acceso, rectificación, supresión y oposición. DPO: dpo@example.invalid. Transferencias internacionales. Contacto: info@example.invalid. Plazo de conservacion: cinco años. Destinatarios: proveedores. AEPD. Medidas de seguridad: copias de seguridad y control de acceso.",
     "riskLabel": "RIESGO ALTO"
   },
   {
     "score": 65,
-    "text": "Contacto. DPO: dpo@example.invalid. Plazo de conservacion: cinco años. Destinatarios: proveedores. Transferencias internacionales. Cookies. AEPD. Consentimiento. Categorias especiales. Medidas de seguridad. Aviso legal. Decisiones automatizadas. Brecha de seguridad. Newsletter.",
+    "text": "Contacto: info@example.invalid. DPO: dpo@example.invalid. Plazo de conservacion: cinco años. Destinatarios: proveedores. Transferencias internacionales. Usamos cookies técnicas y analíticas para medir las visitas, que duran un año, y puede rechazarlas desde el panel. AEPD. El consentimiento se presta marcando una casilla y puede retirarse en cualquier momento. Categorias especiales. Medidas de seguridad: copias de seguridad y control de acceso. Aviso legal. Decisiones automatizadas. Brecha de seguridad. Newsletter.",
     "riskLabel": "RIESGO MODERADO"
   },
   {
     "score": 84,
-    "text": "Contacto. DPO: dpo@example.invalid. Base legal: ejecución del contrato. Derechos de acceso, rectificación, supresión y oposición. Plazo de conservacion: cinco años. Destinatarios: proveedores. Transferencias internacionales. Cookies. AEPD. Consentimiento. Menores. Categorias especiales. Medidas de seguridad. Aviso legal. Decisiones automatizadas. Brecha de seguridad. Newsletter.",
+    "text": "Contacto: info@example.invalid. DPO: dpo@example.invalid. Base legal: ejecución del contrato. Derechos de acceso, rectificación, supresión y oposición. Plazo de conservacion: cinco años. Destinatarios: proveedores. Transferencias internacionales. Usamos cookies técnicas y analíticas para medir las visitas, que duran un año, y puede rechazarlas desde el panel. AEPD. El consentimiento se presta marcando una casilla y puede retirarse en cualquier momento. Menores. Categorias especiales. Medidas de seguridad: copias de seguridad y control de acceso. Aviso legal. Decisiones automatizadas. Brecha de seguridad. Newsletter.",
     "riskLabel": "RIESGO MODERADO"
   },
   {
     "score": 85,
-    "text": "Contacto. DPO: dpo@example.invalid. Finalidad. Base legal: ejecución del contrato. Derechos de acceso, rectificación, supresión y oposición. Plazo de conservacion: cinco años. Destinatarios: proveedores. Transferencias internacionales. Cookies. AEPD. Consentimiento. Menores. Categorias especiales. Medidas de seguridad. Decisiones automatizadas. Brecha de seguridad. Newsletter.",
+    "text": "Contacto: info@example.invalid. DPO: dpo@example.invalid. Finalidad. Base legal: ejecución del contrato. Derechos de acceso, rectificación, supresión y oposición. Plazo de conservacion: cinco años. Destinatarios: proveedores. Transferencias internacionales. Usamos cookies técnicas y analíticas para medir las visitas, que duran un año, y puede rechazarlas desde el panel. AEPD. El consentimiento se presta marcando una casilla y puede retirarse en cualquier momento. Menores. Categorias especiales. Medidas de seguridad: copias de seguridad y control de acceso. Decisiones automatizadas. Brecha de seguridad. Newsletter.",
     "riskLabel": "BAJO RIESGO"
   },
   {
     "score": 100,
-    "text": "Responsable del tratamiento. Contacto. DPO: dpo@example.invalid. Finalidad. Base legal: ejecución del contrato. Derechos de acceso, rectificación, supresión y oposición. Plazo de conservacion: cinco años. Destinatarios: proveedores. Transferencias internacionales. Cookies. AEPD. Consentimiento. Menores. Categorias especiales. Medidas de seguridad. Aviso legal. Decisiones automatizadas. Brecha de seguridad. Newsletter.",
+    "text": "Responsable del tratamiento. Contacto: info@example.invalid. DPO: dpo@example.invalid. Finalidad. Base legal: ejecución del contrato. Derechos de acceso, rectificación, supresión y oposición. Plazo de conservacion: cinco años. Destinatarios: proveedores. Transferencias internacionales. Usamos cookies técnicas y analíticas para medir las visitas, que duran un año, y puede rechazarlas desde el panel. AEPD. El consentimiento se presta marcando una casilla y puede retirarse en cualquier momento. Menores. Categorias especiales. Medidas de seguridad: copias de seguridad y control de acceso. Aviso legal. Decisiones automatizadas. Brecha de seguridad. Newsletter.",
     "riskLabel": "BAJO RIESGO"
   }
 ]
