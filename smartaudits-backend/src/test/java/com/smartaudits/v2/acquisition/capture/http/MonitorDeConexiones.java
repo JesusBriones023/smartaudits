@@ -15,7 +15,7 @@ import java.util.concurrent.Callable;
  * (it observes, it does not sandbox). It needs a JDK where System.setSecurityManager still works
  * (Java 17, the project's runtime); otherwise the test is skipped, not passed.
  */
-final class MonitorDeConexiones extends SecurityManager {
+public final class MonitorDeConexiones extends SecurityManager {
 
     record Evento(String host, int puerto) {
         boolean esResolucion() {
@@ -26,7 +26,7 @@ final class MonitorDeConexiones extends SecurityManager {
     private final Thread vigilado = Thread.currentThread();
     private final List<Evento> eventos = Collections.synchronizedList(new ArrayList<>());
 
-    static <T> Observado<T> durante(Callable<T> accion) throws Exception {
+    public static <T> Observado<T> durante(Callable<T> accion) throws Exception {
         MonitorDeConexiones monitor = new MonitorDeConexiones();
         try {
             System.setSecurityManager(monitor);
@@ -48,7 +48,7 @@ final class MonitorDeConexiones extends SecurityManager {
         }
     }
 
-    record Observado<T>(T resultado, Throwable error, List<Evento> eventos) {
+    public record Observado<T>(T resultado, Throwable error, List<Evento> eventos) {
         List<Evento> resoluciones() {
             return eventos.stream().filter(Evento::esResolucion).toList();
         }
