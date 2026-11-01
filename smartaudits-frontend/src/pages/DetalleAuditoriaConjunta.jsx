@@ -2,7 +2,14 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import api from '../api/axios'
 import LoadingSpinner from '../components/LoadingSpinner'
-import { JOINT_FALLBACKS, JOINT_LABELS, buildJointReport, jointPdfFileName } from '../report/jointReportPresentation'
+import { COVERAGE_TEXTS, JOINT_FALLBACKS, JOINT_LABELS, buildJointReport, jointPdfFileName } from '../report/jointReportPresentation'
+
+// The state is always written out; colour only reinforces it.
+const ESTILO_ESTADO = {
+  DOCUMENTO_ANALIZADO: 'bg-green-100 text-green-800',
+  ENLACE_DETECTADO_NO_ANALIZADO: 'bg-amber-100 text-amber-800',
+  NO_VERIFICADO: 'bg-gray-100 text-gray-700',
+}
 
 // Informe conjunto. Pantalla y PDF muestran el mismo modelo (buildJointReport); no hay
 // puntuación global porque el motor solo la define por documento.
@@ -86,6 +93,64 @@ const DetalleAuditoriaConjunta = () => {
         {pdfError && <p role="alert" className="text-sm text-red-700 mt-2">{pdfError}</p>}
         <p className="text-sm text-gray-500 mt-2">{report.limitations[2]}</p>
       </div>
+
+      <section aria-labelledby="titulo-cobertura" className="card space-y-3">
+        <h2 id="titulo-cobertura" className="text-xl font-semibold text-gray-900">{JOINT_LABELS.coverage}</h2>
+        {!report.coverage ? (
+          <p className="text-sm text-gray-600" data-joint-field="coverageNote">{COVERAGE_TEXTS.unavailable}</p>
+        ) : (
+          <>
+            <p className="text-sm text-gray-600">{COVERAGE_TEXTS.intro}</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left align-top">
+                <thead>
+                  <tr className="border-b border-gray-300 text-gray-700">
+                    <th scope="col" className="py-2 pr-3">{JOINT_LABELS.coverageCategory}</th>
+                    <th scope="col" className="py-2 pr-3">{JOINT_LABELS.coverageState}</th>
+                    <th scope="col" className="py-2">{JOINT_LABELS.coverageDetail}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.coverage.rows.map(row => (
+                    <tr key={row.key} className="border-b border-gray-100 align-top" data-joint-coverage={row.key}>
+                      <th scope="row" className="py-2 pr-3 font-medium text-gray-900" data-joint-field="coverageCategory">{row.label}</th>
+                      <td className="py-2 pr-3">
+                        <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${ESTILO_ESTADO[row.state]}`}
+                          data-joint-field="coverageState">{row.stateLabel}</span>
+                      </td>
+                      <td className="py-2 space-y-1 text-gray-700">
+                        {row.documents.map((d, i) => (
+                          <div key={`d${i}`}>
+                            <p className="font-medium" data-joint-field="coverageDocument">{d.text}</p>
+                            {d.evidence.map((e, j) => (
+                              <p key={j} className="text-xs text-gray-500 break-all" data-joint-field="coverageEvidence">{e}</p>
+                            ))}
+                          </div>
+                        ))}
+                        {row.links.map((l, i) => (
+                          <div key={`l${i}`}>
+                            <p className="break-all" data-joint-field="coverageLink">{l.text}</p>
+                            <p className="text-xs text-gray-500" data-joint-field="coverageLinkSources">{l.sources}</p>
+                          </div>
+                        ))}
+                        {row.contradictions.map((c, i) => (
+                          <p key={`c${i}`} className="text-amber-800" data-joint-field="coverageContradiction">{c}</p>
+                        ))}
+                        {row.state === 'NO_VERIFICADO' && (
+                          <p className="text-gray-500" data-joint-field="coverageEmpty">{COVERAGE_TEXTS.notVerified}</p>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {report.coverage.notes.map((n, i) => (
+              <p key={i} className="text-sm text-amber-800" data-joint-field="coverageNote">{n}</p>
+            ))}
+          </>
+        )}
+      </section>
 
       <section aria-labelledby="titulo-documentos" className="space-y-4">
         <h2 id="titulo-documentos" className="text-xl font-semibold text-gray-900">Documentos analizados</h2>

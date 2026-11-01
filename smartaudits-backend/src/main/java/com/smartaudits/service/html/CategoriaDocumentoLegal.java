@@ -58,6 +58,18 @@ public enum CategoriaDocumentoLegal {
         return expresiones;
     }
 
+    public String etiqueta() {
+        return switch (this) {
+            case POLITICA_PRIVACIDAD -> "Política de Privacidad";
+            case POLITICA_COOKIES -> "Política de Cookies";
+            case AVISO_LEGAL -> "Aviso Legal";
+            case TERMINOS_CONDICIONES -> "Términos y Condiciones";
+            case CONDICIONES_USO -> "Condiciones de Uso";
+            case CONDICIONES_COMPRA -> "Condiciones de Compra";
+            case DECLARACION_ACCESIBILIDAD -> "Accesibilidad";
+        };
+    }
+
     List<String> expresionesRuta() {
         return expresionesRuta;
     }

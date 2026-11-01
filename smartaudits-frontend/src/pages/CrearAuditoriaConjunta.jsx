@@ -8,6 +8,7 @@ import { MAX_HTML_LENGTH } from './CrearAuditoria'
 export const MAX_DOCUMENTOS = 4
 export const CATEGORIAS_CONJUNTAS = [
   'Política de Privacidad', 'Aviso Legal', 'Política de Cookies', 'Términos y Condiciones', 'Condiciones de Uso',
+  'Condiciones de Compra', 'Accesibilidad',
 ]
 
 const documentoVacio = categoria => ({ titulo: '', tipoDocumento: categoria, html: '', urlOpcional: '' })

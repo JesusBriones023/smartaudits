@@ -38,7 +38,38 @@ export const informeVariosDocumentos = {
     { texto: 'Indicar plazos de conservación concretos', auditoriaIds: [101, 103], documentos: ['Política de Privacidad', 'Términos y Condiciones'] },
     { texto: 'Revisar la redacción de los derechos ARSOPL', auditoriaIds: [101], documentos: ['Política de Privacidad'] },
   ],
-  categoriasNoAportadas: ['Política de Cookies', 'Condiciones de Uso'],
+  categoriasNoAportadas: ['Política de Cookies', 'Condiciones de Uso', 'Condiciones de Compra', 'Accesibilidad'],
+  // Document 103 was stored before evidence was kept; 102 is declared «Aviso Legal» but reads as purchase conditions.
+  cobertura: {
+    categorias: [
+      { categoria: 'POLITICA_PRIVACIDAD', etiqueta: 'Política de Privacidad', estado: 'DOCUMENTO_ANALIZADO',
+        documentos: [{ auditoriaId: 101, titulo: 'Política de Privacidad', categoriaDeclarada: 'Política de Privacidad', historico: false,
+          evidencias: [{ categoria: 'POLITICA_PRIVACIDAD', origen: 'H1', evidencia: 'Política de privacidad — Tienda Ñandú' }] }],
+        enlaces: [], contradicciones: [] },
+      { categoria: 'POLITICA_COOKIES', etiqueta: 'Política de Cookies', estado: 'ENLACE_DETECTADO_NO_ANALIZADO', documentos: [],
+        enlaces: [{ url: 'https://www.ejemplo.es/cookies', relativa: false, origenes: [
+          { auditoriaId: 101, titulo: 'Política de Privacidad', texto: 'Cookies', contexto: 'footer', senal: 'texto' },
+          { auditoriaId: 102, titulo: 'Aviso Legal', texto: 'Política de cookies', contexto: 'nav', senal: 'texto' }] }],
+        contradicciones: [] },
+      { categoria: 'AVISO_LEGAL', etiqueta: 'Aviso Legal', estado: 'NO_VERIFICADO', documentos: [], enlaces: [],
+        contradicciones: [{ auditoriaId: 102, titulo: 'Aviso Legal', identificadas: ['Condiciones de Compra'] }] },
+      { categoria: 'TERMINOS_CONDICIONES', etiqueta: 'Términos y Condiciones', estado: 'DOCUMENTO_ANALIZADO',
+        documentos: [{ auditoriaId: 103, titulo: 'Términos y Condiciones', categoriaDeclarada: 'Términos y Condiciones', historico: true,
+          evidencias: [{ categoria: 'TERMINOS_CONDICIONES', origen: 'Categoría declarada (auditoría anterior sin evidencias conservadas)', evidencia: 'Términos y Condiciones' }] }],
+        enlaces: [], contradicciones: [] },
+      { categoria: 'CONDICIONES_USO', etiqueta: 'Condiciones de Uso', estado: 'NO_VERIFICADO', documentos: [], enlaces: [], contradicciones: [] },
+      { categoria: 'CONDICIONES_COMPRA', etiqueta: 'Condiciones de Compra', estado: 'DOCUMENTO_ANALIZADO',
+        documentos: [{ auditoriaId: 102, titulo: 'Aviso Legal', categoriaDeclarada: 'Aviso Legal', historico: false,
+          evidencias: [{ categoria: 'CONDICIONES_COMPRA', origen: 'H1', evidencia: 'Condiciones generales de contratación' }] }],
+        enlaces: [], contradicciones: [] },
+      { categoria: 'DECLARACION_ACCESIBILIDAD', etiqueta: 'Accesibilidad', estado: 'ENLACE_DETECTADO_NO_ANALIZADO', documentos: [],
+        enlaces: [{ url: '/accesibilidad', relativa: true, origenes: [
+          { auditoriaId: 102, titulo: 'Aviso Legal', texto: 'Accesibilidad', contexto: 'footer', senal: 'texto' }] }],
+        contradicciones: [] },
+    ],
+    sinEvidencias: [{ auditoriaId: 103, titulo: 'Términos y Condiciones' }],
+    enlacesLimitados: [{ auditoriaId: 102, titulo: 'Aviso Legal' }],
+  },
 }
 
 export const informePocosHallazgos = {

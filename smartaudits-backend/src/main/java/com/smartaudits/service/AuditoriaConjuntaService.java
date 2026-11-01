@@ -9,6 +9,7 @@ import com.smartaudits.model.dto.AuditoriaResponse;
 import com.smartaudits.model.dto.PaginaResponse;
 import com.smartaudits.model.dto.ResultadoAuditoria;
 import com.smartaudits.repository.AuditoriaConjuntaRepository;
+import com.smartaudits.service.html.CoberturaDocumental;
 import com.smartaudits.service.html.ContenidoHtmlInvalidoException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -39,7 +40,8 @@ public class AuditoriaConjuntaService {
 
     /** Categorías que puede cubrir una auditoría conjunta («Documento Completo» no aplica). */
     public static final List<String> CATEGORIAS = List.of(
-            "Política de Privacidad", "Aviso Legal", "Política de Cookies", "Términos y Condiciones", "Condiciones de Uso");
+            "Política de Privacidad", "Aviso Legal", "Política de Cookies", "Términos y Condiciones", "Condiciones de Uso",
+            "Condiciones de Compra", "Accesibilidad");
 
     private final AuditoriaService auditoriaService;
     private final AuditoriaConjuntaRepository conjuntas;
@@ -77,7 +79,8 @@ public class AuditoriaConjuntaService {
         for (int i = 0; i < documentos.size(); i++) {
             AuditoriaConjuntaRequest.Documento d = documentos.get(i);
             creadas.add(auditoriaService.crearAuditoriaAnalizada(d.getTitulo(), d.getTipoDocumento(), textos.get(i),
-                    d.getUrlOpcional(), TipoFuente.MANUAL, usuario, ipAcceso));
+                    d.getUrlOpcional(), TipoFuente.MANUAL, usuario, ipAcceso,
+                    CoberturaDocumental.clasificar(d.getHtml(), d.getUrlOpcional(), d.getTipoDocumento())));
         }
         AuditoriaConjunta conjunta = new AuditoriaConjunta();
         conjunta.setUsuario(usuario);
@@ -169,6 +172,7 @@ public class AuditoriaConjuntaService {
         auditorias.forEach(a -> aportadas.add(a.getTipoDocumento()));
         List<String> noAportadas = CATEGORIAS.stream().filter(c -> !aportadas.contains(c)).toList();
         return new AuditoriaConjuntaResponse(conjunta.getId(), conjunta.getTitulo(), conjunta.getFechaCreacion(),
-                conjunta.getUsuario().getId(), documentos.size(), documentos, recomendaciones, noAportadas);
+                conjunta.getUsuario().getId(), documentos.size(), documentos, recomendaciones, noAportadas,
+                CoberturaDocumental.resumir(auditorias));
     }
 }

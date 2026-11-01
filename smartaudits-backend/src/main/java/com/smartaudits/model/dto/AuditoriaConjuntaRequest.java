@@ -36,7 +36,7 @@ public class AuditoriaConjuntaRequest {
 
         @NotBlank(message = "La categoría legal es obligatoria")
         @Pattern(
-                regexp = "Política de Privacidad|Aviso Legal|Política de Cookies|Términos y Condiciones|Condiciones de Uso",
+                regexp = "Política de Privacidad|Aviso Legal|Política de Cookies|Términos y Condiciones|Condiciones de Uso|Condiciones de Compra|Accesibilidad",
                 message = "La categoría legal no es válida"
         )
         private String tipoDocumento;

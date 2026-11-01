@@ -7,7 +7,7 @@ import api from '../api/axios'
 import DetalleAuditoriaConjunta from '../pages/DetalleAuditoriaConjunta'
 import AuditoriaConjuntaPdfDocument, { textoPdf } from '../pdf/AuditoriaConjuntaPdfDocument'
 import { buildJointReport, jointPdfFileName } from '../report/jointReportPresentation'
-import { informeVariosDocumentos as informe, payloadHostil } from './fixtures/jointReportFixtures'
+import { informePocosHallazgos, informeVariosDocumentos as informe, payloadHostil } from './fixtures/jointReportFixtures'
 
 vi.mock('../api/axios', () => ({ default: { get: vi.fn(), post: vi.fn() } }))
 // Real PDF document; only the binary rendering boundary is replaced here.
@@ -42,6 +42,8 @@ const nodes = (tree, attr) => tree.flatMap(n => typeof n === 'string' ? [] : [
 const textOf = tree => tree.map(n => typeof n === 'string' ? n : textOf(n.children)).join('')
 const FIELDS = ['category', 'url', 'score', 'classification', 'engine', 'summary', 'risk']
 const FINDING_FIELDS = ['findingTitle', 'severity', 'description', 'evidence', 'impact', 'action']
+const COVERAGE_FIELDS = ['coverageCategory', 'coverageState', 'coverageDocument', 'coverageEvidence', 'coverageLink',
+  'coverageLinkSources', 'coverageContradiction', 'coverageEmpty']
 
 function pdfModel(tree) {
   const fieldsIn = (scope, name) => nodes(scope, 'data-joint-field').filter(n => n.props['data-joint-field'] === name).map(n => textOf(n.children))
@@ -52,6 +54,9 @@ function pdfModel(tree) {
     })),
     recommendations: nodes(tree, 'data-joint-recommendation').map(r => [fieldsIn(r.children, 'recommendation')[0], fieldsIn(r.children, 'appliesTo')[0]]),
     missing: fieldsIn(tree, 'missing'),
+    coverage: nodes(tree, 'data-joint-coverage').map(row => [row.props['data-joint-coverage'],
+      ...COVERAGE_FIELDS.map(f => fieldsIn(row.children, f))]),
+    coverageNotes: fieldsIn(tree, 'coverageNote'),
     limitations: fieldsIn(tree, 'limitation'),
   }
 }
@@ -65,6 +70,9 @@ function screenModel(container) {
     })),
     recommendations: [...container.querySelectorAll('[data-joint-recommendation]')].map(r => [fieldsIn(r, 'recommendation')[0], fieldsIn(r, 'appliesTo')[0]]),
     missing: fieldsIn(container, 'missing'),
+    coverage: [...container.querySelectorAll('[data-joint-coverage]')].map(row => [row.dataset.jointCoverage,
+      ...COVERAGE_FIELDS.map(f => fieldsIn(row, f))]),
+    coverageNotes: fieldsIn(container, 'coverageNote'),
     limitations: fieldsIn(container, 'limitation'),
   }
 }
@@ -121,18 +129,53 @@ describe('joint audit PDF download', () => {
     expect(fromPdf.recommendations).toEqual(informe.recomendaciones.map(r => [r.texto, r.documentos.join(', ')]))
     expect(fromPdf.missing).toEqual(informe.categoriasNoAportadas)
     expect(fromPdf.limitations).toEqual(buildJointReport(informe).limitations)
+
+    // The coverage matrix: the seven persisted rows, their states and every evidence, link and contradiction.
+    expect(fromPdf.coverage.map(r => r[0])).toEqual(informe.cobertura.categorias.map(f => f.categoria))
+    expect(fromPdf.coverage.map(r => r[1][0])).toEqual(informe.cobertura.categorias.map(f => textoPdf(f.etiqueta)))
+    expect(fromPdf.coverage.map(r => r[2][0])).toEqual(['Documento analizado', 'Enlace detectado, no analizado', 'No verificado',
+      'Documento analizado', 'No verificado', 'Documento analizado', 'Enlace detectado, no analizado'])
+    const column = field => fromPdf.coverage.flatMap(r => r[1 + COVERAGE_FIELDS.indexOf(field)])
+    expect(column('coverageDocument')).toEqual(['«Política de Privacidad»', '«Términos y Condiciones» · sin evidencias conservadas',
+      '«Aviso Legal» (aportado como Aviso Legal)'])
+    expect(column('coverageEvidence')).toContain('H1: Política de privacidad - Tienda Ñandú')
+    expect(column('coverageLink')).toEqual(['https://www.ejemplo.es/cookies', '/accesibilidad (ruta relativa, sin URL de referencia)'])
+    expect(column('coverageLinkSources')[0]).toBe('Enlazado desde «Política de Privacidad» (pie de página), «Aviso Legal» (navegación)')
+    expect(column('coverageContradiction')).toEqual(['«Aviso Legal» se aportó como esta categoría, pero su contenido corresponde a: Condiciones de Compra'])
+    expect(column('coverageEmpty')).toHaveLength(2)
+    expect(fromPdf.coverageNotes).toHaveLength(2)
+    expect(fromPdf.coverageNotes[0]).toContain('«Términos y Condiciones»')
+    expect(fromPdf.coverageNotes[1]).toContain('«Aviso Legal»')
+  })
+
+  it('states on screen and in the PDF that a report without a matrix has none', async () => {
+    const { container } = await showReport(informePocosHallazgos)
+    const fromScreen = screenModel(container)
+    const fromPdf = pdfModel(pdfTree(<AuditoriaConjuntaPdfDocument informe={informePocosHallazgos} />))
+    expect(fromPdf).toEqual(fromScreen)
+    expect(fromPdf.coverage).toEqual([])
+    expect(fromPdf.coverageNotes).toEqual(['Este informe no incluye la matriz de cobertura documental.'])
   })
 
   it('renders hostile persisted text as text on screen and in the PDF tree', async () => {
     const execute = vi.fn()
     vi.stubGlobal('testXss', execute)
+    const fila = informe.cobertura.categorias[1]
     const hostil = { ...informe, titulo: payloadHostil,
-      documentos: [{ ...informe.documentos[1], resumen: payloadHostil }] }
+      documentos: [{ ...informe.documentos[1], resumen: payloadHostil }],
+      cobertura: { ...informe.cobertura, categorias: [{ ...fila,
+        enlaces: [{ url: 'https://www.ejemplo.es/' + payloadHostil, relativa: false,
+          origenes: [{ ...fila.enlaces[0].origenes[0], titulo: payloadHostil }] }] }] } }
     const { container } = await showReport(hostil)
     expect(container.querySelector('img, script, [onerror]')).toBeNull()
     expect(screen.getByText(payloadHostil, { selector: '[data-joint-field="summary"]' })).toBeVisible()
+    // Detected URLs are shown as text, never as something the browser could follow.
+    const enlace = container.querySelector('[data-joint-field="coverageLink"]')
+    expect(enlace.textContent).toBe('https://www.ejemplo.es/' + payloadHostil)
+    expect(container.querySelector('[data-joint-coverage] a')).toBeNull()
     const tree = pdfTree(<AuditoriaConjuntaPdfDocument informe={hostil} />)
     expect(textOf(tree)).toContain(payloadHostil)
+    expect(textOf(tree)).toContain('Enlazado desde «' + payloadHostil + '»')
     expect(execute).not.toHaveBeenCalled()
   })
 })

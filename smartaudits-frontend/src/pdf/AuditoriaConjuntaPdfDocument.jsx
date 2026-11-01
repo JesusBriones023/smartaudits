@@ -1,5 +1,5 @@
 import { Document, Page, StyleSheet, Text, View } from '@react-pdf/renderer'
-import { JOINT_FALLBACKS, JOINT_LABELS, buildJointReport } from '../report/jointReportPresentation'
+import { COVERAGE_TEXTS, JOINT_FALLBACKS, JOINT_LABELS, buildJointReport } from '../report/jointReportPresentation'
 
 // A4 report of a joint audit. Only built-in Helvetica (no external fonts or images);
 // user text is always a <Text> string, never markup.
@@ -20,6 +20,12 @@ const styles = StyleSheet.create({
   colScore: { width: '14%' },
   colLevel: { width: '16%' },
   colFindings: { width: '10%', textAlign: 'right' },
+  colCovCat: { width: '24%', paddingRight: 4 },
+  colCovState: { width: '22%', paddingRight: 4 },
+  colCovDetail: { width: '54%' },
+  state_DOCUMENTO_ANALIZADO: { color: '#166534' },
+  state_ENLACE_DETECTADO_NO_ANALIZADO: { color: '#92400E' },
+  state_NO_VERIFICADO: { color: '#4B5563' },
   meta: { marginBottom: 1 },
   label: { fontFamily: 'Helvetica-Bold' },
   item: { marginLeft: 8, marginBottom: 2 },
@@ -121,6 +127,48 @@ const AuditoriaConjuntaPdfDocument = ({ informe }) => {
             <Text style={styles.colFindings}>{d.findings.length}</Text>
           </View>
         ))}
+      </Page>
+
+      <Page size="A4" style={styles.page}>
+        <Marco date={report.date} />
+        <Text style={styles.h2}>{JOINT_LABELS.coverage}</Text>
+        {!report.coverage ? (
+          <T data-joint-field="coverageNote">{COVERAGE_TEXTS.unavailable}</T>
+        ) : (
+          <>
+            <T style={styles.muted}>{COVERAGE_TEXTS.intro}</T>
+            <View style={[styles.headRow, { marginTop: 6 }]}>
+              <Text style={styles.colCovCat}>{JOINT_LABELS.coverageCategory}</Text>
+              <Text style={styles.colCovState}>{JOINT_LABELS.coverageState}</Text>
+              <Text style={styles.colCovDetail}>{JOINT_LABELS.coverageDetail}</Text>
+            </View>
+            {report.coverage.rows.map(row => (
+              <View key={row.key} style={styles.row} data-joint-coverage={row.key}>
+                <T style={[styles.colCovCat, styles.label]} data-joint-field="coverageCategory">{row.label}</T>
+                <T style={[styles.colCovState, styles[`state_${row.state}`]]} data-joint-field="coverageState">{row.stateLabel}</T>
+                <View style={styles.colCovDetail}>
+                  {row.documents.map((d, i) => (
+                    <View key={`d${i}`}>
+                      <T style={styles.label} data-joint-field="coverageDocument">{d.text}</T>
+                      {d.evidence.map((e, j) => <T key={j} style={styles.muted} data-joint-field="coverageEvidence">{e}</T>)}
+                    </View>
+                  ))}
+                  {row.links.map((l, i) => (
+                    <View key={`l${i}`}>
+                      <T data-joint-field="coverageLink">{l.text}</T>
+                      <T style={styles.muted} data-joint-field="coverageLinkSources">{l.sources}</T>
+                    </View>
+                  ))}
+                  {row.contradictions.map((c, i) => <T key={`c${i}`} data-joint-field="coverageContradiction">{c}</T>)}
+                  {row.state === 'NO_VERIFICADO' && <T style={styles.muted} data-joint-field="coverageEmpty">{COVERAGE_TEXTS.notVerified}</T>}
+                </View>
+              </View>
+            ))}
+            {report.coverage.notes.map((n, i) => (
+              <View key={i} style={styles.notice}><T data-joint-field="coverageNote">{n}</T></View>
+            ))}
+          </>
+        )}
       </Page>
 
       {report.documents.map((d, index) => (

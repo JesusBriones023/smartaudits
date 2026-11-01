@@ -129,7 +129,7 @@ class AuditoriaConjuntaEndpointTest {
                 .getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
 
         assertThat(fieldNames(created)).containsExactlyInAnyOrder("id", "titulo", "fechaCreacion", "usuarioId",
-                "documentosAnalizados", "documentos", "recomendaciones", "categoriasNoAportadas");
+                "documentosAnalizados", "documentos", "recomendaciones", "categoriasNoAportadas", "cobertura");
         assertThat(created.has("puntuacionGlobal")).isFalse();
         assertThat(created.path("documentosAnalizados").intValue()).isEqualTo(2);
         assertThat(created.path("documentos").get(0).path("auditoriaId").longValue()).isEqualTo(101L);
@@ -138,11 +138,32 @@ class AuditoriaConjuntaEndpointTest {
         assertThat(created.path("recomendaciones")).hasSize(1);
         assertThat(created.path("recomendaciones").get(0).path("documentos").toString()).isEqualTo("[\"Privacidad\",\"Cookies\"]");
         assertThat(created.path("categoriasNoAportadas").toString())
-                .isEqualTo("[\"Aviso Legal\",\"Términos y Condiciones\",\"Condiciones de Uso\"]");
+                .isEqualTo("[\"Aviso Legal\",\"Términos y Condiciones\",\"Condiciones de Uso\",\"Condiciones de Compra\",\"Accesibilidad\"]");
+        // The mocked analyser returns one shared result: each document must still keep its own coverage.
+        JsonNode filas = created.path("cobertura").path("categorias");
+        assertThat(filas).hasSize(7);
+        assertThat(filas.findValuesAsText("estado")).containsExactly("DOCUMENTO_ANALIZADO", "DOCUMENTO_ANALIZADO",
+                "NO_VERIFICADO", "NO_VERIFICADO", "NO_VERIFICADO", "NO_VERIFICADO", "NO_VERIFICADO");
+        assertThat(filas.get(0).path("documentos").get(0).path("evidencias").get(0).path("origen").asText()).isEqualTo("H1");
+        assertThat(created.path("cobertura").path("sinEvidencias")).isEmpty();
         verify(motor, times(2)).analyze(any());
         verify(auditQuotaService).verificarPuedeCrear(any(Usuario.class), eq(2));
         verify(history, times(2)).registrarCreacion(any(), any(), any());
         assertThat(saved).allSatisfy(a -> assertThat(a.getTextoOriginal()).doesNotContain("<"));
+    }
+
+    @Test
+    void purchaseConditionsAndAccessibilityCanBeSuppliedAsDocuments() throws Exception {
+        JsonNode created = mapper.readTree(mvc.perform(post("/auditorias-conjuntas")
+                        .header("Authorization", bearer(1000L, Role.CLIENTE)).contentType("application/json")
+                        .content(body(List.of(doc("Condiciones de compra", "Condiciones de Compra"),
+                                doc("Declaración de accesibilidad", "Accesibilidad")))))
+                .andExpect(status().isCreated()).andReturn().getResponse()
+                .getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
+
+        assertThat(created.path("categoriasNoAportadas").toString()).doesNotContain("Compra", "Accesibilidad");
+        assertThat(created.path("cobertura").path("categorias").findValuesAsText("estado")).containsExactly("NO_VERIFICADO",
+                "NO_VERIFICADO", "NO_VERIFICADO", "NO_VERIFICADO", "NO_VERIFICADO", "DOCUMENTO_ANALIZADO", "DOCUMENTO_ANALIZADO");
     }
 
     @Test
@@ -234,6 +255,13 @@ class AuditoriaConjuntaEndpointTest {
             assertThat(report.path("titulo").asText()).isEqualTo("Web persistida");
             assertThat(report.path("documentos").get(0).path("riesgos").toString()).isEqualTo("[\"Conservación indefinida\"]");
             assertThat(report.path("documentos").get(0).path("resumen").asText()).isEqualTo("Resumen persistido");
+            // Stored before coverage existed: declared category only, flagged, links unknown.
+            assertThat(report.path("cobertura").path("sinEvidencias").get(0).path("auditoriaId").longValue()).isEqualTo(101L);
+            JsonNode privacidad = report.path("cobertura").path("categorias").get(0);
+            assertThat(privacidad.path("estado").asText()).isEqualTo("DOCUMENTO_ANALIZADO");
+            assertThat(privacidad.path("documentos").get(0).path("historico").booleanValue()).isTrue();
+            assertThat(report.path("cobertura").path("categorias").findValuesAsText("estado"))
+                    .filteredOn("ENLACE_DETECTADO_NO_ANALIZADO"::equals).isEmpty();
         }
         verify(history, times(2)).registrarDescarga(any(), any(), any());
         verify(history, never()).registrarConsulta(any(), any(), any());

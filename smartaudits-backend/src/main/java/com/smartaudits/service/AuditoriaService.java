@@ -8,6 +8,7 @@ import com.smartaudits.model.TipoFuente;
 import com.smartaudits.model.dto.AuditoriaHtmlRequest;
 import com.smartaudits.model.dto.AuditoriaRequest;
 import com.smartaudits.model.dto.AuditoriaResponse;
+import com.smartaudits.model.dto.CoberturaDocumento;
 import com.smartaudits.model.dto.ResultadoAuditoria;
 import com.smartaudits.repository.AuditoriaRepository;
 import com.smartaudits.service.html.ContenidoHtmlInvalidoException;
@@ -24,12 +25,16 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 
 @Service
 @RequiredArgsConstructor
 public class AuditoriaService {
+
+    /** resultado_json is a MariaDB TEXT column. */
+    static final int MAX_RESULTADO_JSON_BYTES = 65_535;
 
     private final AuditoriaRepository auditoriaRepository;
     private final AnalizadorLegal analizadorLegal;
@@ -76,12 +81,21 @@ public class AuditoriaService {
     @Transactional
     public AuditoriaResponse crearAuditoriaAnalizada(String titulo, String tipoDocumento, String texto, String urlOpcional,
                                                      TipoFuente fuente, Usuario usuario, String ipAcceso) {
+        return crearAuditoriaAnalizada(titulo, tipoDocumento, texto, urlOpcional, fuente, usuario, ipAcceso, null);
+    }
+
+    @Transactional
+    public AuditoriaResponse crearAuditoriaAnalizada(String titulo, String tipoDocumento, String texto, String urlOpcional,
+            TipoFuente fuente, Usuario usuario, String ipAcceso, CoberturaDocumento cobertura) {
 
         auditQuotaService.verificarPuedeCrear(usuario);
         // 1. Analizar texto con motor propio
         var version = analizadorLegal.version();
         LocalDateTime fechaAnalisis = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
         ResultadoAuditoria resultadoDto = analizadorLegal.analyze(new EntradaAnalisis(texto, tipoDocumento));
+        if (cobertura != null) {
+            resultadoDto = resultadoDto.conCobertura(cobertura);
+        }
 
         // 2. Crear entidad Auditoria
         Auditoria auditoria = new Auditoria();
@@ -97,11 +111,17 @@ public class AuditoriaService {
         auditoria.setUsuario(usuario);
 
         // 3. Serializar JSON para el frontend
-        try {
-            auditoria.setResultadoJson(objectMapper.writeValueAsString(resultadoDto));
-        } catch (Exception e) {
-            throw new RuntimeException("Error al serializar resultado", e);
+        String resultadoJson = serializar(resultadoDto);
+        // Coverage metadata must never push the stored result past the column: links are dropped
+        // first (the document is then flagged as having a limited link list).
+        while (resultadoDto.getCoberturaDocumento() != null
+                && resultadoJson.getBytes(StandardCharsets.UTF_8).length > MAX_RESULTADO_JSON_BYTES
+                && !resultadoDto.getCoberturaDocumento().enlaces().detectados().isEmpty()) {
+            var actual = resultadoDto.getCoberturaDocumento();
+            resultadoDto.setCoberturaDocumento(actual.conEnlaces(actual.enlaces().detectados().size() / 2));
+            resultadoJson = serializar(resultadoDto);
         }
+        auditoria.setResultadoJson(resultadoJson);
 
         // 4. Guardar auditoría (necesaria antes de las FK de las tablas hijas)
         auditoria = auditoriaRepository.save(auditoria);
@@ -226,6 +246,14 @@ private Pageable crearPageable(int page, int size) {
      */
     public AuditoriaResponse leerAuditoriaAutorizada(Long id, Long usuarioId, boolean isAdmin) {
         return respuestaCompleta(obtenerAuditoriaAutorizada(id, usuarioId, isAdmin));
+    }
+
+    private String serializar(ResultadoAuditoria resultado) {
+        try {
+            return objectMapper.writeValueAsString(resultado);
+        } catch (Exception e) {
+            throw new RuntimeException("Error al serializar resultado", e);
+        }
     }
 
     private AuditoriaResponse respuestaCompleta(Auditoria auditoria) {

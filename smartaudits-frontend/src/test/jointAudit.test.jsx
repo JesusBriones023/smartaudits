@@ -7,6 +7,8 @@ import { AuthProvider } from '../context/AuthContext'
 import CrearAuditoriaConjunta, { MAX_DOCUMENTOS } from '../pages/CrearAuditoriaConjunta'
 import DetalleAuditoriaConjunta from '../pages/DetalleAuditoriaConjunta'
 import HistorialConjuntas from '../pages/HistorialConjuntas'
+import { buildCoverage } from '../report/jointReportPresentation'
+import { informeVariosDocumentos } from './fixtures/jointReportFixtures'
 
 // HTTP boundary only: components and router stay real.
 vi.mock('../api/axios', () => ({ default: { get: vi.fn(), post: vi.fn() } }))
@@ -148,6 +150,52 @@ describe('joint audit report', () => {
     for (const categoria of informe.categoriasNoAportadas) {
       expect(within(noAportados).getByText(categoria)).toBeVisible()
     }
+  })
+
+  it('shows the coverage matrix of the seven categories without claiming more than each state means', async () => {
+    api.get.mockResolvedValue({ data: informeVariosDocumentos })
+    showReport()
+    const matriz = await screen.findByRole('region', { name: 'Cobertura documental' })
+    const filas = within(matriz).getAllByRole('row').slice(1)
+    expect(filas.map(f => within(f).getByRole('rowheader').textContent)).toEqual(['Política de Privacidad',
+      'Política de Cookies', 'Aviso Legal', 'Términos y Condiciones', 'Condiciones de Uso', 'Condiciones de Compra', 'Accesibilidad'])
+    expect(within(filas[0]).getByText('Documento analizado')).toBeVisible()
+    expect(within(filas[0]).getByText('H1: Política de privacidad — Tienda Ñandú')).toBeVisible()
+    // Links are only candidates: their content is not analysed and they are not clickable.
+    expect(within(filas[1]).getByText('Enlace detectado, no analizado')).toBeVisible()
+    expect(within(filas[1]).getByText('https://www.ejemplo.es/cookies')).toBeVisible()
+    expect(within(filas[1]).queryByRole('link')).toBeNull()
+    // Declared «Aviso Legal» but its content is purchase conditions: reported, not counted.
+    expect(within(filas[2]).getByText('No verificado')).toBeVisible()
+    expect(within(filas[2]).getByText(/se aportó como esta categoría, pero su contenido corresponde a: Condiciones de Compra/)).toBeVisible()
+    expect(within(filas[3]).getByText('«Términos y Condiciones» · sin evidencias conservadas')).toBeVisible()
+    expect(within(filas[4]).getByText('Ningún documento aportado pertenece a esta categoría ni enlaza a ella.')).toBeVisible()
+    expect(within(filas[5]).getByText('«Aviso Legal» (aportado como Aviso Legal)')).toBeVisible()
+    expect(within(filas[6]).getByText('/accesibilidad (ruta relativa, sin URL de referencia)')).toBeVisible()
+    expect(within(matriz).getByText(/una categoría no verificada no demuestra que la web no la publique/)).toBeVisible()
+    expect(within(matriz).getByText(/antes de que se conservaran evidencias.*«Términos y Condiciones»/)).toBeVisible()
+    expect(within(matriz).getByText(/se recortó.*«Aviso Legal»/)).toBeVisible()
+    expect(matriz.textContent).not.toMatch(/cumple|global|\d+\/100/i)
+  })
+
+  it('says so when a report has no coverage matrix', async () => {
+    api.get.mockResolvedValue({ data: informe })
+    showReport()
+    const matriz = await screen.findByRole('region', { name: 'Cobertura documental' })
+    expect(within(matriz).getByText('Este informe no incluye la matriz de cobertura documental.')).toBeVisible()
+    expect(within(matriz).queryByRole('table')).toBeNull()
+  })
+
+  it('keeps unknown coverage values on the safe side', () => {
+    const coverage = buildCoverage({ categorias: [{ categoria: 'POLITICA_PRIVACIDAD', etiqueta: 'Política de Privacidad',
+      estado: 'CUMPLE', documentos: null, enlaces: [{ url: '/p', relativa: true, origenes: [{ titulo: 'A', contexto: 'otro' }] }],
+      contradicciones: [{ titulo: 'B', identificadas: [] }] }] })
+    expect(coverage.rows[0]).toMatchObject({ state: 'NO_VERIFICADO', stateLabel: 'No verificado', documents: [] })
+    expect(coverage.rows[0].links[0].sources).toBe('Enlazado desde «A» (otro)')
+    expect(coverage.rows[0].contradictions[0]).toMatch(/ninguna categoría reconocible$/)
+    expect(coverage.notes).toEqual([])
+    expect(buildCoverage(undefined)).toBeNull()
+    expect(buildCoverage({ categorias: 'x' })).toBeNull()
   })
 
   it('renders hostile titles as text', async () => {

@@ -8,10 +8,14 @@ import com.smartaudits.model.Usuario;
 import com.smartaudits.model.dto.AuditoriaConjuntaRequest;
 import com.smartaudits.model.dto.AuditoriaConjuntaResponse;
 import com.smartaudits.model.dto.AuditoriaRequest;
+import com.smartaudits.model.dto.CoberturaDocumento;
+import com.smartaudits.model.dto.DeteccionEnlacesResponse;
 import com.smartaudits.model.dto.ResultadoAuditoria;
 import com.smartaudits.repository.AuditoriaConjuntaRepository;
 import com.smartaudits.repository.AuditoriaRepository;
 import com.smartaudits.repository.UsuarioRepository;
+import com.smartaudits.service.html.CategoriaDocumentoLegal;
+import com.smartaudits.service.html.CoberturaDocumental;
 import com.smartaudits.service.html.ContenidoHtmlInvalidoException;
 import com.smartaudits.service.html.ExtractorTextoHtml;
 import com.smartaudits.service.motor.AnalizadorLegal;
@@ -27,12 +31,19 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 /** Varios HTML → motor real por documento → auditorías + grupo persistidos → informe conjunto. */
 @DataJpaTest(showSql = false, properties = {
@@ -101,7 +112,8 @@ class AuditoriaConjuntaIntegrationTest {
         entityManager.clear();
 
         assertThat(created.documentosAnalizados()).isEqualTo(3);
-        assertThat(created.categoriasNoAportadas()).containsExactly("Términos y Condiciones", "Condiciones de Uso");
+        assertThat(created.categoriasNoAportadas()).containsExactly("Términos y Condiciones", "Condiciones de Uso",
+                "Condiciones de Compra", "Accesibilidad");
         ExtractorTextoHtml extractor = new ExtractorTextoHtml();
         for (int i = 0; i < 3; i++) {
             var input = request.getDocumentos().get(i);
@@ -170,6 +182,121 @@ class AuditoriaConjuntaIntegrationTest {
         return String.join("|", a.getTitulo(), a.getTipoDocumento(), a.getTextoOriginal(), a.getResultadoJson(),
                 String.valueOf(a.getPuntuacionRiesgo()), String.valueOf(a.getFechaCreacion()), a.getEstado(),
                 String.valueOf(a.getIncidencias().size()));
+    }
+
+    @Test
+    void theCoverageMatrixIsStoredWithEachResultAndReadBackUnchanged() throws Exception {
+        Usuario owner = user("coverage@example.invalid", Role.CLIENTE);
+        Usuario admin = user("coverage-admin@example.invalid", Role.ADMIN);
+        Usuario other = user("coverage-other@example.invalid", Role.CLIENTE);
+        String pie = "<footer><a href='/accesibilidad#inicio'>Accesibilidad</a><a href='javascript:alert(1)'>Aviso legal</a>"
+                + "<a href='https://example.invalid/condiciones-de-compra'>Condiciones de compra</a></footer>";
+        var created = service.crear(request("Web cobertura", doc("Privacidad", "Política de Privacidad", PRIVACIDAD + pie),
+                doc("Accesibilidad declarada", "Accesibilidad", "<h1>Declaración de accesibilidad</h1><p>Nivel AA.</p>" + pie),
+                doc("Compra", "Condiciones de Compra", "<h1>Política de cookies</h1><p>Texto.</p>")), owner, "192.0.2.61");
+        entityManager.flush();
+        entityManager.clear();
+
+        var m = created.cobertura();
+        assertThat(m.categorias()).extracting(f -> f.categoria(), f -> f.estado().name()).containsExactly(
+                tuple(CategoriaDocumentoLegal.POLITICA_PRIVACIDAD, "DOCUMENTO_ANALIZADO"),
+                tuple(CategoriaDocumentoLegal.POLITICA_COOKIES, "DOCUMENTO_ANALIZADO"),
+                tuple(CategoriaDocumentoLegal.AVISO_LEGAL, "NO_VERIFICADO"),
+                tuple(CategoriaDocumentoLegal.TERMINOS_CONDICIONES, "NO_VERIFICADO"),
+                tuple(CategoriaDocumentoLegal.CONDICIONES_USO, "NO_VERIFICADO"),
+                tuple(CategoriaDocumentoLegal.CONDICIONES_COMPRA, "ENLACE_DETECTADO_NO_ANALIZADO"),
+                tuple(CategoriaDocumentoLegal.DECLARACION_ACCESIBILIDAD, "DOCUMENTO_ANALIZADO"));
+        // "Compra" was declared as purchase conditions but is a cookie policy: reported, not counted.
+        var compra = m.categorias().get(5);
+        assertThat(compra.contradicciones()).extracting(c -> c.titulo()).containsExactly("Compra");
+        assertThat(compra.enlaces()).singleElement().satisfies(e -> assertThat(e.origenes())
+                .extracting(o -> o.titulo()).containsExactly("Privacidad", "Accesibilidad declarada"));
+        // Relative links were resolved only against each document's own reference URL; fragments dropped.
+        assertThat(m.categorias().get(6).enlaces()).isNotEmpty().allSatisfy(e ->
+                assertThat(e.url()).startsWith("https://example.invalid/").doesNotContain("#"));
+
+        for (var d : created.documentos()) {
+            String json = audits.findById(d.auditoriaId()).orElseThrow().getResultadoJson();
+            assertThat(json).contains("coberturaDocumento").doesNotContain("<h1", "<script", "javascript:", "<footer");
+            assertThat(new ObjectMapper().readValue(json, ResultadoAuditoria.class).getCoberturaDocumento()).isNotNull();
+        }
+        assertThat(service.obtener(created.id(), owner, false, "192.0.2.61").cobertura()).isEqualTo(m);
+        assertThat(service.obtener(created.id(), admin, true, "192.0.2.62").cobertura()).isEqualTo(m);
+        assertThat(service.descargar(created.id(), owner, false, "192.0.2.61").cobertura()).isEqualTo(m);
+        assertThatThrownBy(() -> service.obtener(created.id(), other, false, "192.0.2.63")).isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(() -> service.descargar(created.id(), other, false, "192.0.2.63")).isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void auditsStoredBeforeCoverageExistedAreReportedWithTheirLimitationAndNeverRewritten() {
+        Usuario owner = user("legacy-coverage@example.invalid", Role.CLIENTE);
+        // The pre-existing path stores no coverage, exactly like every audit created before this feature.
+        var antigua = auditorias.crearAuditoriaAnalizada("Privacidad 2025", "Política de Privacidad",
+                "Responsable del tratamiento: Ejemplo S.L.", null, TipoFuente.MANUAL, owner, "192.0.2.64");
+        var nueva = auditorias.crearAuditoriaAnalizada("Cookies", "Política de Cookies", "Usamos cookies.", null,
+                TipoFuente.MANUAL, owner, "192.0.2.64", CoberturaDocumental.clasificar(
+                        "<h1>Cookies</h1><a href='https://example.invalid/aviso-legal'>Aviso legal</a>", null, "Política de Cookies"));
+        var grupo = new com.smartaudits.model.AuditoriaConjunta();
+        grupo.setUsuario(owner);
+        grupo.setTitulo("Grupo antiguo");
+        grupo.setFechaCreacion(LocalDateTime.of(2025, 6, 1, 10, 0));
+        grupo.asignarDocumentos(List.of(antigua.getId(), nueva.getId()));
+        Long id = groups.saveAndFlush(grupo).getId();
+        entityManager.flush();
+        entityManager.clear();
+        String antes = audits.findById(antigua.getId()).orElseThrow().getResultadoJson();
+        assertThat(antes).doesNotContain("coberturaDocumento");
+
+        var m = service.obtener(id, owner, false, "192.0.2.64").cobertura();
+        service.descargar(id, owner, false, "192.0.2.64");
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(m.sinEvidencias()).extracting(r -> r.auditoriaId()).containsExactly(antigua.getId());
+        var privacidad = m.categorias().get(0);
+        assertThat(privacidad.estado().name()).isEqualTo("DOCUMENTO_ANALIZADO");
+        assertThat(privacidad.documentos()).singleElement().satisfies(d -> {
+            assertThat(d.historico()).isTrue();
+            assertThat(d.evidencias()).singleElement().satisfies(s -> assertThat(s.origen()).contains("sin evidencias conservadas"));
+        });
+        assertThat(m.categorias().get(2).estado().name()).isEqualTo("ENLACE_DETECTADO_NO_ANALIZADO");
+        assertThat(audits.findById(antigua.getId()).orElseThrow().getResultadoJson()).isEqualTo(antes);
+    }
+
+    @Test
+    void coverageNeverMakesTheStoredResultExceedItsColumn() {
+        Usuario owner = user("coverage-size@example.invalid", Role.CLIENTE);
+        // Worst case the classifier can produce: every category at its link cap, long URLs, multibyte and escaped texts.
+        String comilla = String.valueOf((char) 34);
+        String enlaces = Arrays.stream(CategoriaDocumentoLegal.values()).flatMap(c -> IntStream.range(0, 5)
+                .mapToObj(i -> "<a href='https://example.invalid/" + c.name().toLowerCase() + "/" + "x".repeat(420) + i + "'>"
+                        + c.etiqueta() + " " + ("€" + comilla).repeat(90) + "</a>")).collect(Collectors.joining());
+        var maxima = CoberturaDocumental.clasificar("<h1>Aviso legal</h1>" + enlaces, null, "Aviso Legal");
+        var creada = auditorias.crearAuditoriaAnalizada("Máxima", "Aviso Legal", "Sin cláusulas.", null,
+                TipoFuente.MANUAL, owner, "192.0.2.65", maxima);
+        assertThat(bytes(creada.getId())).isLessThanOrEqualTo(AuditoriaService.MAX_RESULTADO_JSON_BYTES);
+        // It fits as is: the guard below did not have to cut anything.
+        assertThat(creada.getResultado().getCoberturaDocumento().enlaces().detectados()).hasSize(35);
+        assertThat(creada.getResultado().getCoberturaDocumento().enlaces().limiteAlcanzado()).isFalse();
+
+        // Beyond any classifier output, the guard drops links (never signals) until it fits and flags the cut.
+        var enlace = maxima.enlaces().detectados().get(0);
+        var desmesurada = new CoberturaDocumento(maxima.senales(), new DeteccionEnlacesResponse(
+                Collections.nCopies(400, enlace), List.of(), 400, 0, false, false));
+        var recortada = auditorias.crearAuditoriaAnalizada("Desmesurada", "Aviso Legal", "Sin cláusulas.", null,
+                TipoFuente.MANUAL, owner, "192.0.2.65", desmesurada);
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(bytes(recortada.getId())).isLessThanOrEqualTo(AuditoriaService.MAX_RESULTADO_JSON_BYTES);
+        var guardada = auditorias.leerAuditoriaAutorizada(recortada.getId(), owner.getId(), false).getResultado().getCoberturaDocumento();
+        assertThat(guardada.enlaces().limiteAlcanzado()).isTrue();
+        assertThat(guardada.enlaces().detectados()).isNotEmpty().hasSizeLessThan(400);
+        assertThat(guardada.senales()).isEqualTo(maxima.senales());
+        assertThat(guardada).isEqualTo(recortada.getResultado().getCoberturaDocumento());
+    }
+
+    int bytes(Long auditoriaId) {
+        return audits.findById(auditoriaId).orElseThrow().getResultadoJson().getBytes(StandardCharsets.UTF_8).length;
     }
 
     @Test

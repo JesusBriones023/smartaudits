@@ -172,7 +172,7 @@ public final class DetectorEnlacesLegales {
         }
         String atributos = normalizar(ancla.attr("title") + " " + ancla.attr("aria-label"));
         Set<CategoriaDocumentoLegal> porAtributo = coincidencias(atributos, false);
-        Set<String> rel = Set.of(ancla.attr("rel").toLowerCase(Locale.ROOT).split("\\s+"));
+        Set<String> rel = new LinkedHashSet<>(List.of(ancla.attr("rel").toLowerCase(Locale.ROOT).split("\\s+")));
         for (CategoriaDocumentoLegal categoria : CategoriaDocumentoLegal.values()) {
             if (categoria.rel().stream().anyMatch(rel::contains)) {
                 porAtributo.add(categoria);
@@ -184,7 +184,7 @@ public final class DetectorEnlacesLegales {
         return lista(coincidencias(normalizar(decodificar(ruta)), true), "ruta");
     }
 
-    private static Set<CategoriaDocumentoLegal> coincidencias(String normalizado, boolean ruta) {
+    static Set<CategoriaDocumentoLegal> coincidencias(String normalizado, boolean ruta) {
         Set<CategoriaDocumentoLegal> encontradas = EnumSet.noneOf(CategoriaDocumentoLegal.class);
         if (normalizado.isBlank()) {
             return encontradas;
@@ -218,7 +218,7 @@ public final class DetectorEnlacesLegales {
         return NO_ALFANUMERICO.matcher(sinTildes.toLowerCase(Locale.ROOT)).replaceAll(" ").trim();
     }
 
-    private static String decodificar(String ruta) {
+    static String decodificar(String ruta) {
         try {
             return java.net.URLDecoder.decode(ruta.replace("+", "%2B"), StandardCharsets.UTF_8);
         } catch (IllegalArgumentException e) {

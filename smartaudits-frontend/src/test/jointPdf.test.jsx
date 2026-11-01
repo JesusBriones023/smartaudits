@@ -48,6 +48,13 @@ describe('joint audit PDF', () => {
       expect(text, fragment).toContain(fragment)
     }
     expect(text).toContain('No acredita por sí solo el cumplimiento normativo')
+    // Narrow matrix columns wrap (each drawn run keeps its trailing space): compare with the runs joined.
+    const joined = text.split(String.fromCharCode(10)).join('')
+    for (const fragment of ['Cobertura documental', 'Documento analizado', 'Enlace detectado, no analizado', 'No verificado',
+      'Accesibilidad', 'Condiciones de Compra', 'sin evidencias conservadas', 'pero su contenido corresponde a']) {
+      expect(joined, fragment).toContain(fragment)
+    }
+    expect(text).toContain('https://www.ejemplo.es/cookies')
   }, 30000)
 
   it('keeps accents and special characters of user content', async () => {
@@ -100,6 +107,7 @@ describe('joint audit PDF', () => {
     expect(buffer.subarray(0, 5).toString()).toBe('%PDF-')
     expect(text).toContain('Sin hallazgos detectados')
     expect(text).toContain('No hay recomendaciones.')
+    expect(text).toContain('Este informe no incluye la matriz de cobertura documental.')
     expect(text).toContain('95/100')
     expect(text).not.toMatch(/global[^\n]*\d+\/100/i)
   }, 30000)

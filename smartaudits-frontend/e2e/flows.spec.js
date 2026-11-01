@@ -177,7 +177,8 @@ test('auditoría conjunta de tres HTML: informe persistente y recuperable desde 
   })
   const docs = [
     ['Privacidad E2E', '<h1>Política de Privacidad</h1><script>window.__smartauditsXss = 1</script>' +
-      '<p>Responsable: Empresa E2E. Contacto: privacidad@example.invalid. Conservamos los datos 12 meses.</p>'],
+      '<p>Responsable: Empresa E2E. Contacto: privacidad@example.invalid. Conservamos los datos 12 meses.</p>' +
+      '<footer><a href="https://evil.example.invalid/accesibilidad">Declaración de accesibilidad</a></footer>'],
     ['Aviso E2E', '<h1>Aviso Legal</h1><p>Titular: Empresa E2E S.L., CIF B12345678, domicilio en Madrid.</p>'],
     ['Cookies E2E', '<h1>Política de Cookies</h1><p>Usamos cookies técnicas y, con consentimiento, analíticas.</p>' +
       '<img src="https://evil.example.invalid/p.png" onerror="window.__smartauditsXss = 2">'],
@@ -201,8 +202,12 @@ test('auditoría conjunta de tres HTML: informe persistente y recuperable desde 
   const report = await response.json()
   expect(report.documentosAnalizados).toBe(3)
   expect(report.documentos.map(d => d.tipoDocumento)).toEqual(['Política de Privacidad', 'Aviso Legal', 'Política de Cookies'])
-  expect(report.categoriasNoAportadas).toEqual(['Términos y Condiciones', 'Condiciones de Uso'])
+  expect(report.categoriasNoAportadas).toEqual(['Términos y Condiciones', 'Condiciones de Uso', 'Condiciones de Compra', 'Accesibilidad'])
   expect(report).not.toHaveProperty('puntuacionGlobal')
+  // Coverage persisted in each result in MariaDB: the footer link is detected, never fetched nor analysed.
+  expect(report.cobertura.categorias.map(f => f.estado)).toEqual(['DOCUMENTO_ANALIZADO', 'DOCUMENTO_ANALIZADO',
+    'DOCUMENTO_ANALIZADO', 'NO_VERIFICADO', 'NO_VERIFICADO', 'NO_VERIFICADO', 'ENLACE_DETECTADO_NO_ANALIZADO'])
+  expect(report.cobertura.categorias[6].enlaces.map(e => e.url)).toEqual(['https://evil.example.invalid/accesibilidad'])
   await expect(page).toHaveURL(new RegExp(`/auditoria-conjunta/${report.id}$`))
 
   const loaded = page.waitForResponse(r => r.url().endsWith(`/api/auditorias-conjuntas/${report.id}`) && r.request().method() === 'GET')
@@ -216,6 +221,11 @@ test('auditoría conjunta de tres HTML: informe persistente y recuperable desde 
   }
   await expect(page.getByText('No se calcula una puntuación global', { exact: false }).first()).toBeVisible()
   await expect(page.getByRole('region', { name: 'Documentos no aportados' })).toContainText('Condiciones de Uso')
+  const matriz = page.getByRole('region', { name: 'Cobertura documental', exact: true })
+  await expect(matriz.getByRole('row', { name: /^Accesibilidad/ })).toContainText('Enlace detectado, no analizado')
+  await expect(matriz.getByRole('row', { name: /^Política de Privacidad/ })).toContainText('Documento analizado')
+  await expect(matriz.getByRole('row', { name: /^Condiciones de Compra/ })).toContainText('No verificado')
+  await expect(matriz.getByRole('link')).toHaveCount(0)
 
   // Real PDF download, generated from the authorized /descarga response.
   const pdfRequest = page.waitForResponse(r => r.url().endsWith(`/api/auditorias-conjuntas/${report.id}/descarga`) && r.request().method() === 'POST')
@@ -236,7 +246,8 @@ test('auditoría conjunta de tres HTML: informe persistente y recuperable desde 
     } catch { return [] }
   }).join('\n')
   for (const fragment of [title, 'Puntuación de Cumplimiento', 'Privacidad E2E', 'Aviso E2E', 'Cookies E2E',
-    'Documentos no aportados', 'Limitaciones del análisis', String(report.documentos[0].puntuacionRiesgo) + '/100']) {
+    'Documentos no aportados', 'Limitaciones del análisis', String(report.documentos[0].puntuacionRiesgo) + '/100',
+    'Cobertura documental', 'Documento analizado']) {
     expect(pdfText, fragment).toContain(fragment)
   }
   expect(pdfText).not.toContain('evil.example.invalid/p.png')

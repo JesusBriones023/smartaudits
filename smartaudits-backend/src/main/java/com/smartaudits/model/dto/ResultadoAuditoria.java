@@ -1,6 +1,7 @@
 package com.smartaudits.model.dto;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -23,6 +24,15 @@ public class ResultadoAuditoria {
     private List<String> textosSugeridos = new ArrayList<>();
     private List<String> referenciasLegales = new ArrayList<>();
     private List<String> faltantes = new ArrayList<>();
+
+    @JsonInclude(JsonInclude.Include.NON_NULL) // results stored before coverage existed stay byte-identical
+    private CoberturaDocumento coberturaDocumento;
+
+    /** Copy carrying this document's coverage; the analyser's own result is never modified. */
+    public ResultadoAuditoria conCobertura(CoberturaDocumento cobertura) {
+        return new ResultadoAuditoria(resumen, puntuacionRiesgo, riesgos, errores, recomendaciones, textosSugeridos,
+                referenciasLegales, faltantes, cobertura);
+    }
 
     @Data
     @AllArgsConstructor
