@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises'
+import { inflateSync } from 'node:zlib'
 import { test, expect } from '@playwright/test'
 
 const runId = process.env.E2E_RUN_ID
@@ -212,8 +214,32 @@ test('auditoría conjunta de tres HTML: informe persistente y recuperable desde 
     await expect(card).toContainText(String(documento.puntuacionRiesgo))
     await expect(card).toContainText(documento.tipoDocumento)
   }
-  await expect(page.getByText('No se calcula una puntuación global', { exact: false })).toBeVisible()
+  await expect(page.getByText('No se calcula una puntuación global', { exact: false }).first()).toBeVisible()
   await expect(page.getByRole('region', { name: 'Documentos no aportados' })).toContainText('Condiciones de Uso')
+
+  // Real PDF download, generated from the authorized /descarga response.
+  const pdfRequest = page.waitForResponse(r => r.url().endsWith(`/api/auditorias-conjuntas/${report.id}/descarga`) && r.request().method() === 'POST')
+  const downloadEvent = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Descargar PDF', exact: true }).click()
+  expect((await pdfRequest).status()).toBe(200)
+  const download = await downloadEvent
+  expect(download.suggestedFilename()).toBe(`Auditoria conjunta - ${title}.pdf`)
+  const bytes = await readFile(await download.path())
+  expect(bytes.subarray(0, 5).toString()).toBe('%PDF-')
+  expect(bytes.toString('latin1').trimEnd().endsWith('%%EOF')).toBe(true)
+  expect(bytes.toString('latin1')).toMatch(/\/MediaBox \[0 0 595\.2\d* 841\.8\d*\]/)
+  const decoder = new TextDecoder('windows-1252')
+  const pdfText = [...bytes.toString('latin1').matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)].flatMap(m => {
+    try {
+      return [...inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1').matchAll(/\[([^\]]*)\]\s*TJ/g)]
+        .map(op => [...op[1].matchAll(/<([0-9a-fA-F]*)>/g)].map(x => decoder.decode(Buffer.from(x[1], 'hex'))).join(''))
+    } catch { return [] }
+  }).join('\n')
+  for (const fragment of [title, 'Puntuación de Cumplimiento', 'Privacidad E2E', 'Aviso E2E', 'Cookies E2E',
+    'Documentos no aportados', 'Limitaciones del análisis', String(report.documentos[0].puntuacionRiesgo) + '/100']) {
+    expect(pdfText, fragment).toContain(fragment)
+  }
+  expect(pdfText).not.toContain('evil.example.invalid/p.png')
 
   // Recover it from the history after leaving the page.
   await page.goto('/historial')

@@ -91,21 +91,47 @@ public class AuditoriaConjuntaService {
     /** Informe conjunto del propietario o de un ADMIN; registra la consulta de cada documento. */
     @Transactional
     public AuditoriaConjuntaResponse obtener(Long id, Usuario usuario, boolean isAdmin, String ipAcceso) {
+        AuditoriaConjunta conjunta = autorizada(id, usuario, isAdmin);
+        List<AuditoriaResponse> documentos = new ArrayList<>();
+        for (Long documentoId : conjunta.documentoIds()) {
+            documentos.add(documento(conjunta, auditoriaService.obtenerAuditoriaPorId(documentoId, usuario.getId(), isAdmin,
+                    usuario, ipAcceso)));
+        }
+        return informe(conjunta, documentos);
+    }
+
+    /**
+     * Informe conjunto para generar el PDF: se construye siempre desde las auditorías
+     * persistidas del propietario o de un ADMIN (nunca desde datos del navegador) y
+     * registra una DESCARGA por documento. No modifica ninguna auditoría.
+     */
+    @Transactional
+    public AuditoriaConjuntaResponse descargar(Long id, Usuario usuario, boolean isAdmin, String ipAcceso) {
+        AuditoriaConjunta conjunta = autorizada(id, usuario, isAdmin);
+        List<AuditoriaResponse> documentos = new ArrayList<>();
+        for (Long documentoId : conjunta.documentoIds()) {
+            documentos.add(documento(conjunta, auditoriaService.leerAuditoriaAutorizada(documentoId, usuario.getId(), isAdmin)));
+        }
+        for (Long documentoId : conjunta.documentoIds()) {
+            auditoriaService.registrarDescarga(documentoId, usuario.getId(), isAdmin, usuario, ipAcceso);
+        }
+        return informe(conjunta, documentos);
+    }
+
+    private AuditoriaConjunta autorizada(Long id, Usuario usuario, boolean isAdmin) {
         AuditoriaConjunta conjunta = conjuntas.findById(id)
                 .orElseThrow(() -> new RuntimeException("Auditoría conjunta no encontrada"));
         if (!isAdmin && !conjunta.getUsuario().getId().equals(usuario.getId())) {
             throw new AccessDeniedException("No tienes permiso para acceder a esta auditoría");
         }
-        List<AuditoriaResponse> documentos = new ArrayList<>();
-        for (Long documentoId : conjunta.documentoIds()) {
-            AuditoriaResponse documento = auditoriaService.obtenerAuditoriaPorId(documentoId, usuario.getId(), isAdmin,
-                    usuario, ipAcceso);
-            if (!Objects.equals(documento.getUsuarioId(), conjunta.getUsuario().getId())) {
-                throw new IllegalStateException("Documento " + documentoId + " no pertenece al propietario de la auditoría conjunta");
-            }
-            documentos.add(documento);
+        return conjunta;
+    }
+
+    private static AuditoriaResponse documento(AuditoriaConjunta conjunta, AuditoriaResponse documento) {
+        if (!Objects.equals(documento.getUsuarioId(), conjunta.getUsuario().getId())) {
+            throw new IllegalStateException("Documento " + documento.getId() + " no pertenece al propietario de la auditoría conjunta");
         }
-        return informe(conjunta, documentos);
+        return documento;
     }
 
     @Transactional(readOnly = true)
@@ -122,7 +148,8 @@ public class AuditoriaConjuntaService {
         for (AuditoriaResponse a : auditorias) {
             ResultadoAuditoria r = a.getResultado();
             documentos.add(new AuditoriaConjuntaResponse.Documento(a.getId(), a.getTitulo(), a.getTipoDocumento(),
-                    a.getUrlOpcional(), a.getPuntuacionRiesgo(), r == null ? null : r.getResumen(), a.getVersionMotor(),
+                    a.getUrlOpcional(), a.getPuntuacionRiesgo(), r == null ? null : r.getResumen(),
+                    r == null || r.getRiesgos() == null ? List.of() : List.copyOf(r.getRiesgos()), a.getVersionMotor(),
                     a.getVersionReglas(), r == null || r.getErrores() == null ? List.of() : List.copyOf(r.getErrores())));
             if (r != null && r.getRecomendaciones() != null) {
                 for (String recomendacion : r.getRecomendaciones()) {

@@ -198,6 +198,58 @@ class AuditoriaConjuntaEndpointTest {
         verifyNoInteractions(audits, history);
     }
 
+    void storedGroup() throws Exception {
+        Usuario owner = new Usuario();
+        owner.setId(1000L);
+        owner.setNombre("Propietario");
+        owner.setEmail("owner@example.invalid");
+        Auditoria audit = new Auditoria();
+        audit.setId(101L);
+        audit.setUsuario(owner);
+        audit.setTitulo("Privacidad");
+        audit.setTipoDocumento("Política de Privacidad");
+        var analysis = new ResultadoAuditoria();
+        analysis.setResumen("Resumen persistido");
+        analysis.setRiesgos(List.of("Conservación indefinida"));
+        analysis.setRecomendaciones(List.of("Fijar plazos"));
+        analysis.setErrores(List.of());
+        audit.setResultadoJson(mapper.writeValueAsString(analysis));
+        audit.setPuntuacionRiesgo(55);
+        when(audits.findById(101L)).thenReturn(Optional.of(audit));
+        AuditoriaConjunta group = new AuditoriaConjunta();
+        group.setId(7L);
+        group.setUsuario(owner);
+        group.setTitulo("Web persistida");
+        group.asignarDocumentos(List.of(101L));
+        when(groups.findById(7L)).thenReturn(Optional.of(group));
+    }
+
+    @Test
+    void downloadServesThePersistedReportToTheOwnerAndAdmin() throws Exception {
+        storedGroup();
+        for (var token : List.of(bearer(1000L, Role.CLIENTE), bearer(2000L, Role.ADMIN))) {
+            JsonNode report = mapper.readTree(mvc.perform(post("/auditorias-conjuntas/7/descarga").header("Authorization", token))
+                    .andExpect(status().isOk()).andReturn().getResponse()
+                    .getContentAsString(java.nio.charset.StandardCharsets.UTF_8));
+            assertThat(report.path("titulo").asText()).isEqualTo("Web persistida");
+            assertThat(report.path("documentos").get(0).path("riesgos").toString()).isEqualTo("[\"Conservación indefinida\"]");
+            assertThat(report.path("documentos").get(0).path("resumen").asText()).isEqualTo("Resumen persistido");
+        }
+        verify(history, times(2)).registrarDescarga(any(), any(), any());
+        verify(history, never()).registrarConsulta(any(), any(), any());
+        verify(audits, never()).save(any());
+        verifyNoInteractions(motor);
+    }
+
+    @Test
+    void downloadIsRejectedWithoutAuthenticationAndForOtherUsers() throws Exception {
+        storedGroup();
+        mvc.perform(post("/auditorias-conjuntas/7/descarga")).andExpect(status().isUnauthorized());
+        mvc.perform(post("/auditorias-conjuntas/7/descarga").header("Authorization", bearer(3000L, Role.CLIENTE)))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(history);
+    }
+
     private static Set<String> fieldNames(JsonNode node) {
         Set<String> names = new HashSet<>();
         node.fieldNames().forEachRemaining(names::add);

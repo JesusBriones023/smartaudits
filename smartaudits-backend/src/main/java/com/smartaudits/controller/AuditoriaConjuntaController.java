@@ -51,6 +51,19 @@ public class AuditoriaConjuntaController {
         return ResponseEntity.ok(service.obtener(id, usuario, usuario.getRole() == Role.ADMIN, ip(httpRequest)));
     }
 
+    /**
+     * Datos autoritativos para generar el PDF del informe conjunto en el navegador:
+     * salen de las auditorías persistidas y autorizadas, y la petición registra la descarga.
+     */
+    @PostMapping("/{id}/descarga")
+    public ResponseEntity<AuditoriaConjuntaResponse> descargar(
+            @PathVariable Long id,
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            HttpServletRequest httpRequest) {
+        Usuario usuario = usuario(userDetails);
+        return ResponseEntity.ok(service.descargar(id, usuario, usuario.getRole() == Role.ADMIN, ip(httpRequest)));
+    }
+
     private Usuario usuario(CustomUserDetails userDetails) {
         return usuarioService.obtenerPorId(userDetails.getUsuario().getId())
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));

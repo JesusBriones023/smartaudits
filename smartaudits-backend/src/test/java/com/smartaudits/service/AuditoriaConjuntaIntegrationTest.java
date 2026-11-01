@@ -58,6 +58,7 @@ class AuditoriaConjuntaIntegrationTest {
     @Autowired AuditoriaRepository audits;
     @Autowired AuditoriaConjuntaRepository groups;
     @Autowired UsuarioRepository users;
+    @Autowired com.smartaudits.repository.HistorialAuditoriaRepository history;
     @Autowired TestEntityManager entityManager;
 
     Usuario user(String email, Role role) {
@@ -136,6 +137,39 @@ class AuditoriaConjuntaIntegrationTest {
         assertThat(service.listarMias(owner.getId(), 0, 10).content())
                 .extracting(AuditoriaConjuntaResponse.Resumen::id, AuditoriaConjuntaResponse.Resumen::documentosAnalizados)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple(created.id(), 3));
+    }
+
+    @Test
+    void downloadReturnsThePersistedReportRecordsDownloadsAndChangesNoAudit() {
+        Usuario owner = user("pdf@example.invalid", Role.CLIENTE);
+        Usuario admin = user("pdf-admin@example.invalid", Role.ADMIN);
+        Usuario other = user("pdf-other@example.invalid", Role.CLIENTE);
+        var created = service.crear(request("Web PDF", doc("Privacidad", "Política de Privacidad", PRIVACIDAD),
+                doc("Cookies", "Política de Cookies", COOKIES)), owner, "192.0.2.51");
+        entityManager.flush();
+        entityManager.clear();
+        List<String> before = created.documentos().stream().map(d -> snapshot(d.auditoriaId())).toList();
+        int downloadsBefore = history.findByAccion("DESCARGA").size();
+
+        var downloaded = service.descargar(created.id(), owner, false, "192.0.2.51");
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(downloaded).isEqualTo(created);
+        assertThat(downloaded.documentos()).allSatisfy(d -> assertThat(d.riesgos()).isNotNull());
+        assertThat(created.documentos().stream().map(d -> snapshot(d.auditoriaId())).toList()).isEqualTo(before);
+        assertThat(history.findByAccion("DESCARGA")).hasSize(downloadsBefore + 2);
+        assertThat(service.descargar(created.id(), admin, true, "192.0.2.52")).isEqualTo(created);
+        assertThatThrownBy(() -> service.descargar(created.id(), other, false, "192.0.2.53"))
+                .isInstanceOf(AccessDeniedException.class);
+        assertThat(history.findByAccion("DESCARGA")).hasSize(downloadsBefore + 4);
+    }
+
+    String snapshot(Long auditoriaId) {
+        Auditoria a = audits.findById(auditoriaId).orElseThrow();
+        return String.join("|", a.getTitulo(), a.getTipoDocumento(), a.getTextoOriginal(), a.getResultadoJson(),
+                String.valueOf(a.getPuntuacionRiesgo()), String.valueOf(a.getFechaCreacion()), a.getEstado(),
+                String.valueOf(a.getIncidencias().size()));
     }
 
     @Test

@@ -217,14 +217,26 @@ private Pageable crearPageable(int page, int size) {
     // Registrar CONSULTA en historial
     historialService.registrarConsulta(auditoria, usuario, ipAcceso);
 
-    try {
-        ResultadoAuditoria resultado = objectMapper.readValue(
-                auditoria.getResultadoJson(), ResultadoAuditoria.class);
-        return toResponseComplete(auditoria, resultado);
-    } catch (Exception e) {
-        throw new RuntimeException("Error al deserializar resultado", e);
-    }
+    return respuestaCompleta(auditoria);
 }
+
+    /**
+     * Auditoría completa del propietario o de un ADMIN sin registrar consulta: la usa la
+     * descarga de un informe conjunto, que registra DESCARGA en su lugar. Solo lee.
+     */
+    public AuditoriaResponse leerAuditoriaAutorizada(Long id, Long usuarioId, boolean isAdmin) {
+        return respuestaCompleta(obtenerAuditoriaAutorizada(id, usuarioId, isAdmin));
+    }
+
+    private AuditoriaResponse respuestaCompleta(Auditoria auditoria) {
+        try {
+            ResultadoAuditoria resultado = objectMapper.readValue(
+                    auditoria.getResultadoJson(), ResultadoAuditoria.class);
+            return toResponseComplete(auditoria, resultado);
+        } catch (Exception e) {
+            throw new RuntimeException("Error al deserializar resultado", e);
+        }
+    }
 
     /**
      * Registra una descarga únicamente si el usuario es propietario

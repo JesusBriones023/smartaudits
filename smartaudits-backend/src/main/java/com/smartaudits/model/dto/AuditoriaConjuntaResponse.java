@@ -29,6 +29,7 @@ public record AuditoriaConjuntaResponse(
             String urlOpcional,
             Integer puntuacionRiesgo,
             String resumen,
+            List<String> riesgos,
             String versionMotor,
             String versionReglas,
             List<ResultadoAuditoria.ErrorAuditoria> incidencias) {}

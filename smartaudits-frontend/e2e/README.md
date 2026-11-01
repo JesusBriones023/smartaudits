@@ -36,7 +36,7 @@ No carga `.env` ni hereda variables de configuración de la aplicación. Vite us
 Para `.env` se compara metadata del archivo, sin leer su contenido.
 
 Los seis tests cubren registro/login/auditoría/resultado persistido, auditoría
-conjunta de tres HTML (informe persistente, recuperable desde el historial y con
+conjunta de tres HTML (informe persistente, descarga del PDF real, recuperable desde el historial y con
 el informe individual de cada documento; ADMIN temporal, sin registro extra), auditoría
 desde HTML pegado (detección estática de enlaces legales, texto extraído,
 persistido e informe sin ejecutar el HTML ni
