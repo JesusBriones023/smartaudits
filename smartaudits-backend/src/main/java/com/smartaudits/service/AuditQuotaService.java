@@ -34,6 +34,11 @@ public class AuditQuotaService {
      * Los planes y entitlements llegarán en la fase de Billing.
      */
     public void verificarPuedeCrear(Usuario usuario) {
+        verificarPuedeCrear(usuario, 1);
+    }
+
+    /** Comprueba que caben {@code cantidad} auditorías más hoy (una por documento de un lote). */
+    public void verificarPuedeCrear(Usuario usuario, int cantidad) {
 
         if (usuario.getRole() == Role.ADMIN) {
             return;
@@ -65,7 +70,7 @@ public class AuditQuotaService {
                                 inicioDia
                         );
 
-        if (usadas < dailyLimit) {
+        if (usadas + Math.max(1, cantidad) <= dailyLimit) {
             return;
         }
 

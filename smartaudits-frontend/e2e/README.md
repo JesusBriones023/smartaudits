@@ -35,7 +35,9 @@ No carga `.env` ni hereda variables de configuración de la aplicación. Vite us
 (si existe; en CI se verifica que siga ausente), sin conexión SQL, reinicio, montaje ni modificación.
 Para `.env` se compara metadata del archivo, sin leer su contenido.
 
-Los cinco tests cubren registro/login/auditoría/resultado persistido, auditoría
+Los seis tests cubren registro/login/auditoría/resultado persistido, auditoría
+conjunta de tres HTML (informe persistente, recuperable desde el historial y con
+el informe individual de cada documento; ADMIN temporal, sin registro extra), auditoría
 desde HTML pegado (detección estática de enlaces legales, texto extraído,
 persistido e informe sin ejecutar el HTML ni
 pedir URLs externas; usa el ADMIN temporal para no añadir un registro), logout,

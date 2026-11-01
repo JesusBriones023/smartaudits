@@ -12,6 +12,9 @@ import Register from './pages/Register'
 import Dashboard from './pages/Dashboard'
 import CrearAuditoria from './pages/CrearAuditoria'
 import HistorialAuditorias from './pages/HistorialAuditorias'
+import CrearAuditoriaConjunta from './pages/CrearAuditoriaConjunta'
+import DetalleAuditoriaConjunta from './pages/DetalleAuditoriaConjunta'
+import HistorialConjuntas from './pages/HistorialConjuntas'
 import DetalleAuditoria from './pages/DetalleAuditoria'
 import Perfil from './pages/Perfil'
 
@@ -64,6 +67,9 @@ function App() {
               <Route path="/crear-auditoria" element={<CrearAuditoria />} />
               <Route path="/historial" element={<HistorialAuditorias />} />
               <Route path="/auditoria/:id" element={<DetalleAuditoria />} />
+              <Route path="/crear-auditoria-conjunta" element={<CrearAuditoriaConjunta />} />
+              <Route path="/historial-conjuntas" element={<HistorialConjuntas />} />
+              <Route path="/auditoria-conjunta/:id" element={<DetalleAuditoriaConjunta />} />
               <Route path="/perfil" element={<Perfil />} />
 
               {/* Administración */}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import api from '../api/axios'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -202,6 +202,10 @@ const HistorialAuditorias = () => {
                 ? 'Historial completo de auditorías de todos los usuarios del sistema'
                 : 'Historial completo de auditorías legales realizadas'}
             </p>
+
+            <Link to="/historial-conjuntas" className="text-sm text-primary-600 underline">
+              Ver auditorías conjuntas (varios documentos)
+            </Link>
           </div>
 
           {isAdmin && (

@@ -168,6 +168,68 @@ test('HTML pegado: texto extraído, auditoría persistida e informe sin ejecutar
   expect(external.every(url => new URL(url).hostname === 'fonts.googleapis.com')).toBe(true)
 })
 
+test('auditoría conjunta de tres HTML: informe persistente y recuperable desde el historial', async ({ page, baseURL }) => {
+  const external = []
+  page.on('request', request => {
+    if (new URL(request.url()).origin !== baseURL) external.push(request.url())
+  })
+  const docs = [
+    ['Privacidad E2E', '<h1>Política de Privacidad</h1><script>window.__smartauditsXss = 1</script>' +
+      '<p>Responsable: Empresa E2E. Contacto: privacidad@example.invalid. Conservamos los datos 12 meses.</p>'],
+    ['Aviso E2E', '<h1>Aviso Legal</h1><p>Titular: Empresa E2E S.L., CIF B12345678, domicilio en Madrid.</p>'],
+    ['Cookies E2E', '<h1>Política de Cookies</h1><p>Usamos cookies técnicas y, con consentimiento, analíticas.</p>' +
+      '<img src="https://evil.example.invalid/p.png" onerror="window.__smartauditsXss = 2">'],
+  ]
+  // The temporary ADMIN avoids another registration (3 per IP and 15 minutes).
+  await login(page, adminEmail)
+  await page.goto('/crear-auditoria-conjunta')
+  const title = `Auditoría conjunta E2E ${runId}`
+  await page.getByLabel('Título de la Auditoría Conjunta *', { exact: true }).fill(title)
+  for (let i = 0; i < docs.length; i++) {
+    if (i > 0) await page.getByRole('button', { name: 'Añadir documento', exact: true }).click()
+    await page.getByLabel(`Título del documento ${i + 1} *`, { exact: true }).fill(docs[i][0])
+    await page.getByLabel(`HTML del documento ${i + 1} *`, { exact: true }).fill(docs[i][1])
+  }
+  await page.getByLabel('URL del documento 1 (opcional)', { exact: true }).fill('https://evil.example.invalid/privacidad')
+  await expect(page.getByLabel('Categoría legal del documento 3 *', { exact: true })).toHaveValue('Política de Cookies')
+  const created = page.waitForResponse(r => r.url().endsWith('/api/auditorias-conjuntas') && r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Analizar 3 documentos', exact: true }).click()
+  const response = await created
+  expect(response.status()).toBe(201)
+  const report = await response.json()
+  expect(report.documentosAnalizados).toBe(3)
+  expect(report.documentos.map(d => d.tipoDocumento)).toEqual(['Política de Privacidad', 'Aviso Legal', 'Política de Cookies'])
+  expect(report.categoriasNoAportadas).toEqual(['Términos y Condiciones', 'Condiciones de Uso'])
+  expect(report).not.toHaveProperty('puntuacionGlobal')
+  await expect(page).toHaveURL(new RegExp(`/auditoria-conjunta/${report.id}$`))
+
+  const loaded = page.waitForResponse(r => r.url().endsWith(`/api/auditorias-conjuntas/${report.id}`) && r.request().method() === 'GET')
+  await page.reload()
+  expect(await (await loaded).json()).toEqual(report)
+  await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible()
+  for (const documento of report.documentos) {
+    const card = page.getByRole('article', { name: documento.titulo, exact: true })
+    await expect(card).toContainText(String(documento.puntuacionRiesgo))
+    await expect(card).toContainText(documento.tipoDocumento)
+  }
+  await expect(page.getByText('No se calcula una puntuación global', { exact: false })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Documentos no aportados' })).toContainText('Condiciones de Uso')
+
+  // Recover it from the history after leaving the page.
+  await page.goto('/historial')
+  await page.getByRole('link', { name: 'Ver auditorías conjuntas (varios documentos)', exact: true }).click()
+  await page.getByRole('link', { name: title, exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`/auditoria-conjunta/${report.id}$`))
+  await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible()
+  // Each document is an individual audit with its own full report.
+  await page.getByRole('link', { name: 'Ver informe completo de «Aviso E2E»', exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`/auditoria/${report.documentos[1].auditoriaId}$`))
+  await expect(page.getByRole('heading', { name: 'Aviso E2E', exact: true })).toBeVisible()
+
+  expect(await page.evaluate(() => window.__smartauditsXss)).toBeUndefined()
+  expect(external.filter(url => new URL(url).hostname.endsWith('example.invalid'))).toEqual([])
+})
+
 test('logout limpia la sesión y una ruta privada redirige al login', async ({ page }) => {
   await login(page, adminEmail)
   await logout(page)

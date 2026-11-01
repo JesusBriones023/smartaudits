@@ -122,7 +122,7 @@ $scopePaths = $overlayPaths + $auxPaths
 $migrationCandidate = 'smartaudits-backend/src/main/resources/db/migration/V8__create_scans.sql'
 $migrationNames = @('V1__initial_schema.sql','V2__audit_analysis_provenance.sql','V3__incident_rule_provenance.sql',
     'V4__create_organizations.sql','V5__create_organization_memberships.sql','V6__create_sites.sql','V7__create_audits.sql',
-    'V8__create_scans.sql')
+    'V8__create_scans.sql','V9__create_joint_audits.sql')
 $candidateHashes = @{}
 
 function Assert-That([bool]$Condition, [string]$Message) {
@@ -218,9 +218,10 @@ function Assert-Migrations([string]$Jar, [string]$MigrationDir = (Join-Path $rep
         'V6__create_sites.sql'='62AF26386433E7F8316D0559294A85F00197926AFF3EA6DB114A2EFA46F55804'
         'V7__create_audits.sql'='93ECB485513247CEF614238A614F7AD76CD2793062B03183A83B2E70C8B7ACA5'
         'V8__create_scans.sql'='1E6EE50CAFC5D26DCBD0BD2E2E28B8904A1CED6AE5C0E5CE302D1CD5F27B774C'
+        'V9__create_joint_audits.sql'='950424D3D667169E0F89563C2E2816025CCD99D65E30F7F8E32DA555EC60D462'
     }
     $sourceNames = @(Get-ChildItem -LiteralPath $MigrationDir -Force | ForEach-Object { $_.Name } | Sort-Object)
-    Assert-That (($sourceNames -join ',') -ceq (($expected.Keys | Sort-Object) -join ',')) 'Expected exactly V1-V8 source migrations'
+    Assert-That (($sourceNames -join ',') -ceq (($expected.Keys | Sort-Object) -join ',')) 'Expected exactly V1-V9 source migrations'
     $archive = $null
     if ($Jar) {
         Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -626,16 +627,17 @@ function Inventory-SelfTests {
     $null = Get-VersionInventory $base
     $cases = New-Object 'System.Collections.Generic.List[object]'
     $cases.Add([string[]]@($base | Where-Object { $_ -cne ($prefix + 'V8__create_scans.sql') }))
-    foreach ($extra in @('V9__future.sql','V8__create_scans_copy.sql','V9000__f3_harness_future_probe.sql',
+    $cases.Add([string[]]@($base | Where-Object { $_ -cne ($prefix + 'V9__create_joint_audits.sql') }))
+    foreach ($extra in @('V10__future.sql','V8__create_scans_copy.sql','V9000__f3_harness_future_probe.sql',
         'V0__zero.sql','R__repeatable.sql','V8.1__point.sql')) { $cases.Add([string[]]($base + @($prefix + $extra))) }
     foreach ($case in $cases) { Expect-Rejection { $null = Get-VersionInventory $case } 'Migration inventory accepted an invalid fixture' }
-    Pass "Inventory self-tests: exact V1-V8 accepted; $($cases.Count) rejected (V8 absent, V9, duplicate V8, publishable V9000, V0, repeatable, dotted)"
+    Pass "Inventory self-tests: exact V1-V9 accepted; $($cases.Count) rejected (V8 absent, V9 absent, V10, duplicate V8, publishable V9000, V0, repeatable, dotted)"
 }
 function Migration-SelfTests {
     $source = Join-Path $repo 'smartaudits-backend/src/main/resources/db/migration'
     $dir = Join-Path $tempRoot 'migration-fixture'
     $jar = Join-Path $tempRoot 'migration-fixture.jar'
-    $packaged = [long[]]@(1,2,3,4,5,6,7,8,9000)
+    $packaged = [long[]]@(1,2,3,4,5,6,7,8,9,9000)
     $future = 'V9000__f3_harness_future_probe.sql'
     $altered = [IO.File]::ReadAllText((Join-Path $source 'V8__create_scans.sql')) + ' '
     $reset = {
@@ -663,7 +665,8 @@ function Migration-SelfTests {
         @{ Why='V8 modified'; Do={ [IO.File]::WriteAllText((Join-Path $dir 'V8__create_scans.sql'), $altered, $utf8) } },
         @{ Why='V8 absent'; Do={ Remove-Item -LiteralPath (Join-Path $dir 'V8__create_scans.sql') } },
         @{ Why='V7 modified'; Do={ [IO.File]::WriteAllText((Join-Path $dir 'V7__create_audits.sql'), ([IO.File]::ReadAllText((Join-Path $source 'V7__create_audits.sql')) + ' '), $utf8) } },
-        @{ Why='unexpected V9'; Do={ [IO.File]::WriteAllText((Join-Path $dir 'V9__future.sql'), 'CREATE TABLE f3_future (id BIGINT);', $utf8) } },
+        @{ Why='V9 absent'; Do={ Remove-Item -LiteralPath (Join-Path $dir 'V9__create_joint_audits.sql') } },
+        @{ Why='unexpected V10'; Do={ [IO.File]::WriteAllText((Join-Path $dir 'V10__future.sql'), 'CREATE TABLE f3_future (id BIGINT);', $utf8) } },
         @{ Why='duplicate V8'; Do={ Copy-Item -LiteralPath (Join-Path $dir 'V8__create_scans.sql') -Destination (Join-Path $dir 'V8__create_scans_copy.sql') } },
         @{ Why='publishable V9000'; Do={ [IO.File]::WriteAllText((Join-Path $dir $future), 'CREATE TABLE f3_harness_future_probe (id BIGINT);', $utf8) } },
         @{ Why='incorrect V8 hash'; Do={ Copy-Item -LiteralPath (Join-Path $source 'V7__create_audits.sql') -Destination (Join-Path $dir 'V8__create_scans.sql') -Force } }
@@ -674,7 +677,7 @@ function Migration-SelfTests {
         @{ Why='source and JAR altered identically'; Do={ [IO.File]::WriteAllText((Join-Path $dir 'V8__create_scans.sql'), $altered, $utf8); & $pack $all @{'V8__create_scans.sql'=$altered} } },
         @{ Why='duplicate JAR entry'; Do={ & $pack ([string[]]($all + @('V8__create_scans.sql'))) } },
         @{ Why='JAR V8 absent'; Do={ & $pack ([string[]]@($all | Where-Object { $_ -cne 'V8__create_scans.sql' })) } },
-        @{ Why='unexpected JAR V9'; Do={ & $pack ([string[]]($all + @('V9__future.sql'))) @{'V9__future.sql'='CREATE TABLE f3_future (id BIGINT);'} } },
+        @{ Why='unexpected JAR V10'; Do={ & $pack ([string[]]($all + @('V10__future.sql'))) @{'V10__future.sql'='CREATE TABLE f3_future (id BIGINT);'} } },
         @{ Why='JAR without synthetic V9000'; Do={ & $pack ([string[]]$migrationNames) } }
     )
     try {
@@ -831,7 +834,7 @@ function Get-VersionInventory([string[]]$Files) {
         Assert-That ($version -gt 0 -and $version -lt 9000 -and -not $versions.ContainsKey($version)) 'Duplicate/reserved migration version'
         $versions[$version] = $file
     }
-    Assert-That ((($versions.Keys | Sort-Object) -join ',') -ceq '1,2,3,4,5,6,7,8') 'Expected exactly versioned V1-V8 (pending V8 only with -IncludePendingScan)'
+    Assert-That ((($versions.Keys | Sort-Object) -join ',') -ceq '1,2,3,4,5,6,7,8,9') 'Expected exactly versioned V1-V9 (pending V8 only with -IncludePendingScan)'
     return $versions
 }
 function Real-Migrations {

@@ -40,7 +40,7 @@ public class AuditoriaService {
 
     @Transactional
     public AuditoriaResponse crearAuditoria(AuditoriaRequest request, Usuario usuario, String ipAcceso) {
-        return crear(request.getTitulo(), request.getTipoDocumento(), request.getTextoOriginal(),
+        return crearAuditoriaAnalizada(request.getTitulo(), request.getTipoDocumento(), request.getTextoOriginal(),
                 request.getUrlOpcional(), TipoFuente.MANUAL, usuario, ipAcceso);
     }
 
@@ -52,7 +52,13 @@ public class AuditoriaService {
      */
     @Transactional
     public AuditoriaResponse crearAuditoriaDesdeHtml(AuditoriaHtmlRequest request, Usuario usuario, String ipAcceso) {
-        String texto = extractorHtml.extraer(request.getHtml());
+        return crearAuditoriaAnalizada(request.getTitulo(), request.getTipoDocumento(),
+                textoAuditableDeHtml(request.getHtml()), request.getUrlOpcional(), TipoFuente.MANUAL, usuario, ipAcceso);
+    }
+
+    /** Texto legible del HTML, o ContenidoHtmlInvalidoException si queda vacío o demasiado largo. */
+    public String textoAuditableDeHtml(String html) {
+        String texto = extractorHtml.extraer(html);
         if (texto.isBlank()) {
             throw new ContenidoHtmlInvalidoException("El HTML no contiene texto legible para auditar");
         }
@@ -60,12 +66,16 @@ public class AuditoriaService {
             throw new ContenidoHtmlInvalidoException(
                     "El texto extraído del HTML supera los " + AuditoriaRequest.MAX_TEXTO_LENGTH + " caracteres");
         }
-        return crear(request.getTitulo(), request.getTipoDocumento(), texto,
-                request.getUrlOpcional(), TipoFuente.MANUAL, usuario, ipAcceso);
+        return texto;
     }
 
-    private AuditoriaResponse crear(String titulo, String tipoDocumento, String texto, String urlOpcional,
-                                    TipoFuente fuente, Usuario usuario, String ipAcceso) {
+    /**
+     * Analiza un texto y guarda su auditoría con incidencias e historial. Se une a la
+     * transacción del llamante: en una auditoría conjunta, un fallo deshace todo el lote.
+     */
+    @Transactional
+    public AuditoriaResponse crearAuditoriaAnalizada(String titulo, String tipoDocumento, String texto, String urlOpcional,
+                                                     TipoFuente fuente, Usuario usuario, String ipAcceso) {
 
         auditQuotaService.verificarPuedeCrear(usuario);
         // 1. Analizar texto con motor propio
