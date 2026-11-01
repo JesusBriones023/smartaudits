@@ -304,6 +304,28 @@ class ClienteHttpLoopbackTest {
         assertThat(servidor.abiertasTrasRespuesta()).isZero();
     }
 
+    @Test
+    void concurrentTimeoutsCloseEveryClientSocket() throws Exception {
+        var servidor = tls(ServidorHttpDePrueba.fija("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 99\r\n\r\nx"));
+        var ejecutor = java.util.concurrent.Executors.newFixedThreadPool(4);
+        var futuros = new ArrayList<java.util.concurrent.Future<?>>();
+        try {
+            for (int i = 0; i < 4; i++) {
+                futuros.add(ejecutor.submit(() -> falla(() -> cliente(servidor.puerto()).obtener(URL, LOCAL),
+                        Motivo.TRANSPORTE, "Tiempo de espera agotado")));
+            }
+            for (var futuro : futuros) {
+                futuro.get(5, java.util.concurrent.TimeUnit.SECONDS);
+            }
+        } finally {
+            ejecutor.shutdownNow();
+        }
+        Thread.sleep(500);
+        assertThat(servidor.conexiones()).isEqualTo(4);
+        assertThat(servidor.cerradasPorCliente()).isEqualTo(4);
+        assertThat(servidor.abiertasTrasRespuesta()).isZero();
+    }
+
     // ------------------------------------------------------------------ 10: proxies
 
     @Test

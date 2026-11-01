@@ -233,6 +233,10 @@ public final class ResolvedorDnsDirecto implements HostResolver {
                 }
                 if (rclass == CLASS_IN && rtype == TYPE_CNAME) {
                     Nombre destino = leerNombre(m, inicio);
+                    // fin is the on-wire end (including a compression pointer), not the expanded name.
+                    if (destino.fin != inicio + rdlength) {
+                        throw new RespuestaInvalida("longitud CNAME no válida");
+                    }
                     cnames.add(new String[]{propietario.texto.toLowerCase(Locale.ROOT), destino.texto});
                 } else if (rclass == CLASS_IN && rtype == tipo) {
                     propietarios.add(propietario.texto.toLowerCase(Locale.ROOT));

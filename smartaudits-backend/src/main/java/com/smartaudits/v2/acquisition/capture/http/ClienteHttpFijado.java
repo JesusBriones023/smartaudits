@@ -17,6 +17,7 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.security.cert.X509Certificate;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -74,7 +75,10 @@ public final class ClienteHttpFijado {
         int puerto = puertoTcp.applyAsInt(url.port());
         Conexion conexion;
         try {
-            conexion = conector.conectar(ip, puerto, limites.conexion());
+            // The watchdog starts only after connect: its timeout must already fit the total budget.
+            // Socket.connect interprets zero milliseconds as unlimited, so keep a positive value.
+            long conexionMs = Math.max(1, Math.min(limites.conexion().toMillis(), restante(limite)));
+            conexion = conector.conectar(ip, puerto, Duration.ofMillis(conexionMs));
         } catch (IOException e) {
             throw new CapturaException(Motivo.TRANSPORTE, "No se pudo conectar con la dirección aprobada", e);
         }

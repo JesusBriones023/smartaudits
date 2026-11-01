@@ -74,10 +74,12 @@ final class LectorHttp {
             if (dosPuntos <= 0 || !token(linea.substring(0, dosPuntos))) {
                 throw new ErrorRespuesta("nombre de cabecera no válido");
             }
-            String valor = linea.substring(dosPuntos + 1).strip();
+            // Validate the wire value before trimming: String.strip() also removes forbidden CTLs.
+            String valor = linea.substring(dosPuntos + 1);
             if (valor.chars().anyMatch(c -> (c < 0x20 && c != '\t') || c == 0x7F)) {
                 throw new ErrorRespuesta("valor de cabecera no válido");
             }
+            valor = valor.strip(); // after validation, only SP and HTAB can be stripped
             cabeceras.computeIfAbsent(linea.substring(0, dosPuntos).toLowerCase(Locale.ROOT), k -> new ArrayList<>()).add(valor);
         }
         cabeceras.replaceAll((k, v) -> Collections.unmodifiableList(v));
@@ -88,7 +90,7 @@ final class LectorHttp {
         List<String> te = valores(cabecera, "transfer-encoding");
         List<String> cl = cabecera.cabeceras().getOrDefault("content-length", List.of());
         byte[] crudo;
-        if (!te.isEmpty()) {
+        if (cabecera.cabeceras().containsKey("transfer-encoding")) {
             if (!cl.isEmpty() || te.size() != 1 || !te.get(0).equalsIgnoreCase("chunked")) {
                 throw new ErrorRespuesta("Transfer-Encoding no admitido o ambiguo");
             }

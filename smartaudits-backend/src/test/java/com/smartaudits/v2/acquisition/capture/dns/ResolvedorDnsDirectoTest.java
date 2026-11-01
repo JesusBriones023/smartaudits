@@ -7,6 +7,8 @@ import com.smartaudits.v2.acquisition.destination.DestinationPolicy;
 import com.smartaudits.v2.acquisition.destination.RejectionCode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -174,6 +176,32 @@ class ResolvedorDnsDirectoTest {
             muchos[i] = Registro.a("www.ejemplo.es", 8, 8, 8, i + 1);
         }
         assertThat(codigo(politica(con(muchos), rcode(0)).evaluate(URL))).isEqualTo(RejectionCode.DNS_LIMIT);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {-1, 1})
+    void cnameMustConsumeExactlyItsDeclaredRdata(int diferencia) throws IOException {
+        byte[] nombre = new byte[]{3, 'c', 'd', 'n', 7, 'e', 'j', 'e', 'm', 'p', 'l', 'o', 3, 'n', 'e', 't', 0};
+        byte[] rdata = java.util.Arrays.copyOf(nombre, nombre.length + diferencia);
+        Function<byte[], List<byte[]>> malformada = q -> {
+            byte[] r = respuesta(q, 0, List.of(Registro.a("cdn.ejemplo.net", 8, 8, 4, 4),
+                    new Registro("www.ejemplo.es", ResolvedorDnsDirecto.TYPE_CNAME, rdata, null)));
+            // For the short RDATA the terminating root exists only OUTSIDE the record.
+            if (diferencia < 0) {
+                r = java.util.Arrays.copyOf(r, r.length + 1);
+            }
+            return List.of(r);
+        };
+        assertThat(codigo(politica(malformada, con(Registro.cname("www.ejemplo.es", "cdn.ejemplo.net")))
+                .evaluate(URL))).isEqualTo(RejectionCode.DNS_FAILURE);
+    }
+
+    @Test
+    void compressedCnameWithExactRdataLengthStillWorks() throws IOException {
+        // Offset 16 of the echoed question points to "ejemplo.es", after the "www" label.
+        var cname = new Registro("www.ejemplo.es", ResolvedorDnsDirecto.TYPE_CNAME, new byte[]{(byte) 0xc0, 16}, null);
+        assertThat(politica(con(cname, Registro.a("ejemplo.es", 8, 8, 4, 4)), con(cname)).evaluate(URL))
+                .isInstanceOf(DestinationDecision.Approved.class);
     }
 
     @Test
