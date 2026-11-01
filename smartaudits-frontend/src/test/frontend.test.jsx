@@ -7,7 +7,7 @@ import { AuthProvider, useAuth } from '../context/AuthContext'
 import PrivateRoute from '../components/PrivateRoute'
 import Sidebar from '../components/Sidebar'
 import Login from '../pages/Login'
-import CrearAuditoria from '../pages/CrearAuditoria'
+import CrearAuditoria, { MAX_HTML_LENGTH } from '../pages/CrearAuditoria'
 import DetalleAuditoria from '../pages/DetalleAuditoria'
 import GestionUsuarios from '../pages/GestionUsuarios'
 
@@ -160,6 +160,59 @@ describe('Audit creation', () => {
     expect(screen.getByLabelText(/Título de la Auditoría/)).toHaveValue('Auditoría de prueba')
     expect(screen.getByLabelText(/Texto Legal a Auditar/)).toHaveValue('Contenido legal sintético para analizar.')
     expect(screen.getByRole('button', { name: 'Analizar documento' })).toBeEnabled()
+  })
+
+  it('keeps manual text as the default mode', () => {
+    showCreation()
+    expect(screen.getByRole('radio', { name: 'Texto' })).toBeChecked()
+    expect(screen.getByLabelText(/Texto Legal a Auditar/)).toBeVisible()
+    expect(screen.queryByLabelText(/HTML de la Página/)).not.toBeInTheDocument()
+  })
+
+  it('sends pasted HTML to the HTML endpoint without rendering it', async () => {
+    const execute = vi.fn()
+    vi.stubGlobal('testXss', execute)
+    const html = '<h1>Aviso</h1><img src=x onerror="window.testXss()"><script>window.testXss()</script><p>Titular</p>'
+    const pending = deferred()
+    api.post.mockReturnValue(pending.promise)
+    const { container } = renderRoutes(<>
+      <Route path="/crear-auditoria" element={<CrearAuditoria />} />
+      <Route path="/auditoria/:id" element={<DetailDestination />} />
+    </>, '/crear-auditoria', session)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('radio', { name: 'HTML' }))
+    expect(screen.queryByLabelText(/Texto Legal a Auditar/)).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText(/Título de la Auditoría/), 'Auditoría HTML')
+    await user.selectOptions(screen.getByLabelText(/Tipo de Documento/), 'Aviso Legal')
+    await user.type(screen.getByLabelText(/URL del Sitio Web/), 'https://example.invalid/aviso')
+    const campo = screen.getByLabelText(/HTML de la Página/)
+    expect(campo).toHaveAttribute('maxLength', String(MAX_HTML_LENGTH))
+    await user.click(campo)
+    await user.paste(html)
+    expect(campo).toHaveValue(html)
+    expect(container.querySelector('script, img, [onerror]')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Analizar documento' }))
+    expect(screen.getByText('Extrayendo y analizando el texto del HTML...')).toBeVisible()
+    expect(api.post).toHaveBeenCalledExactlyOnceWith('/auditorias/html', {
+      titulo: 'Auditoría HTML', tipoDocumento: 'Aviso Legal', html,
+      urlOpcional: 'https://example.invalid/aviso'
+    })
+    await act(async () => pending.resolve({ data: { id: 77 } }))
+    expect(await screen.findByRole('heading', { name: 'Detalle recibido: 77' })).toBeVisible()
+    expect(execute).not.toHaveBeenCalled()
+  })
+
+  it('shows the backend error for HTML without readable text and keeps the HTML for editing', async () => {
+    api.post.mockRejectedValue({ response: { status: 400, data: { message: 'El HTML no contiene texto legible para auditar' } } })
+    showCreation()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('radio', { name: 'HTML' }))
+    await user.type(screen.getByLabelText(/Título de la Auditoría/), 'Vacía')
+    await user.click(screen.getByLabelText(/HTML de la Página/))
+    await user.paste('<script>x()</script>')
+    await user.click(screen.getByRole('button', { name: 'Analizar documento' }))
+    expect(await screen.findByText('El HTML no contiene texto legible para auditar')).toBeVisible()
+    expect(screen.getByLabelText(/HTML de la Página/)).toHaveValue('<script>x()</script>')
   })
 })
 

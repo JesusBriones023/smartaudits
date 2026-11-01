@@ -22,9 +22,17 @@
         <java.version>17</java.version>
         <jjwt.version>0.12.3</jjwt.version>
         <flyway.version>11.8.0</flyway.version>
+        <jsoup.version>1.18.3</jsoup.version>
     </properties>
     
     <dependencies>
+        <!-- HTML pegado por el usuario: análisis sin red ni ejecución -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>${jsoup.version}</version>
+        </dependency>
+
         <!-- Spring Boot Web -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

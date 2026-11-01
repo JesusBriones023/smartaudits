@@ -5,10 +5,13 @@ import com.smartaudits.model.Auditoria;
 import com.smartaudits.model.Incidencia;
 import com.smartaudits.model.Usuario;
 import com.smartaudits.model.TipoFuente;
+import com.smartaudits.model.dto.AuditoriaHtmlRequest;
 import com.smartaudits.model.dto.AuditoriaRequest;
 import com.smartaudits.model.dto.AuditoriaResponse;
 import com.smartaudits.model.dto.ResultadoAuditoria;
 import com.smartaudits.repository.AuditoriaRepository;
+import com.smartaudits.service.html.ContenidoHtmlInvalidoException;
+import com.smartaudits.service.html.ExtractorTextoHtml;
 import com.smartaudits.service.motor.AnalizadorLegal;
 import com.smartaudits.service.motor.EntradaAnalisis;
 import com.smartaudits.model.dto.PaginaResponse;
@@ -33,25 +36,51 @@ public class AuditoriaService {
     private final HistorialService historialService;
     private final ObjectMapper objectMapper;
     private final AuditQuotaService auditQuotaService;
+    private final ExtractorTextoHtml extractorHtml = new ExtractorTextoHtml();
 
     @Transactional
     public AuditoriaResponse crearAuditoria(AuditoriaRequest request, Usuario usuario, String ipAcceso) {
+        return crear(request.getTitulo(), request.getTipoDocumento(), request.getTextoOriginal(),
+                request.getUrlOpcional(), TipoFuente.MANUAL, usuario, ipAcceso);
+    }
+
+    /**
+     * Audita el texto legible de un HTML pegado por el usuario. El HTML no se ejecuta,
+     * no se guarda y la URL opcional nunca se descarga: se persiste el texto extraído,
+     * que es exactamente lo que analiza el motor. Es contenido aportado a mano por el
+     * usuario, igual que el texto pegado, así que su fuente sigue siendo MANUAL.
+     */
+    @Transactional
+    public AuditoriaResponse crearAuditoriaDesdeHtml(AuditoriaHtmlRequest request, Usuario usuario, String ipAcceso) {
+        String texto = extractorHtml.extraer(request.getHtml());
+        if (texto.isBlank()) {
+            throw new ContenidoHtmlInvalidoException("El HTML no contiene texto legible para auditar");
+        }
+        if (texto.length() > AuditoriaRequest.MAX_TEXTO_LENGTH) {
+            throw new ContenidoHtmlInvalidoException(
+                    "El texto extraído del HTML supera los " + AuditoriaRequest.MAX_TEXTO_LENGTH + " caracteres");
+        }
+        return crear(request.getTitulo(), request.getTipoDocumento(), texto,
+                request.getUrlOpcional(), TipoFuente.MANUAL, usuario, ipAcceso);
+    }
+
+    private AuditoriaResponse crear(String titulo, String tipoDocumento, String texto, String urlOpcional,
+                                    TipoFuente fuente, Usuario usuario, String ipAcceso) {
 
         auditQuotaService.verificarPuedeCrear(usuario);
         // 1. Analizar texto con motor propio
         var version = analizadorLegal.version();
         LocalDateTime fechaAnalisis = LocalDateTime.now().truncatedTo(ChronoUnit.MICROS);
-        ResultadoAuditoria resultadoDto = analizadorLegal.analyze(new EntradaAnalisis(
-                request.getTextoOriginal(), request.getTipoDocumento()));
+        ResultadoAuditoria resultadoDto = analizadorLegal.analyze(new EntradaAnalisis(texto, tipoDocumento));
 
         // 2. Crear entidad Auditoria
         Auditoria auditoria = new Auditoria();
         auditoria.registrarProcedencia(version.versionMotor(), version.versionReglas(),
-                fechaAnalisis, TipoFuente.MANUAL);
-        auditoria.setTitulo(request.getTitulo());
-        auditoria.setTipoDocumento(request.getTipoDocumento());
-        auditoria.setTextoOriginal(request.getTextoOriginal());
-        auditoria.setUrlOpcional(request.getUrlOpcional());
+                fechaAnalisis, fuente);
+        auditoria.setTitulo(titulo);
+        auditoria.setTipoDocumento(tipoDocumento);
+        auditoria.setTextoOriginal(texto);
+        auditoria.setUrlOpcional(urlOpcional);
         auditoria.setPuntuacionRiesgo(resultadoDto.getPuntuacionRiesgo());
         auditoria.setEstado("COMPLETADA");
         auditoria.setFechaCreacion(LocalDateTime.now());

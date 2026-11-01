@@ -84,6 +84,71 @@ test('registro, login explícito, creación y resultado persistido', async ({ pa
   await expect(page.getByText(legalText, { exact: true })).toBeVisible()
 })
 
+test('HTML pegado: texto extraído, auditoría persistida e informe sin ejecutar el HTML', async ({ page, baseURL }) => {
+  const external = []
+  page.on('request', request => {
+    if (new URL(request.url()).origin !== baseURL) external.push(request.url())
+  })
+  const html = `<!doctype html><html><head><title>Privacidad</title><style>p{color:red}</style>
+    <script>window.__smartauditsXss = 'script'</script></head><body>
+    <nav><a href="https://evil.example.invalid/">Menú</a></nav>
+    <h1>Política de Privacidad</h1>
+    <p>Responsable: Empresa E2E HTML. Contacto: privacidad@example.invalid.</p>
+    <p onclick="window.__smartauditsXss = 'click'">Tratamos los datos para gestionar el servicio con consentimiento expreso.
+       Conservamos los datos durante 12 meses.</p>
+    <ul><li>Acceso, rectificación y supresión</li><li>Oposición, limitación y portabilidad</li></ul>
+    <img src="https://evil.example.invalid/pixel.png" onerror="window.__smartauditsXss = 'img'">
+    <p>Aplicamos cifrado y medidas de seguridad.</p></body></html>`
+  const extracted = [
+    'Política de Privacidad',
+    '',
+    'Responsable: Empresa E2E HTML. Contacto: privacidad@example.invalid.',
+    '',
+    'Tratamos los datos para gestionar el servicio con consentimiento expreso. Conservamos los datos durante 12 meses.',
+    '',
+    '- Acceso, rectificación y supresión',
+    '- Oposición, limitación y portabilidad',
+    '',
+    'Aplicamos cifrado y medidas de seguridad.',
+  ].join('\n')
+
+  // The temporary ADMIN avoids a fourth registration (3 per IP and 15 minutes).
+  await login(page, adminEmail)
+  await page.goto('/crear-auditoria')
+  const title = `Auditoría HTML E2E ${runId}`
+  await page.getByLabel('Título de la Auditoría *', { exact: true }).fill(title)
+  await page.getByLabel('Tipo de Documento *', { exact: true }).selectOption('Política de Privacidad')
+  await page.getByLabel('URL del Sitio Web (opcional)', { exact: true }).fill('https://evil.example.invalid/privacidad')
+  await page.getByRole('radio', { name: 'HTML', exact: true }).check()
+  await page.getByLabel('HTML de la Página *', { exact: true }).fill(html)
+  const created = page.waitForResponse(r => r.url().endsWith('/api/auditorias/html') && r.request().method() === 'POST')
+  await page.getByRole('button', { name: 'Analizar documento', exact: true }).click()
+  const response = await created
+  expect(response.status()).toBe(201)
+  const audit = await response.json()
+  expect(audit.textoOriginal).toBe(extracted)
+  expect(audit.tipoFuente).toBe('MANUAL')
+  expect(audit.urlOpcional).toBe('https://evil.example.invalid/privacidad')
+  expect(audit.resultado.resumen).toBeTruthy()
+  await expect(page).toHaveURL(new RegExp(`/auditoria/${audit.id}$`))
+
+  const loaded = page.waitForResponse(r => r.url().endsWith(`/api/auditorias/${audit.id}`) && r.request().method() === 'GET')
+  await page.reload()
+  const persisted = await (await loaded).json()
+  expect(persisted.textoOriginal).toBe(extracted)
+  expect(persisted.resultado).toEqual(audit.resultado)
+  await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible()
+  await expect(page.getByText(audit.resultado.resumen, { exact: true })).toBeVisible()
+  await expect(page.getByText(String(audit.puntuacionRiesgo), { exact: true })).toBeVisible()
+  await expect(page.getByText(/Responsable: Empresa E2E HTML/)).toBeVisible()
+  expect(await page.evaluate(() => window.__smartauditsXss)).toBeUndefined()
+  expect(await page.locator('script:not([type="module"]), img[onerror], [onclick]').count()).toBe(0)
+  // Nothing from the pasted HTML or the reference URL is ever requested. The app's own
+  // font stylesheet (index.html) is the only pre-existing outside request, and it is blocked.
+  expect(external.filter(url => new URL(url).hostname.endsWith('example.invalid'))).toEqual([])
+  expect(external.every(url => new URL(url).hostname === 'fonts.googleapis.com')).toBe(true)
+})
+
 test('logout limpia la sesión y una ruta privada redirige al login', async ({ page }) => {
   await login(page, adminEmail)
   await logout(page)

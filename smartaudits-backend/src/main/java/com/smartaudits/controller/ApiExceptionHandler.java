@@ -58,6 +58,20 @@ public class ApiExceptionHandler {
                 ));
     }
 
+    @ExceptionHandler(com.smartaudits.service.html.ContenidoHtmlInvalidoException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidHtml(
+            com.smartaudits.service.html.ContenidoHtmlInvalidoException exception) {
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(errorBody(
+                        HttpStatus.BAD_REQUEST,
+                        "INVALID_HTML",
+                        exception.getMessage(),
+                        Map.of("html", exception.getMessage())
+                ));
+    }
+
     private Map<String, Object> errorBody(
             HttpStatus status,
             String error,

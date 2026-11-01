@@ -2,6 +2,7 @@ package com.smartaudits.controller;
 
 import com.smartaudits.model.Usuario;
 import com.smartaudits.model.Role;
+import com.smartaudits.model.dto.AuditoriaHtmlRequest;
 import com.smartaudits.model.dto.AuditoriaRequest;
 import com.smartaudits.model.dto.AuditoriaResponse;
 import com.smartaudits.security.CustomUserDetails;
@@ -36,6 +37,21 @@ public class AuditoriaController {
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
         AuditoriaResponse response = auditoriaService.crearAuditoria(
+                request, usuario, obtenerIp(httpRequest));
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /** Auditoría del texto legible de un HTML pegado; la URL opcional nunca se descarga. */
+    @PostMapping("/html")
+    public ResponseEntity<AuditoriaResponse> crearAuditoriaDesdeHtml(
+            @Valid @RequestBody AuditoriaHtmlRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            HttpServletRequest httpRequest) {
+
+        Usuario usuario = usuarioService.obtenerPorId(userDetails.getUsuario().getId())
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        AuditoriaResponse response = auditoriaService.crearAuditoriaDesdeHtml(
                 request, usuario, obtenerIp(httpRequest));
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
