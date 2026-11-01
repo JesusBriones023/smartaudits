@@ -2,6 +2,8 @@ package com.smartaudits.service.motor;
 
 import com.smartaudits.model.dto.ResultadoAuditoria;
 import com.smartaudits.model.dto.ResultadoAuditoria.ErrorAuditoria;
+import com.smartaudits.model.dto.ResultadoAuditoria.EstadoEvidencia;
+import com.smartaudits.model.dto.ResultadoAuditoria.EvaluacionRegla;
 import org.springframework.stereotype.Service;
 
 import java.text.Normalizer;
@@ -29,13 +31,20 @@ import java.util.stream.Collectors;
  *   - No cumplirla no suma nada.
  *   - Resultado final = suma de puntos obtenidos (0-100). Nunca negativo.
  *
+ * Reglas versión 2: R03, R05, R06, R07 y R08 (y los riesgos G01 y G02) se evalúan por cláusulas,
+ * con palabras completas y negaciones ({@link ReglasContextuales}). Cada una termina en un estado
+ * de evidencia y suma: su peso si es SUFICIENTE; la mitad si es INSUFICIENTE o si la cláusula
+ * suficiente tiene redacción problemática; nada en otro caso. NO_APLICABLE y NO_VERIFICABLE no
+ * suman ni generan incidencia: la puntuación sigue siendo la suma de pesos acreditados sobre 100,
+ * sin redistribuir pesos (eso exigiría recalibrar todas las reglas).
+ *
  * No utiliza APIs externas. Todo el análisis se realiza mediante reglas en Java.
  */
 @Service
 public class MotorAnalisisLegal implements AnalizadorLegal {
 
     private static final String MOTOR = "LEGAL_TEXT";
-    private static final VersionAnalizador VERSION = new VersionAnalizador("2", "1");
+    private static final VersionAnalizador VERSION = new VersionAnalizador("2", "2");
 
     @Override
     public VersionAnalizador version() {
@@ -200,7 +209,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
                 "en virtud de", "en base a", "con fundamento en"
             ),
             Collections.emptyList(),
-            "Incumplimiento del Art. 6 y 13.1.c RGPD. Sin base legal válida, todo tratamiento es ilícito. Máxima exposición a sanciones.",
+            "Posible incumplimiento del deber de información del Art. 13.1.c RGPD: el interesado no puede saber qué base del Art. 6.1 RGPD legitima cada tratamiento. El texto por sí solo no permite valorar si el tratamiento es lícito.",
             "Identificar y declarar explícitamente la base legal aplicable a cada tratamiento.",
             "RGPD Art. 6 — Licitud del tratamiento / Art. 13.1.c",
             "\"La base legal del tratamiento es: (a) el consentimiento del interesado (Art. 6.1.a RGPD); (b) la ejecución del contrato (Art. 6.1.b RGPD); (c) el cumplimiento de una obligación legal (Art. 6.1.c RGPD).\"",
@@ -601,7 +610,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             List.of("cederemos sus datos", "venderemos sus datos", "vendemos sus datos", "transferimos sus datos a socios publicitarios sin restriccion")),
         new PatronRiesgo("G02",
             "Conservación de datos de forma indefinida",
-            "Se detecta referencia a conservación de datos sin límite temporal, contraria al principio de minimización (Art. 5.1.e RGPD).",
+            "Se detecta referencia a conservación de datos sin límite temporal, contraria al principio de limitación del plazo de conservación (Art. 5.1.e RGPD).",
             "ALTA",
             List.of("indefinidamente", "sin limite de tiempo", "de forma indefinida", "almacenamos sus datos permanentemente")),
         new PatronRiesgo("G03",
@@ -634,6 +643,8 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
         }
 
         String textoNorm = normalizar(texto);
+        List<ReglasContextuales.Clausula> clausulas = ReglasContextuales.segmentar(texto);
+        List<EvaluacionRegla> evaluaciones = new ArrayList<>();
 
         List<ErrorAuditoria> errores = new ArrayList<>();
         List<String> riesgos = new ArrayList<>();
@@ -657,6 +668,60 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
 
         // ---- Evaluar cada regla ----
         for (Regla regla : REGLAS) {
+            if (ReglasContextuales.IDS.contains(regla.id)) {
+                var e = ReglasContextuales.evaluar(regla.id, clausulas, entrada.tipoDocumento());
+                evaluaciones.add(new EvaluacionRegla(regla.id, e.estado(), e.evidencia(), e.detalle()));
+                String severidad = null;
+                switch (e.estado()) {
+                    case SUFICIENTE -> puntuacion += regla.peso;
+                    case INSUFICIENTE -> {
+                        var textos = ReglasContextuales.TEXTOS.get(regla.id);
+                        severidad = rebajar(regla.severidad);
+                        errores.add(errorContextual(regla.id, textos.tituloInsuficiente(),
+                                textos.descripcionInsuficiente() + " " + e.detalle(), severidad, e.evidencia(),
+                                regla.impacto, regla.accion, e.estado()));
+                        riesgos.add(textos.tituloInsuficiente());
+                        anotarCarencia(regla, recomendaciones, textosSugeridos, faltantes, referenciasLegales);
+                        puntuacion += regla.peso / 2;
+                    }
+                    case POSIBLE_INCIDENCIA -> {
+                        if (e.problematica()) {
+                            severidad = "ALTA";
+                            errores.add(errorContextual(regla.id, PREFIJO_RIESGO + regla.titulo,
+                                    "La cláusula contiene una redacción que puede ser contraria a la normativa. " + e.detalle(),
+                                    severidad, e.evidencia(),
+                                    "Esta redacción puede ser considerada ilegal o abusiva según la normativa vigente.",
+                                    "Revisar y reformular la cláusula citada como evidencia.", e.estado()));
+                            riesgos.add("Redacción problemática en: " + regla.titulo);
+                            if (e.suficiente()) puntuacion += regla.peso / 2;
+                        } else {
+                            severidad = regla.severidad;
+                            errores.add(errorContextual(regla.id, regla.titulo, regla.descripcion + " " + e.detalle(),
+                                    severidad, "No se ha encontrado en el texto analizado ninguna cláusula sobre: "
+                                            + regla.campoFaltante + ".", regla.impacto, regla.accion, e.estado()));
+                            riesgos.add(regla.titulo);
+                        }
+                        if (!e.suficiente()) {
+                            anotarCarencia(regla, recomendaciones, textosSugeridos, faltantes, referenciasLegales);
+                        }
+                    }
+                    case NO_VERIFICABLE -> {
+                        // Not a finding: the text cannot tell whether the information is required.
+                        faltantes.add(regla.campoFaltante + ": " + e.detalle());
+                        recomendaciones.add(regla.accion);
+                        textosSugeridos.add(regla.textoCumplimiento);
+                    }
+                    case NO_APLICABLE -> { /* Not demanded from this type of document. */ }
+                }
+                if (severidad != null) {
+                    switch (severidad) {
+                        case "ALTA" -> incumplimientosAlta++;
+                        case "MEDIA" -> incumplimientosMedia++;
+                        default -> incumplimientosBaja++;
+                    }
+                }
+                continue;
+            }
             boolean cumple = contienePalabraClave(textoNorm, regla.palabrasClave);
 
             if (!cumple) {
@@ -692,7 +757,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
                     if (textoNorm.contains(normalizar(patron))) {
                         tieneRiesgo = true;
                         ErrorAuditoria error = nuevoError(regla.id);
-                        error.setTitulo("Cláusula presente pero con redacción problemática: " + regla.titulo);
+                        error.setTitulo(PREFIJO_RIESGO + regla.titulo);
                         error.setDescripcion("La cláusula existe pero contiene lenguaje que puede ser ilegal o abusivo: \"" + patron + "\"");
                         error.setSeveridad("ALTA");
                         error.setEvidencia("Patrón problemático detectado: \"" + patron + "\"");
@@ -715,6 +780,25 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             String descripRiesgo = patron.descripcion();
             String severidadRiesgo = patron.severidad();
 
+            if (patron.id().equals("G01") || patron.id().equals("G02")) {
+                // Negation-aware and tied to a clause about personal data: "no vendemos sus datos" is not a risk.
+                var clausula = patron.id().equals("G01") ? ReglasContextuales.g01(clausulas) : ReglasContextuales.g02(clausulas);
+                if (clausula != null) {
+                    ErrorAuditoria error = nuevoError(patron.id());
+                    error.setTitulo(nombreRiesgo);
+                    error.setDescripcion(descripRiesgo);
+                    error.setSeveridad(severidadRiesgo);
+                    error.setEvidencia(ReglasContextuales.cita(clausula));
+                    error.setImpacto("Posible incumplimiento de la normativa de protección de datos.");
+                    error.setAccion("Revisar y reformular el texto citado como evidencia.");
+                    error.setEstado(EstadoEvidencia.POSIBLE_INCIDENCIA);
+                    errores.add(error);
+                    riesgos.add(nombreRiesgo);
+                    puntuacion = Math.max(0, puntuacion - 2);
+                    incumplimientosAlta++;
+                }
+                continue;
+            }
             for (String expresion : patron.patrones()) {
                 if (textoNorm.contains(normalizar(expresion))) {
                     ErrorAuditoria error = nuevoError(patron.id());
@@ -743,7 +827,8 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
         recomendaciones.add("Formar al personal en protección de datos y establecer un procedimiento interno de gestión de brechas de seguridad (Arts. 33-34 RGPD).");
 
         // ---- Generar resumen ----
-        String resumen = generarResumen(puntuacion, incumplimientosAlta, incumplimientosMedia, incumplimientosBaja, errores.size());
+        String resumen = generarResumen(puntuacion, incumplimientosAlta, incumplimientosMedia, incumplimientosBaja, errores.size())
+                + resumenContextual(evaluaciones);
 
         ResultadoAuditoria resultado = new ResultadoAuditoria();
         resultado.setResumen(resumen);
@@ -754,8 +839,53 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
         resultado.setTextosSugeridos(textosSugeridos);
         resultado.setReferenciasLegales(referenciasLegales);
         resultado.setFaltantes(faltantes);
+        resultado.setEvaluaciones(evaluaciones);
 
         return resultado;
+    }
+
+    private static final String PREFIJO_RIESGO = "Cláusula presente pero con redacción problemática: ";
+
+    private ErrorAuditoria errorContextual(String ruleId, String titulo, String descripcion, String severidad,
+                                           String evidencia, String impacto, String accion, EstadoEvidencia estado) {
+        ErrorAuditoria error = nuevoError(ruleId);
+        error.setTitulo(titulo);
+        error.setDescripcion(descripcion);
+        error.setSeveridad(severidad);
+        error.setEvidencia(evidencia);
+        error.setImpacto(impacto);
+        error.setAccion(accion);
+        error.setEstado(estado);
+        return error;
+    }
+
+    /** Same advice the keyword rules give for a missing clause. */
+    private static void anotarCarencia(Regla regla, List<String> recomendaciones, List<String> textosSugeridos,
+                                       List<String> faltantes, List<String> referenciasLegales) {
+        recomendaciones.add(regla.accion);
+        textosSugeridos.add(regla.textoCumplimiento);
+        faltantes.add(regla.campoFaltante);
+        if (!referenciasLegales.contains(regla.referenciaLegal)) referenciasLegales.add(regla.referenciaLegal);
+    }
+
+    /** Some information is given, so one level below the rule's own severity. */
+    private static String rebajar(String severidad) {
+        return switch (severidad) {
+            case "ALTA" -> "MEDIA";
+            default -> "BAJA";
+        };
+    }
+
+    private static String resumenContextual(List<EvaluacionRegla> evaluaciones) {
+        Map<EstadoEvidencia, Long> cuenta = evaluaciones.stream()
+                .collect(Collectors.groupingBy(EvaluacionRegla::estado, () -> new EnumMap<>(EstadoEvidencia.class),
+                        Collectors.counting()));
+        return String.format(" Información de privacidad evaluada por contexto (R03, R05, R06, R07 y R08): "
+                        + "%d con evidencia suficiente, %d con evidencia insuficiente, %d con posible incidencia, "
+                        + "%d no verificables con el texto y %d no aplicables a este tipo de documento.",
+                cuenta.getOrDefault(EstadoEvidencia.SUFICIENTE, 0L), cuenta.getOrDefault(EstadoEvidencia.INSUFICIENTE, 0L),
+                cuenta.getOrDefault(EstadoEvidencia.POSIBLE_INCIDENCIA, 0L),
+                cuenta.getOrDefault(EstadoEvidencia.NO_VERIFICABLE, 0L), cuenta.getOrDefault(EstadoEvidencia.NO_APLICABLE, 0L));
     }
 
     // -----------------------------------------------------------------------

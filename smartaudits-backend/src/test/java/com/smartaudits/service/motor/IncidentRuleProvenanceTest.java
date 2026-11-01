@@ -15,15 +15,18 @@ class IncidentRuleProvenanceTest {
     private final MotorAnalisisLegal motor = new MotorAnalisisLegal();
 
     @Test
-    void allNineteenMissingRulesRetainTheirOriginalIdsAndTitles() throws Exception {
+    void everyMissingRuleRetainsItsOriginalIdAndTitle() throws Exception {
         var expected = new LinkedHashMap<String, String>();
         try (var input = getClass().getResourceAsStream("/motor/current-engine-v1.json")) {
             new ObjectMapper().readTree(input).path("rules").fields()
                     .forEachRemaining(rule -> expected.put(rule.getKey(), rule.getValue().path("titulo").asText()));
         }
-        var result = motor.analyze(new EntradaAnalisis("zzz", "Aviso Legal"));
+        // Rules v2: a missing DPO mention is not verifiable (no finding), and a legal notice is not
+        // asked for the privacy information; a complete document still shows the other 18 with v1 titles.
+        expected.remove("R03");
+        var result = motor.analyze(new EntradaAnalisis("zzz", "Documento Completo"));
         Map<String, String> actual = new LinkedHashMap<>();
-        assertThat(result.getErrores()).hasSize(19).allSatisfy(error -> {
+        assertThat(result.getErrores()).hasSize(18).allSatisfy(error -> {
             assertThat(actual.put(error.getRuleId(), error.getTitulo())).isNull();
             assertThat(error.getMotor()).isEqualTo("LEGAL_TEXT");
             assertThat(error.getVersion()).isEqualTo(motor.version().versionReglas());
@@ -34,7 +37,7 @@ class IncidentRuleProvenanceTest {
     @ParameterizedTest
     @CsvSource({
             "G01, cederemos sus datos, Cláusula abusiva de cesión de datos",
-            "G02, indefinidamente, Conservación de datos de forma indefinida",
+            "G02, conservaremos sus datos indefinidamente, Conservación de datos de forma indefinida",
             "G03, continuar navegando implica, Consentimiento tácito o por defecto",
             "G04, no podemos garantizar la seguridad, Exclusión de responsabilidad en seguridad",
             "G05, fingerprinting, Tecnologías de seguimiento invasivo sin información"})
@@ -59,8 +62,9 @@ class IncidentRuleProvenanceTest {
     }
 
     @Test
-    void outputContractVersionChangesButRulesVersionDoesNot() {
-        assertThat(motor.version()).isEqualTo(new VersionAnalizador("2", "1"));
+    void contextAwareRulesAreRulesVersionTwoWithTheSameOutputContract() {
+        // The output only gained optional fields (estado, evaluaciones); stored audits keep their own versions.
+        assertThat(motor.version()).isEqualTo(new VersionAnalizador("2", "2"));
     }
 
     @ParameterizedTest

@@ -7,6 +7,7 @@ import api from '../api/axios'
 import DetalleAuditoriaConjunta from '../pages/DetalleAuditoriaConjunta'
 import AuditoriaConjuntaPdfDocument, { textoPdf } from '../pdf/AuditoriaConjuntaPdfDocument'
 import { buildJointReport, jointPdfFileName } from '../report/jointReportPresentation'
+import { EVIDENCE_STATES } from '../report/reportPresentation'
 import { informePocosHallazgos, informeVariosDocumentos as informe, payloadHostil } from './fixtures/jointReportFixtures'
 
 vi.mock('../api/axios', () => ({ default: { get: vi.fn(), post: vi.fn() } }))
@@ -41,7 +42,7 @@ const nodes = (tree, attr) => tree.flatMap(n => typeof n === 'string' ? [] : [
   ...(n.props[attr] !== undefined ? [n] : []), ...nodes(n.children, attr)])
 const textOf = tree => tree.map(n => typeof n === 'string' ? n : textOf(n.children)).join('')
 const FIELDS = ['category', 'url', 'score', 'classification', 'engine', 'summary', 'risk']
-const FINDING_FIELDS = ['findingTitle', 'severity', 'description', 'evidence', 'impact', 'action']
+const FINDING_FIELDS = ['findingTitle', 'severity', 'status', 'description', 'evidence', 'impact', 'action']
 const COVERAGE_FIELDS = ['coverageCategory', 'coverageState', 'coverageDocument', 'coverageEvidence', 'coverageLink',
   'coverageLinkSources', 'coverageContradiction', 'coverageEmpty']
 
@@ -125,6 +126,7 @@ describe('joint audit PDF download', () => {
       expect(doc.risk).toEqual((d.riesgos || []).map(textoPdf))
       expect(doc.findings.map(f => [f.findingTitle, f.severity])).toEqual(d.incidencias.map(x => [x.titulo, x.severidad]))
       expect(doc.findings.map(f => f.evidence)).toEqual(d.incidencias.map(x => textoPdf(x.evidencia) || 'No disponible'))
+      expect(doc.findings.map(f => f.status)).toEqual(d.incidencias.map(x => EVIDENCE_STATES[x.estado] ?? ''))
     })
     expect(fromPdf.recommendations).toEqual(informe.recomendaciones.map(r => [r.texto, r.documentos.join(', ')]))
     expect(fromPdf.missing).toEqual(informe.categoriasNoAportadas)

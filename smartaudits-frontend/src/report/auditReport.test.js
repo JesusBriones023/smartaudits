@@ -23,13 +23,13 @@ describe('AuditReportModel contract', () => {
       findings: [
         { ruleId: 'R05', motor: 'LEGAL_TEXT', version: 'regla-1', title: 'Conservación',
           description: 'Falta plazo', severity: 'MEDIA', severityLevel: 'MEDIA', evidence: 'Sin duración',
-          impact: 'Conservación excesiva', action: 'Indicar plazo' },
+          impact: 'Conservación excesiva', action: 'Indicar plazo', status: null },
         { ruleId: 'R05', motor: 'LEGAL_TEXT', version: 'regla-2', title: '<script>título</script>',
           description: 'Descripción segunda', severity: ' alta ', severityLevel: 'ALTA',
-          evidence: '<img src=x onerror="alert(1)">', impact: 'Impacto segundo', action: 'Acción segunda' },
+          evidence: '<img src=x onerror="alert(1)">', impact: 'Impacto segundo', action: 'Acción segunda', status: null },
         { ruleId: 'R19', motor: 'LEGAL_TEXT', version: 'regla-1', title: 'Tercer hallazgo',
           description: 'Descripción tercera', severity: 'BAJA', severityLevel: 'BAJA',
-          evidence: 'Evidencia tercera', impact: 'Impacto tercero', action: 'Acción tercera' },
+          evidence: 'Evidencia tercera', impact: 'Impacto tercero', action: 'Acción tercera', status: null },
       ],
       recommendations: ['Definir duración', '<script>recomendación</script>', 'Definir duración'],
       unverifiableItems: ['Duración', 'Responsable'],
@@ -61,7 +61,7 @@ describe('AuditReportModel contract', () => {
     expect(report.provenance).toEqual({ versionMotor: null, versionReglas: null, fechaAnalisis: null, tipoFuente: null })
     expect(report.findings).toEqual([{ ruleId: null, motor: null, version: null,
       title: 'Hallazgo histórico', description: '', severity: '', severityLevel: null,
-      evidence: 'Evidencia histórica', impact: '', action: '' }])
+      evidence: 'Evidencia histórica', impact: '', action: '', status: null }])
     expect(report.suggestedTexts).toEqual([])
     expect(report.recommendations).toEqual([])
     expect(report.originalText).toBe(auditoriaLegado.textoOriginal)

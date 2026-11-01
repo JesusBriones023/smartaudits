@@ -129,6 +129,29 @@ describe('semantic parity of the active report outputs', () => {
     expect(report.findings[0].severityLevel).toBeNull()
   })
 
+  it('shows the evidence state of rules v2 findings on screen, in the PDF and in the copied text, and nothing for older ones', async () => {
+    const audit = { ...auditoriaLegado, resultado: { ...auditoriaLegado.resultado, errores: [
+      { ruleId: 'R05', titulo: 'Base legal del tratamiento mencionada sin identificarla', severidad: 'MEDIA', estado: 'INSUFICIENTE',
+        evidencia: '«Legitimación: la indicada en cada caso.»' },
+      { ruleId: 'R10', titulo: 'Política de cookies ausente o incompleta', severidad: 'ALTA' },
+    ] } }
+    const report = buildAuditReport(audit)
+    expect(report.findings.map(f => f.status)).toEqual(['Evidencia insuficiente', null])
+    api.get.mockResolvedValue({ data: audit })
+    const { container } = render(<MemoryRouter initialEntries={[`/auditoria/${audit.id}`]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <Routes><Route path="/auditoria/:id" element={<DetalleAuditoria />} /></Routes>
+    </MemoryRouter>)
+    await screen.findByRole('heading', { name: audit.titulo })
+    const findings = [...container.querySelectorAll('[data-report-field="finding"]')]
+    expect(findings.map(f => f.querySelector('[data-report-field="status"]')?.textContent ?? null))
+      .toEqual(['Evidencia insuficiente', null])
+    const pdfFindings = pdfNodes(pdfTree(<AuditoriaPdfDocument report={report} />), 'data-report-field', 'finding')
+    expect(pdfFindings.map(f => pdfText(pdfNodes(f.children, 'data-report-field', 'status')) || null))
+      .toEqual(['Evidencia insuficiente', null])
+    expect(renderReportText(report).match(/Estado de la evidencia: Evidencia insuficiente/g)).toHaveLength(1)
+    expect(buildAuditReport(auditoriaLegado).findings.every(f => f.status === null)).toBe(true)
+  })
+
   it.each([
     ['complete', auditoriaCompleta], ['historical', auditoriaLegado], ['unavailable score', auditoriaPuntuacionNull],
   ])('preserves the header, section order and every visible field: %s', async (_, audit) => {

@@ -1,5 +1,5 @@
 import { getNivelCumplimiento } from '../utils/helpers'
-import { REPORT_FALLBACKS, REPORT_LABELS, formatReportDate } from './reportPresentation'
+import { EVIDENCE_STATES, REPORT_FALLBACKS, REPORT_LABELS, formatReportDate } from './reportPresentation'
 
 // Single view model of a joint audit for the screen and the PDF: both render exactly
 // this, built from the persisted, authorized DTO. Nothing here computes a global score
@@ -18,6 +18,7 @@ export const JOINT_LABELS = Object.freeze({
   evidence: REPORT_LABELS.evidence,
   impact: REPORT_LABELS.impact,
   action: REPORT_LABELS.action,
+  status: REPORT_LABELS.status,
   recommendations: 'Recomendaciones agrupadas',
   appliesTo: 'Aplica a',
   missing: 'Documentos no aportados',
@@ -127,6 +128,7 @@ export function buildJointReport(informe) {
         evidence: text(i.evidencia) || JOINT_FALLBACKS.evidence,
         impact: text(i.impacto),
         action: text(i.accion),
+        status: EVIDENCE_STATES[i.estado] ?? null,
       })),
     })),
     recommendations: (Array.isArray(informe?.recomendaciones) ? informe.recomendaciones : []).map(r => ({

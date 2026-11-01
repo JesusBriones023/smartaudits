@@ -2,7 +2,16 @@ export const REPORT_LABELS = Object.freeze({
   type: 'Tipo', date: 'Fecha', url: 'URL de referencia',
   score: 'Puntuación de Cumplimiento', level: 'Clasificación',
   description: 'Descripción', evidence: 'Evidencia', impact: 'Impacto',
-  action: 'Acción correctiva',
+  action: 'Acción correctiva', status: 'Estado de la evidencia',
+})
+
+// Evidence states of the context-aware rules (rules version 2). Results without them show nothing.
+export const EVIDENCE_STATES = Object.freeze({
+  SUFICIENTE: 'Evidencia suficiente',
+  INSUFICIENTE: 'Evidencia insuficiente',
+  POSIBLE_INCIDENCIA: 'Posible incidencia',
+  NO_VERIFICABLE: 'No verificable con el contenido',
+  NO_APLICABLE: 'No aplicable a este documento',
 })
 
 export const REPORT_FALLBACKS = Object.freeze({
@@ -72,7 +81,7 @@ export function renderReportText(report) {
     else if (section.kind === 'findings') {
       body = section.items.map((item, index) => [
         `${index + 1}. ${item.title} [${item.severity}]`,
-        ...['description', 'evidence', 'impact', 'action'].map(field =>
+        ...[...(item.status ? ['status'] : []), 'description', 'evidence', 'impact', 'action'].map(field =>
           `   ${REPORT_LABELS[field]}: ${item[field]}`),
       ].join('\n')).join('\n\n')
     } else body = section.items.map((item, index) => `${index + 1}. ${item}`).join('\n')

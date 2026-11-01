@@ -294,6 +294,12 @@ const DetalleAuditoria = () => {
                 </div>
 
                 <div className="space-y-3 text-sm">
+                  {error.status && (
+                    <p className="text-gray-700">
+                      <span className="font-semibold">{REPORT_LABELS.status}:</span>{' '}
+                      <span data-report-field="status">{error.status}</span>
+                    </p>
+                  )}
                   <div>
                     <span className="font-semibold text-gray-700">
                       {REPORT_LABELS.description}:

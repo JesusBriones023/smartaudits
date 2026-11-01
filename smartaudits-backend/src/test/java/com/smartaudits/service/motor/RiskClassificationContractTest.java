@@ -36,7 +36,7 @@ class RiskClassificationContractTest {
         assertThat(result.getPuntuacionRiesgo()).isEqualTo(example.score());
         assertThat(result.getResumen()).contains(
                 "Nivel de riesgo: " + example.riskLabel() + " (puntuación: " + example.score() + "/100).");
-        assertThat(motor.version()).isEqualTo(new VersionAnalizador("2", "1"));
+        assertThat(motor.version()).isEqualTo(new VersionAnalizador("2", "2"));
     }
 
     @ParameterizedTest

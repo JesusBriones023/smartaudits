@@ -506,6 +506,14 @@ const AuditoriaPdfDocument = ({ report }) => {
                     </Text>
                   </View>
 
+                  {error.status && (
+                    <Campo
+                      field="status"
+                      label={REPORT_LABELS.status}
+                      value={error.status}
+                    />
+                  )}
+
                   <Campo
                     field="description"
                     label={REPORT_LABELS.description}

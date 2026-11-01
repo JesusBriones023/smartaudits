@@ -197,6 +197,7 @@ const AuditoriaConjuntaPdfDocument = ({ informe }) => {
                 <Text data-joint-field="findingTitle">{f.title}</Text>
                 {' - '}{JOINT_LABELS.severity}: <Text data-joint-field="severity">{f.severity}</Text>
               </T>
+              {f.status ? <Campo label={JOINT_LABELS.status} value={f.status} field="status" /> : null}
               {f.description ? <Campo label={JOINT_LABELS.description} value={f.description} field="description" /> : null}
               <Campo label={JOINT_LABELS.evidence} value={f.evidence} field="evidence" />
               {f.impact ? <Campo label={JOINT_LABELS.impact} value={f.impact} field="impact" /> : null}

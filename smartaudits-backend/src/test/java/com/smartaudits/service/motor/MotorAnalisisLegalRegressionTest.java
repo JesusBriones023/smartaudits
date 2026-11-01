@@ -13,7 +13,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Characterization of the current engine, not assertions of legal correctness. */
+/** Characterization of the current engine (rules v2), not assertions of legal correctness. */
 class MotorAnalisisLegalRegressionTest {
     private static final String RISK_PREFIX = "Cláusula presente pero con redacción problemática: ";
     private static final Corpus CORPUS = loadCorpus();
@@ -74,10 +74,20 @@ class MotorAnalisisLegalRegressionTest {
         assertStrings(result.getReferenciasLegales(), structure.referenciasLegales(), context);
         assertStrings(result.getFaltantes(), structure.faltantes(), context);
         List<String> expectedMissingFields = example.expectedIncidents().stream()
-                .filter(id -> id.endsWith(":MISSING"))
+                .filter(id -> id.endsWith(":MISSING") || id.endsWith(":INSUFFICIENT"))
                 .map(id -> CORPUS.rules().get(id.substring(0, 3)).campoFaltante()).toList();
-        assertThat(result.getFaltantes()).as(context)
-                .containsExactlyInAnyOrderElementsOf(expectedMissingFields);
+        assertThat(result.getFaltantes()).as(context).containsAll(expectedMissingFields);
+        // What the text cannot settle is listed as such, never as a finding.
+        example.expectedEvaluations().forEach((ruleId, state) -> {
+            if (state.equals("NO_VERIFICABLE")) {
+                assertThat(result.getFaltantes()).as(context)
+                        .anyMatch(f -> f.startsWith(CORPUS.rules().get(ruleId).campoFaltante() + ": "));
+                assertThat(result.getErrores()).as(context).noneMatch(e -> ruleId.equals(e.getRuleId()));
+            }
+        });
+        Map<String, String> evaluations = new java.util.LinkedHashMap<>();
+        result.getEvaluaciones().forEach(e -> evaluations.put(e.ruleId(), e.estado().name()));
+        assertThat(evaluations).as(context).isEqualTo(example.expectedEvaluations());
     }
 
     private static void assertStrings(List<String> values, int size, String context) {
@@ -91,9 +101,13 @@ class MotorAnalisisLegalRegressionTest {
             assertThat(risk).as("Unknown global risk %s", id).isNotNull();
             return new Incident(id, risk.titulo(), risk.severidad());
         }
-        assertThat(id).matches("R(0[1-9]|1[0-9]):(MISSING|RISK)");
+        assertThat(id).matches("R(0[1-9]|1[0-9]):(MISSING|RISK|INSUFFICIENT)");
         Rule rule = CORPUS.rules().get(id.substring(0, 3));
         assertThat(rule).as("Unknown rule %s", id).isNotNull();
+        if (id.endsWith(":INSUFFICIENT")) {
+            assertThat(rule.tituloInsuficiente()).as("Rule %s has no insufficient-evidence state", id).isNotBlank();
+            return new Incident(id.substring(0, 3), rule.tituloInsuficiente(), rule.severidadInsuficiente());
+        }
         return id.endsWith(":RISK")
                 ? new Incident(id.substring(0, 3), RISK_PREFIX + rule.titulo(), "ALTA")
                 : new Incident(id.substring(0, 3), rule.titulo(), rule.severidad());
@@ -101,10 +115,10 @@ class MotorAnalisisLegalRegressionTest {
 
     private static Corpus loadCorpus() {
         try (InputStream input = MotorAnalisisLegalRegressionTest.class
-                .getResourceAsStream("/motor/current-engine-v1.json")) {
+                .getResourceAsStream("/motor/current-engine-v2.json")) {
             assertThat(input).as("Versioned motor corpus must exist").isNotNull();
             Corpus corpus = new ObjectMapper().readValue(input, Corpus.class);
-            assertThat(corpus.schemaVersion()).isEqualTo(1);
+            assertThat(corpus.schemaVersion()).isEqualTo(2);
             assertThat(corpus.baselineCommit()).isNotBlank();
             assertThat(corpus.purpose()).isNotBlank();
             assertThat(corpus.rules()).hasSize(19);
@@ -121,13 +135,15 @@ class MotorAnalisisLegalRegressionTest {
 
     record Corpus(int schemaVersion, String baselineCommit, String purpose,
                   Map<String, Rule> rules, Map<String, GlobalRisk> globalRisks, List<CorpusCase> cases) {}
-    record Rule(String titulo, String severidad, int peso, String campoFaltante) {}
+    record Rule(String titulo, String severidad, int peso, String campoFaltante, String tituloInsuficiente,
+                String severidadInsuficiente) {}
     record GlobalRisk(String titulo, String severidad, int penalizacion) {}
     record Structure(int riesgos, int recomendaciones, int textosSugeridos, int referenciasLegales, int faltantes) {}
     record Incident(String ruleId, String titulo, String severidad) {}
     record CorpusCase(String id, String categoria, String descripcion, String tipoDocumento, String texto,
                       Integer expectedScore, String expectedSummaryMarker, List<String> expectedIncidents,
-                      Structure expectedStructure, String notas, Boolean knownLimitation, String limitation) {
+                      Structure expectedStructure, Map<String, String> expectedEvaluations, String notas,
+                      Boolean knownLimitation, String limitation) {
         @Override public String toString() {
             return id + " [" + categoria + ", knownLimitation=" + knownLimitation + "]";
         }

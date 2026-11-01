@@ -18,7 +18,7 @@ export const informeVariosDocumentos = {
         { ruleId: 'R05', motor: 'LEGAL_TEXT', version: '1', titulo: 'Plazo de conservación ausente', severidad: 'ALTA',
           descripcion: largo, evidencia: 'Conservaremos sus datos indefinidamente' + '-sin-espacios'.repeat(30),
           impacto: 'Incumplimiento del principio de limitación del plazo.', accion: 'Indicar un plazo concreto.' },
-        { ruleId: 'R07', motor: 'LEGAL_TEXT', version: '1', titulo: 'Derechos incompletos', severidad: 'MEDIA',
+        { ruleId: 'R06', motor: 'LEGAL_TEXT', version: '2', titulo: 'Derechos incompletos', severidad: 'MEDIA', estado: 'INSUFICIENTE',
           descripcion: 'No se explica la oposición.', evidencia: '', impacto: 'Información incompleta.', accion: 'Añadir el derecho.' },
       ],
     },

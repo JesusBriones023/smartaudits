@@ -188,6 +188,7 @@ const DetalleAuditoriaConjunta = () => {
                       <span className="font-medium">[<span data-joint-field="severity">{f.severity}</span>]</span>{' '}
                       <span data-joint-field="findingTitle">{f.title}</span>
                     </p>
+                    {f.status && <p>{JOINT_LABELS.status}: <span data-joint-field="status">{f.status}</span></p>}
                     {f.description && <p>{JOINT_LABELS.description}: <span data-joint-field="description">{f.description}</span></p>}
                     <p className="break-all">{JOINT_LABELS.evidence}: <span data-joint-field="evidence">{f.evidence}</span></p>
                     {f.impact && <p>{JOINT_LABELS.impact}: <span data-joint-field="impact">{f.impact}</span></p>}

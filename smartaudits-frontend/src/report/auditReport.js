@@ -1,4 +1,5 @@
 import { getNivelCumplimiento } from '../utils/helpers'
+import { EVIDENCE_STATES } from './reportPresentation'
 
 const text = value => value == null ? '' : String(value)
 const optionalText = value => value == null ? null : String(value)
@@ -29,6 +30,7 @@ function finding(value) {
     evidence: text(value.evidencia),
     impact: text(value.impacto),
     action: text(value.accion),
+    status: EVIDENCE_STATES[value.estado] ?? null,
   })
 }
 
