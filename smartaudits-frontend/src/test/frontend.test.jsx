@@ -214,6 +214,85 @@ describe('Audit creation', () => {
     expect(await screen.findByText('El HTML no contiene texto legible para auditar')).toBeVisible()
     expect(screen.getByLabelText(/HTML de la Página/)).toHaveValue('<script>x()</script>')
   })
+
+  describe('legal document detection', () => {
+    const deteccion = {
+      detectados: [
+        { categoria: 'POLITICA_PRIVACIDAD', texto: 'Política de privacidad', url: 'https://www.ejemplo.es/privacidad',
+          relativa: false, externo: false, contexto: 'footer', senal: 'texto' },
+        { categoria: 'AVISO_LEGAL', texto: 'Aviso legal', url: 'https://legal.example.invalid/aviso',
+          relativa: false, externo: true, contexto: 'footer', senal: 'texto' },
+      ],
+      noDetectados: ['POLITICA_COOKIES', 'TERMINOS_CONDICIONES', 'CONDICIONES_USO', 'CONDICIONES_COMPRA', 'DECLARACION_ACCESIBILIDAD'],
+      enlacesAnalizados: 4, enlacesDescartados: 1, limiteAlcanzado: false, referenciaAplicada: true,
+    }
+
+    async function htmlMode(html) {
+      const user = userEvent.setup()
+      await user.click(screen.getByRole('radio', { name: 'HTML' }))
+      await user.type(screen.getByLabelText(/Título de la Auditoría/), 'Auditoría HTML')
+      await user.click(screen.getByLabelText(/URL del Sitio Web/))
+      await user.paste('https://www.ejemplo.es/')
+      await user.click(screen.getByLabelText(/HTML de la Página/))
+      await user.paste(html)
+      return user
+    }
+
+    it('shows detected and not detected categories as text, without creating an audit', async () => {
+      const html = '<footer><a href="/privacidad">Política de privacidad</a><a href="javascript:x()">Cookies</a></footer>'
+      api.post.mockResolvedValueOnce({ data: deteccion })
+      showCreation()
+      expect(screen.queryByRole('button', { name: 'Detectar documentos legales' })).not.toBeInTheDocument()
+      const user = await htmlMode(html)
+      await user.click(screen.getByRole('button', { name: 'Detectar documentos legales' }))
+      const panel = await screen.findByRole('region', { name: 'Documentos legales enlazados en el HTML' })
+      expect(api.post).toHaveBeenCalledExactlyOnceWith('/auditorias/html/enlaces-legales', {
+        html, urlOpcional: 'https://www.ejemplo.es/'
+      })
+      const fila = clave => panel.querySelector(`[data-categoria="${clave}"]`)
+      expect(fila('POLITICA_PRIVACIDAD')).toHaveTextContent('DETECTADO EN EL HTML')
+      expect(fila('POLITICA_PRIVACIDAD')).toHaveTextContent('https://www.ejemplo.es/privacidad')
+      expect(fila('POLITICA_PRIVACIDAD')).not.toHaveTextContent('Enlace externo')
+      expect(fila('AVISO_LEGAL')).toHaveTextContent('Enlace externo')
+      for (const clave of deteccion.noDetectados) {
+        expect(fila(clave)).toHaveTextContent('NO DETECTADO EN EL HTML')
+      }
+      expect(panel).toHaveTextContent('No se han descargado ni verificado')
+      expect(panel).toHaveTextContent('4 enlaces analizados · 1 descartados')
+      // Candidate URLs are never rendered as navigable links.
+      expect(panel.querySelector('a')).toBeNull()
+      expect(screen.getByText('https://legal.example.invalid/aviso').tagName).toBe('CODE')
+      expect(api.post).toHaveBeenCalledTimes(1)
+    })
+
+    it('keeps the audit flow working after detection and clears stale results when the HTML changes', async () => {
+      const pending = deferred()
+      api.post.mockResolvedValueOnce({ data: { ...deteccion, limiteAlcanzado: true } }).mockReturnValueOnce(pending.promise)
+      showCreation()
+      const user = await htmlMode('<a href="/privacidad">Privacidad</a>')
+      await user.click(screen.getByRole('button', { name: 'Detectar documentos legales' }))
+      expect(await screen.findByText(/Se alcanzó el límite/)).toBeVisible()
+      await user.type(screen.getByLabelText(/HTML de la Página/), ' ')
+      expect(screen.queryByRole('region', { name: 'Documentos legales enlazados en el HTML' })).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Analizar documento' }))
+      expect(api.post).toHaveBeenLastCalledWith('/auditorias/html', {
+        titulo: 'Auditoría HTML', tipoDocumento: 'Política de Privacidad',
+        html: '<a href="/privacidad">Privacidad</a> ', urlOpcional: 'https://www.ejemplo.es/'
+      })
+      await act(async () => pending.resolve({ data: { id: 88 } }))
+      expect(await screen.findByRole('heading', { name: 'Detalle recibido: 88' })).toBeVisible()
+    })
+
+    it('shows a detection error without blocking the form', async () => {
+      api.post.mockRejectedValueOnce({ response: { status: 400, data: { message: 'La URL debe ser una dirección HTTP o HTTPS válida' } } })
+      showCreation()
+      const user = await htmlMode('<a href="/privacidad">Privacidad</a>')
+      await user.click(screen.getByRole('button', { name: 'Detectar documentos legales' }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('La URL debe ser una dirección HTTP o HTTPS válida')
+      expect(screen.getByRole('button', { name: 'Detectar documentos legales' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Analizar documento' })).toBeEnabled()
+    })
+  })
 })
 
 describe('Audit detail', () => {

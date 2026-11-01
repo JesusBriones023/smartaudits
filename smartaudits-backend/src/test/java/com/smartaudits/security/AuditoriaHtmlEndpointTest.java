@@ -160,6 +160,50 @@ class AuditoriaHtmlEndpointTest {
     }
 
     @Test
+    void legalLinkDetectionReturnsCandidatesWithoutCreatingAnAudit() throws Exception {
+        String html = "<footer><a href=\"/privacidad\">Política de privacidad</a>"
+                + "<a href=\"javascript:alert(1)\">Cookies</a><a href=\"https://otra.example.invalid/legal\">Aviso legal</a></footer>";
+
+        JsonNode found = mapper.readTree(mvc.perform(post("/auditorias/html/enlaces-legales")
+                        .header("Authorization", bearer(1000L)).contentType("application/json")
+                        .content(mapper.writeValueAsString(Map.of("html", html, "urlOpcional", "https://www.ejemplo.es/"))))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+
+        assertThat(found.path("detectados")).hasSize(2);
+        assertThat(found.path("detectados").get(0).path("categoria").asText()).isEqualTo("POLITICA_PRIVACIDAD");
+        assertThat(found.path("detectados").get(0).path("url").asText()).isEqualTo("https://www.ejemplo.es/privacidad");
+        assertThat(found.path("detectados").get(0).path("externo").asBoolean()).isFalse();
+        assertThat(found.path("detectados").get(1).path("categoria").asText()).isEqualTo("AVISO_LEGAL");
+        assertThat(found.path("detectados").get(1).path("externo").asBoolean()).isTrue();
+        assertThat(found.path("noDetectados")).hasSize(5);
+        assertThat(found.path("enlacesDescartados").intValue()).isEqualTo(1);
+        assertThat(found.path("referenciaAplicada").asBoolean()).isTrue();
+        verifyNoInteractions(motor, audits, history, auditQuotaService);
+    }
+
+    @Test
+    void legalLinkDetectionRequiresAuthenticationAndValidInput() throws Exception {
+        mvc.perform(post("/auditorias/html/enlaces-legales").contentType("application/json")
+                        .content("{\"html\":\"<a href='/privacidad'>Privacidad</a>\"}"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/auditorias/html/enlaces-legales").header("Authorization", bearer(1000L))
+                        .contentType("application/json").content("{\"html\":\" \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.html").value("El HTML a auditar es obligatorio"));
+        mvc.perform(post("/auditorias/html/enlaces-legales").header("Authorization", bearer(1000L))
+                        .contentType("application/json")
+                        .content(mapper.writeValueAsString(Map.of("html", "<p>x</p>", "urlOpcional", "javascript:alert(1)"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.urlOpcional").exists());
+        mvc.perform(post("/auditorias/html/enlaces-legales").header("Authorization", bearer(1000L))
+                        .contentType("application/json")
+                        .content(mapper.writeValueAsString(Map.of("html", "x".repeat(ExtractorTextoHtml.MAX_HTML_LENGTH + 1)))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.html").value("El HTML no puede superar los 500000 caracteres"));
+        verifyNoInteractions(motor, audits, history, auditQuotaService);
+    }
+
+    @Test
     void manualCreationKeepsItsContract() throws Exception {
         mvc.perform(post("/auditorias").header("Authorization", bearer(1000L)).contentType("application/json")
                         .content("{\"titulo\":\"Manual\",\"tipoDocumento\":\"Aviso Legal\",\"textoOriginal\":\"<b>literal</b>\"}"))

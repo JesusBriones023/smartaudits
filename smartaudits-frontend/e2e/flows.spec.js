@@ -98,7 +98,10 @@ test('HTML pegado: texto extraído, auditoría persistida e informe sin ejecutar
        Conservamos los datos durante 12 meses.</p>
     <ul><li>Acceso, rectificación y supresión</li><li>Oposición, limitación y portabilidad</li></ul>
     <img src="https://evil.example.invalid/pixel.png" onerror="window.__smartauditsXss = 'img'">
-    <p>Aplicamos cifrado y medidas de seguridad.</p></body></html>`
+    <p>Aplicamos cifrado y medidas de seguridad.</p>
+    <footer><a href="/legal/privacidad">Política de privacidad</a>
+    <a href="https://cookies.example.invalid/politica">Cookies</a>
+    <a href="javascript:window.__smartauditsXss = 'link'">Aviso legal</a></footer></body></html>`
   const extracted = [
     'Política de Privacidad',
     '',
@@ -110,6 +113,8 @@ test('HTML pegado: texto extraído, auditoría persistida e informe sin ejecutar
     '- Oposición, limitación y portabilidad',
     '',
     'Aplicamos cifrado y medidas de seguridad.',
+    '',
+    'Política de privacidad Cookies Aviso legal',
   ].join('\n')
 
   // The temporary ADMIN avoids a fourth registration (3 per IP and 15 minutes).
@@ -121,6 +126,20 @@ test('HTML pegado: texto extraído, auditoría persistida e informe sin ejecutar
   await page.getByLabel('URL del Sitio Web (opcional)', { exact: true }).fill('https://evil.example.invalid/privacidad')
   await page.getByRole('radio', { name: 'HTML', exact: true }).check()
   await page.getByLabel('HTML de la Página *', { exact: true }).fill(html)
+
+  // Legal link discovery: static analysis of the pasted HTML, nothing is fetched.
+  const detected = page.waitForResponse(r => r.url().endsWith('/api/auditorias/html/enlaces-legales'))
+  await page.getByRole('button', { name: 'Detectar documentos legales', exact: true }).click()
+  expect((await detected).status()).toBe(200)
+  const panel = page.getByRole('region', { name: 'Documentos legales enlazados en el HTML' })
+  const row = key => panel.locator(`[data-categoria="${key}"]`)
+  await expect(row('POLITICA_PRIVACIDAD')).toContainText('DETECTADO EN EL HTML')
+  await expect(row('POLITICA_PRIVACIDAD')).toContainText('https://evil.example.invalid/legal/privacidad')
+  await expect(row('POLITICA_COOKIES')).toContainText('https://cookies.example.invalid/politica')
+  await expect(row('POLITICA_COOKIES')).toContainText('Enlace externo')
+  await expect(row('AVISO_LEGAL')).toContainText('NO DETECTADO EN EL HTML')
+  await expect(panel).toContainText('No se han descargado ni verificado')
+  expect(await panel.locator('a').count()).toBe(0)
   const created = page.waitForResponse(r => r.url().endsWith('/api/auditorias/html') && r.request().method() === 'POST')
   await page.getByRole('button', { name: 'Analizar documento', exact: true }).click()
   const response = await created

@@ -3,6 +3,9 @@ package com.smartaudits.controller;
 import com.smartaudits.model.Usuario;
 import com.smartaudits.model.Role;
 import com.smartaudits.model.dto.AuditoriaHtmlRequest;
+import com.smartaudits.model.dto.DeteccionEnlacesRequest;
+import com.smartaudits.model.dto.DeteccionEnlacesResponse;
+import com.smartaudits.service.html.DetectorEnlacesLegales;
 import com.smartaudits.model.dto.AuditoriaRequest;
 import com.smartaudits.model.dto.AuditoriaResponse;
 import com.smartaudits.security.CustomUserDetails;
@@ -26,6 +29,7 @@ public class AuditoriaController {
 
     private final AuditoriaService auditoriaService;
     private final UsuarioService usuarioService;
+    private final DetectorEnlacesLegales detectorEnlaces = new DetectorEnlacesLegales();
 
     @PostMapping
     public ResponseEntity<AuditoriaResponse> crearAuditoria(
@@ -54,6 +58,16 @@ public class AuditoriaController {
         AuditoriaResponse response = auditoriaService.crearAuditoriaDesdeHtml(
                 request, usuario, obtenerIp(httpRequest));
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * Enlaces a documentos legales encontrados en el HTML pegado, por análisis estático.
+     * No crea auditoría ni consume cuota, y no descarga ni sigue ninguna URL.
+     */
+    @PostMapping("/html/enlaces-legales")
+    public ResponseEntity<DeteccionEnlacesResponse> detectarEnlacesLegales(
+            @Valid @RequestBody DeteccionEnlacesRequest request) {
+        return ResponseEntity.ok(detectorEnlaces.detectar(request.getHtml(), request.getUrlOpcional()));
     }
 
     @GetMapping("/mias")

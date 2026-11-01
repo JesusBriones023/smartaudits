@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/axios'
 import LoadingSpinner from '../components/LoadingSpinner'
+import DeteccionEnlacesLegales from '../components/DeteccionEnlacesLegales'
 
 // Debe coincidir con ExtractorTextoHtml.MAX_HTML_LENGTH del backend.
 export const MAX_HTML_LENGTH = 500000
@@ -9,6 +10,9 @@ export const MAX_HTML_LENGTH = 500000
 const CrearAuditoria = () => {
   const [formato, setFormato] = useState('texto')
   const [contenidoHtml, setContenidoHtml] = useState('')
+  const [deteccion, setDeteccion] = useState(null)
+  const [detectando, setDetectando] = useState(false)
+  const [errorDeteccion, setErrorDeteccion] = useState('')
   const [titulo, setTitulo] = useState('')
   const [tipoDocumento, setTipoDocumento] = useState('Política de Privacidad')
   const [textoOriginal, setTextoOriginal] = useState('')
@@ -44,6 +48,35 @@ const CrearAuditoria = () => {
       setError(err.response?.data?.message || 'Error al crear la auditoría')
       setLoading(false)
     }
+  }
+
+  // Análisis estático en el backend: no descarga ni sigue ninguna URL y no crea auditoría.
+  const detectarEnlaces = async () => {
+    setErrorDeteccion('')
+    setDeteccion(null)
+    setDetectando(true)
+    try {
+      const response = await api.post('/auditorias/html/enlaces-legales', {
+        html: contenidoHtml,
+        urlOpcional: urlOpcional || null
+      })
+      setDeteccion(response.data)
+    } catch (err) {
+      setErrorDeteccion(err.response?.data?.message || 'No se pudieron detectar los documentos legales')
+    } finally {
+      setDetectando(false)
+    }
+  }
+
+  // Un resultado solo vale para el HTML y la URL con los que se obtuvo.
+  const cambiarHtml = (valor) => {
+    setContenidoHtml(valor)
+    setDeteccion(null)
+  }
+
+  const cambiarUrl = (valor) => {
+    setUrlOpcional(valor)
+    setDeteccion(null)
   }
 
   if (loading) {
@@ -116,7 +149,7 @@ const CrearAuditoria = () => {
                 id="urlOpcional"
                 type="url"
                 value={urlOpcional}
-                onChange={(e) => setUrlOpcional(e.target.value)}
+                onChange={(e) => cambiarUrl(e.target.value)}
                 className="input-field"
                 placeholder="https://ejemplo.com/privacidad"
               />
@@ -156,7 +189,7 @@ const CrearAuditoria = () => {
               <textarea
                 id="contenidoHtml"
                 value={contenidoHtml}
-                onChange={(e) => setContenidoHtml(e.target.value)}
+                onChange={(e) => cambiarHtml(e.target.value)}
                 className="input-field font-mono text-sm"
                 rows={15}
                 maxLength={MAX_HTML_LENGTH}
@@ -169,6 +202,20 @@ const CrearAuditoria = () => {
                 No se descarga ninguna URL. Máximo {MAX_HTML_LENGTH.toLocaleString('es-ES')} caracteres
                 ({contenidoHtml.length.toLocaleString('es-ES')} usados).
               </p>
+              <div className="mt-3 space-y-3">
+                <button
+                  type="button"
+                  onClick={detectarEnlaces}
+                  disabled={detectando || !contenidoHtml.trim()}
+                  className="btn-secondary"
+                >
+                  {detectando ? 'Detectando...' : 'Detectar documentos legales'}
+                </button>
+                {errorDeteccion && (
+                  <p role="alert" className="text-sm text-red-700">{errorDeteccion}</p>
+                )}
+                {deteccion && <DeteccionEnlacesLegales resultado={deteccion} />}
+              </div>
             </div>
             ) : (
             <div>
