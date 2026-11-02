@@ -260,6 +260,8 @@ class AuditoriaConjuntaEndpointTest {
             JsonNode privacidad = report.path("cobertura").path("categorias").get(0);
             assertThat(privacidad.path("estado").asText()).isEqualTo("DOCUMENTO_ANALIZADO");
             assertThat(privacidad.path("documentos").get(0).path("historico").booleanValue()).isTrue();
+            // No score breakdown was stored with it, and none is invented.
+            assertThat(report.path("documentos").get(0).path("desglosePuntuacion").isNull()).isTrue();
             assertThat(report.path("cobertura").path("categorias").findValuesAsText("estado"))
                     .filteredOn("ENLACE_DETECTADO_NO_ANALIZADO"::equals).isEmpty();
         }

@@ -74,6 +74,9 @@ class AuditoriaManualAnalysisIntegrationTest {
 
         var read = service.obtenerAuditoriaPorId(created.getId(), owner.getId(), false, owner, "192.0.2.11");
         assertThat(read.getResultado()).isEqualTo(expected);
+        // The score breakdown is persisted with the result and read back through the owner-only path.
+        assertThat(read.getResultado().getDesglosePuntuacion()).isNotNull()
+                .satisfies(d -> assertThat(d.puntuacion()).isEqualTo(stored.getPuntuacionRiesgo()));
         assertThat(read.getVersionMotor()).isEqualTo(stored.getVersionMotor());
         assertThat(read.getVersionReglas()).isEqualTo(stored.getVersionReglas());
         assertThat(read.getFechaAnalisis()).isEqualTo(stored.getFechaAnalisis());

@@ -17,7 +17,10 @@ describe('AuditReportModel contract', () => {
       metadata: { id: 42, title: 'Informe / privado', documentType: 'Aviso Legal',
         createdAt: '2026-01-02T12:00:00',
         referenceUrl: { text: 'https://example.invalid/legal', href: 'https://example.invalid/legal' } },
-      score: { value: 62, level: { nivel: 'ALTO', etiqueta: 'Cumplimiento Bajo', etiquetaRiesgo: 'RIESGO ALTO' } },
+      score: { value: 62, level: { nivel: 'ALTO', etiqueta: 'Puntuación baja', etiquetaRiesgo: 'RIESGO ALTO' } },
+      // The fixture predates the score breakdown: it is reported as unavailable, never reconstructed.
+      scoring: { available: false, warning: null,
+        lines: ['Desglose no disponible: este análisis es anterior a esa información y no se reconstruye.'] },
       summary: 'Resumen sintético',
       risks: ['Plazo ausente', ' <script>riesgo</script> ', 'Plazo ausente'],
       findings: [
@@ -138,8 +141,8 @@ describe('report presentation policy', () => {
     const report = buildAuditReport({ ...auditoriaPuntuacionNull, tipoDocumento: null })
     expect(reportHeader(report)).toMatchObject({ score: 'No disponible', level: null,
       documentType: 'No especificado', date: 'Fecha no disponible' })
-    expect(renderReportText(report)).toContain('Puntuación de Cumplimiento: No disponible\n')
-    expect(renderReportText(report)).not.toContain('Clasificación:')
+    expect(renderReportText(report)).toContain('Puntuación del análisis automático: No disponible\n')
+    expect(renderReportText(report)).not.toContain('Nivel de la puntuación:')
   })
 
   it('declares empty-list differences centrally and preserves original trailing whitespace', () => {
@@ -152,7 +155,7 @@ describe('report presentation policy', () => {
     expect(text).toContain('=== RESUMEN ===\nSin resumen disponible.')
     expect(text).toContain('=== RECOMENDACIONES ===\nNinguna')
     expect(text).toContain('=== ELEMENTOS NO VERIFICABLES ===\nNinguno')
-    expect(text).toContain('Clasificación: Cumplimiento Crítico')
+    expect(text).toContain('Nivel de la puntuación: Puntuación muy baja')
     expect(text.endsWith('=== TEXTO ORIGINAL AUDITADO ===\n' + auditoriaLegado.textoOriginal)).toBe(true)
   })
 })

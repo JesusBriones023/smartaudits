@@ -15,16 +15,19 @@ export const truncateText = (text, maxLength = 100) => {
 }
 
 /**
- * Devuelve el nivel de cumplimiento a partir de la puntuación (0-100).
+ * Devuelve el nivel de la puntuación (0-100). Describe la cifra del análisis automático, no el
+ * cumplimiento normativo: la etiqueta nunca afirma cumplir o incumplir.
  *
  * Los umbrales coinciden EXACTAMENTE con los del MotorAnalisisLegal.java.
  * El contrato entre capas se verifica con motor/risk-boundaries.json en tests.
  *
  * Niveles:
- *   85-100 → Cumplimiento Alto      (verde)   — BAJO RIESGO
- *   65-84  → Cumplimiento Medio     (amarillo) — RIESGO MODERADO
- *   40-64  → Cumplimiento Bajo      (naranja) — RIESGO ALTO
- *   0-39   → Cumplimiento Crítico   (rojo)    — RIESGO MUY ALTO
+ *   85-100 → Puntuación alta      (verde)   — BAJO RIESGO
+ *   65-84  → Puntuación media     (amarillo) — RIESGO MODERADO
+ *   40-64  → Puntuación baja      (naranja) — RIESGO ALTO
+ *   0-39   → Puntuación muy baja  (rojo)    — RIESGO MUY ALTO
+ *
+ * etiquetaRiesgo es el marcador que escribe el resumen del motor (contrato risk-boundaries.json).
  */
 export const getNivelCumplimiento = (puntuacion) => {
   const p = puntuacion ?? 0
@@ -32,7 +35,7 @@ export const getNivelCumplimiento = (puntuacion) => {
   if (p >= 85) {
     return {
       nivel: 'BAJO',
-      etiqueta: 'Cumplimiento Alto',
+      etiqueta: 'Puntuación alta',
       etiquetaRiesgo: 'BAJO RIESGO',
       // Tailwind classes
       colorBadge: 'bg-green-500',
@@ -48,7 +51,7 @@ export const getNivelCumplimiento = (puntuacion) => {
   if (p >= 65) {
     return {
       nivel: 'MODERADO',
-      etiqueta: 'Cumplimiento Medio',
+      etiqueta: 'Puntuación media',
       etiquetaRiesgo: 'RIESGO MODERADO',
       colorBadge: 'bg-yellow-500',
       colorBadgeTexto: 'text-yellow-100',
@@ -62,7 +65,7 @@ export const getNivelCumplimiento = (puntuacion) => {
   if (p >= 40) {
     return {
       nivel: 'ALTO',
-      etiqueta: 'Cumplimiento Bajo',
+      etiqueta: 'Puntuación baja',
       etiquetaRiesgo: 'RIESGO ALTO',
       colorBadge: 'bg-orange-500',
       colorBadgeTexto: 'text-orange-100',
@@ -75,7 +78,7 @@ export const getNivelCumplimiento = (puntuacion) => {
 
   return {
     nivel: 'MUY_ALTO',
-    etiqueta: 'Cumplimiento Crítico',
+    etiqueta: 'Puntuación muy baja',
     etiquetaRiesgo: 'RIESGO MUY ALTO',
     colorBadge: 'bg-red-500',
     colorBadgeTexto: 'text-red-100',

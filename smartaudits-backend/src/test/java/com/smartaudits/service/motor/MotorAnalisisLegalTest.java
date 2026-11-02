@@ -9,7 +9,7 @@ class MotorAnalisisLegalTest {
     private final AnalizadorLegal motor = new MotorAnalisisLegal();
 
     // Basic structural examples only; the regression corpus belongs to Phase 1.2.
-    private static final String COMPLETE_TEXT = """
+    static final String COMPLETE_TEXT = """
             Aviso legal. Responsable del tratamiento: Ejemplo S.L., NIF de prueba,
             domicilio social en Madrid e inscrita en el Registro Mercantil de Madrid.
             Contacto: privacidad@example.invalid. Delegado de protección de datos:

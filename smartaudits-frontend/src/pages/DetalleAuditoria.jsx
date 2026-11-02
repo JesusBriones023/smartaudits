@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import api from '../api/axios'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { buildAuditReport } from '../report/auditReport'
-import { REPORT_LABELS, REPORT_POLICIES, reportHeader, seccionesInforme, renderReportText } from '../report/reportPresentation'
+import { REPORT_LABELS, REPORT_POLICIES, SCORE_BREAKDOWN_TITLE, SCORE_DISCLAIMER, reportHeader, seccionesInforme, renderReportText } from '../report/reportPresentation'
 
 const levelBadges = {
   BAJO: 'bg-green-500 text-green-100',
@@ -605,6 +605,20 @@ const DetalleAuditoria = () => {
           </div>
         </div>
       </div>
+
+      {/* Lo que significa la puntuación: mismo texto que el PDF y el informe copiado */}
+      <section aria-labelledby="titulo-desglose" className="card space-y-2" data-report-score="breakdown">
+        <h2 id="titulo-desglose" className="text-lg font-semibold text-gray-900">{SCORE_BREAKDOWN_TITLE}</h2>
+        <p className="text-sm text-gray-700" data-report-field="scoreDisclaimer">{SCORE_DISCLAIMER}</p>
+        {report.scoring.warning && (
+          <p className="text-sm text-amber-800" data-report-field="scoreWarning">{report.scoring.warning}</p>
+        )}
+        <ul className="list-disc pl-5 space-y-1">
+          {report.scoring.lines.map((line, i) => (
+            <li key={i} className="text-sm text-gray-600" data-report-field="scoreLine">{line}</li>
+          ))}
+        </ul>
+      </section>
 
       {/* Acciones */}
       <div className="flex space-x-3 flex-wrap gap-2">

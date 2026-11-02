@@ -12,6 +12,10 @@ export const informeVariosDocumentos = {
     {
       auditoriaId: 101, titulo: 'Política de Privacidad', tipoDocumento: 'Política de Privacidad', urlOpcional: urlLarga,
       puntuacionRiesgo: 62, resumen: 'Falta concretar la conservación y los derechos de oposición.',
+      // 20 of 32 contextual points + 42 of 47 keyword points; 21 points not verifiable.
+      desglosePuntuacion: { version: 'desglose-1', puntuacion: 62, pesoTotal: 100, puntosAcreditados: 62, penalizacionRiesgos: 0,
+        pesoNoAplicable: 0, pesoNoVerificable: 21, pesoContextualEvaluado: 32, puntosContextuales: 20, pesoPalabrasClave: 47,
+        puntosPalabrasClave: 42, porcentajeContextual: 63, motivoSinPorcentaje: null, controles: [] },
       riesgos: ['Conservación excesiva de datos', 'Derecho de oposición no explicado'],
       versionMotor: '2', versionReglas: '1',
       incidencias: [
@@ -25,6 +29,10 @@ export const informeVariosDocumentos = {
     {
       auditoriaId: 102, titulo: 'Aviso Legal', tipoDocumento: 'Aviso Legal', urlOpcional: null,
       puntuacionRiesgo: 90, resumen: 'Identificación completa del titular.', riesgos: [],
+      // Deliberately inconsistent with the stored score: it must not be displayed.
+      desglosePuntuacion: { version: 'desglose-1', puntuacion: 21, pesoTotal: 100, puntosAcreditados: 21, penalizacionRiesgos: 0,
+        pesoNoAplicable: 47, pesoNoVerificable: 0, pesoContextualEvaluado: 6, puntosContextuales: 6, pesoPalabrasClave: 47,
+        puntosPalabrasClave: 15, porcentajeContextual: 100, motivoSinPorcentaje: null, controles: [] },
       versionMotor: '2', versionReglas: '1', incidencias: [],
     },
     {

@@ -40,7 +40,7 @@ describe('joint audit PDF', () => {
     expect(pageCount(buffer)).toBeGreaterThanOrEqual(5)
     for (const fragment of [
       'SmartAudits', 'Resumen de documentos', 'Documento 1: Política de Privacidad', 'Documento 3: Términos y Condiciones',
-      'Puntuación de Cumplimiento', '62/100', '90/100', 'No disponible', 'Cumplimiento Bajo', 'Cumplimiento Alto',
+      'Puntuación del análisis automático', '62/100', '90/100', 'No disponible', 'Puntuación baja', 'Puntuación alta',
       'Conservación excesiva de datos', 'Plazo de conservación ausente', 'ALTA', 'MEDIA', 'BAJA',
       'Recomendaciones agrupadas', 'Indicar plazos de conservación concretos', 'Documentos no aportados',
       'Política de Cookies', 'Condiciones de Uso', 'Limitaciones del análisis', 'Página 1 de',

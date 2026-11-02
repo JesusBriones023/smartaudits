@@ -153,7 +153,8 @@ public class AuditoriaConjuntaService {
             documentos.add(new AuditoriaConjuntaResponse.Documento(a.getId(), a.getTitulo(), a.getTipoDocumento(),
                     a.getUrlOpcional(), a.getPuntuacionRiesgo(), r == null ? null : r.getResumen(),
                     r == null || r.getRiesgos() == null ? List.of() : List.copyOf(r.getRiesgos()), a.getVersionMotor(),
-                    a.getVersionReglas(), r == null || r.getErrores() == null ? List.of() : List.copyOf(r.getErrores())));
+                    a.getVersionReglas(), r == null || r.getErrores() == null ? List.of() : List.copyOf(r.getErrores()),
+                    r == null ? null : r.getDesglosePuntuacion()));
             if (r != null && r.getRecomendaciones() != null) {
                 for (String recomendacion : r.getRecomendaciones()) {
                     List<AuditoriaResponse> lista = porRecomendacion.computeIfAbsent(recomendacion, k -> new ArrayList<>());

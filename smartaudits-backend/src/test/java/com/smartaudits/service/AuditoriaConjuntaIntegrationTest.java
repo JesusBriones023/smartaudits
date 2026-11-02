@@ -217,6 +217,10 @@ class AuditoriaConjuntaIntegrationTest {
 
         for (var d : created.documentos()) {
             String json = audits.findById(d.auditoriaId()).orElseThrow().getResultadoJson();
+            // Each document keeps its own score and breakdown, read from its persisted result.
+            var almacenado = new ObjectMapper().readValue(json, ResultadoAuditoria.class).getDesglosePuntuacion();
+            assertThat(d.desglosePuntuacion()).isNotNull().isEqualTo(almacenado);
+            assertThat(d.desglosePuntuacion().puntuacion()).isEqualTo(d.puntuacionRiesgo());
             assertThat(json).contains("coberturaDocumento").doesNotContain("<h1", "<script", "javascript:", "<footer");
             assertThat(new ObjectMapper().readValue(json, ResultadoAuditoria.class).getCoberturaDocumento()).isNotNull();
         }

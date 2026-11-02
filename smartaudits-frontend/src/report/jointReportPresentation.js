@@ -1,5 +1,5 @@
 import { getNivelCumplimiento } from '../utils/helpers'
-import { EVIDENCE_STATES, REPORT_FALLBACKS, REPORT_LABELS, formatReportDate } from './reportPresentation'
+import { EVIDENCE_STATES, REPORT_FALLBACKS, REPORT_LABELS, SCORE_DISCLAIMER, formatReportDate, scoreExplanation } from './reportPresentation'
 
 // Single view model of a joint audit for the screen and the PDF: both render exactly
 // this, built from the persisted, authorized DTO. Nothing here computes a global score
@@ -10,6 +10,7 @@ export const JOINT_LABELS = Object.freeze({
   category: 'Categoría',
   url: REPORT_LABELS.url,
   engine: 'Motor de análisis',
+  scoring: 'Cómo se compone la puntuación',
   summary: 'Resumen',
   risks: 'Incumplimientos detectados',
   findings: 'Hallazgos',
@@ -60,6 +61,7 @@ export const JOINT_LIMITATIONS = Object.freeze([
   'Cada documento se puntúa por separado. No se calcula una puntuación global porque no hay reglas definidas para combinarlas.',
   'Solo se han evaluado los documentos aportados; las categorías no aportadas no se han analizado.',
   'Los enlaces legales se han detectado por análisis estático del HTML aportado: no se han abierto ni descargado y su contenido no se ha analizado.',
+  SCORE_DISCLAIMER + ' Las puntuaciones de documentos de distinto tipo no son comparables entre sí.',
 ])
 
 const text = value => (typeof value === 'string' ? value : '')
@@ -118,6 +120,7 @@ export function buildJointReport(informe) {
       url: text(d.urlOpcional) || null,
       score: formatScore(d.puntuacionRiesgo),
       classification: scoreClassification(d.puntuacionRiesgo),
+      scoring: scoreExplanation(d.desglosePuntuacion, d.puntuacionRiesgo),
       engine: `versión del motor ${text(d.versionMotor) || '?'} · reglas ${text(d.versionReglas) || '?'}`,
       summary: text(d.resumen) || REPORT_FALLBACKS.summary,
       risks: (Array.isArray(d.riesgos) ? d.riesgos : []).map(text),

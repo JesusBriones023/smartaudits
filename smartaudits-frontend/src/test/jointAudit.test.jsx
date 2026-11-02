@@ -137,7 +137,7 @@ describe('joint audit report', () => {
     expect(screen.getAllByText(/No se calcula una puntuación global/)[0]).toBeVisible()
     const privacidad = screen.getByRole('article', { name: 'Privacidad' })
     expect(within(privacidad).getByText('62/100')).toBeVisible()
-    expect(within(privacidad).getByText('Cumplimiento Bajo')).toBeVisible()
+    expect(within(privacidad).getByText('Puntuación baja')).toBeVisible()
     expect(within(privacidad).getByText('1 hallazgos')).toBeVisible()
     expect(within(privacidad).getByText(/Plazo ausente/)).toBeVisible()
     expect(within(privacidad).getByRole('link', { name: /Ver informe completo/ })).toHaveAttribute('href', '/auditoria/101')

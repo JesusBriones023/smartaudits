@@ -6,7 +6,7 @@ import {
   StyleSheet
 } from '@react-pdf/renderer'
 
-import { REPORT_LABELS, REPORT_POLICIES, reportHeader, seccionesInforme } from '../report/reportPresentation'
+import { REPORT_LABELS, REPORT_POLICIES, SCORE_BREAKDOWN_TITLE, SCORE_DISCLAIMER, reportHeader, seccionesInforme } from '../report/reportPresentation'
 
 const levelColors = {
   BAJO: '#16a34a', MODERADO: '#ca8a04', ALTO: '#ea580c', MUY_ALTO: '#dc2626',
@@ -697,6 +697,25 @@ const AuditoriaPdfDocument = ({ report }) => {
             >
               {header.level}
             </Text>}
+          </View>
+        </View>
+
+        {/* Lo que significa la puntuación: mismo texto que la pantalla y el informe copiado */}
+        <View data-report-score="breakdown" style={[styles.section, { borderColor: '#E5E7EB' }]} wrap={false}>
+          <View style={[styles.sectionHeader, { backgroundColor: '#F8FAFC', borderBottomColor: '#E5E7EB' }]}>
+            <Text style={styles.sectionTitle}>{SCORE_BREAKDOWN_TITLE}</Text>
+          </View>
+          <View style={styles.sectionBody}>
+            <Text data-report-field="scoreDisclaimer" style={styles.paragraph}>{SCORE_DISCLAIMER}</Text>
+            {report.scoring.warning && (
+              <Text data-report-field="scoreWarning" style={[styles.paragraph, { color: '#92400E' }]}>{report.scoring.warning}</Text>
+            )}
+            {report.scoring.lines.map((line, i) => (
+              <View key={i} style={styles.listRow}>
+                <Text style={styles.bullet}>-</Text>
+                <Text data-report-field="scoreLine" style={styles.listText}>{line}</Text>
+              </View>
+            ))}
           </View>
         </View>
 

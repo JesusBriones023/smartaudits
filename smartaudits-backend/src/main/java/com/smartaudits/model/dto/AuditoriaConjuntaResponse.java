@@ -57,7 +57,11 @@ public record AuditoriaConjuntaResponse(
 
     public record DocumentoRef(Long auditoriaId, String titulo) {}
 
-    /** Resultado de un documento: es su auditoría individual, enlazable por auditoriaId. */
+    /**
+     * Resultado de un documento: es su auditoría individual, enlazable por auditoriaId.
+     *
+     * @param desglosePuntuacion cómo se compone su puntuación; null en auditorías anteriores al desglose
+     */
     public record Documento(
             Long auditoriaId,
             String titulo,
@@ -68,7 +72,8 @@ public record AuditoriaConjuntaResponse(
             List<String> riesgos,
             String versionMotor,
             String versionReglas,
-            List<ResultadoAuditoria.ErrorAuditoria> incidencias) {}
+            List<ResultadoAuditoria.ErrorAuditoria> incidencias,
+            ResultadoAuditoria.DesglosePuntuacion desglosePuntuacion) {}
 
     public record RecomendacionAgrupada(String texto, List<Long> auditoriaIds, List<String> documentos) {}
 

@@ -168,6 +168,13 @@ const DetalleAuditoriaConjunta = () => {
             </div>
             {d.url && <p className="text-xs text-gray-500 break-all">{JOINT_LABELS.url}: <span data-joint-field="url">{d.url}</span></p>}
             <p className="text-xs text-gray-500">{JOINT_LABELS.engine}: <span data-joint-field="engine">{d.engine}</span></p>
+            <div className="text-xs text-gray-600 space-y-1">
+              <p className="font-medium text-gray-700">{JOINT_LABELS.scoring}</p>
+              {d.scoring.warning && <p className="text-amber-800" data-joint-field="scoreWarning">{d.scoring.warning}</p>}
+              <ul className="list-disc pl-5">
+                {d.scoring.lines.map((line, i) => <li key={i} data-joint-field="scoreLine">{line}</li>)}
+              </ul>
+            </div>
             <p className="text-sm text-gray-700" data-joint-field="summary">{d.summary}</p>
             {d.risks.length > 0 && (
               <div>

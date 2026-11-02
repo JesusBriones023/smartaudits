@@ -380,12 +380,14 @@ La puntuación final se limita a 0–100. Se añaden siempre tres recomendacione
 
 | Puntuación | Resumen de riesgo | Etiqueta frontend |
 |---|---|---|
-| 85–100 | BAJO RIESGO | Cumplimiento Alto |
-| 65–84 | RIESGO MODERADO | Cumplimiento Medio |
-| 40–64 | RIESGO ALTO | Cumplimiento Bajo |
-| 0–39 | RIESGO MUY ALTO | Cumplimiento Crítico |
+| 85–100 | BAJO RIESGO | Puntuación alta |
+| 65–84 | RIESGO MODERADO | Puntuación media |
+| 40–64 | RIESGO ALTO | Puntuación baja |
+| 0–39 | RIESGO MUY ALTO | Puntuación muy baja |
 
-El campo `puntuacionRiesgo` representa en realidad una puntuación de cumplimiento: cuanto mayor, mejor. La clasificación depende de la puntuación, no de una condición independiente que impida bajo riesgo cuando exista alguna incidencia ALTA.
+El campo `puntuacionRiesgo` es la puntuación del análisis automático: cuanto mayor, mejor. La clasificación depende de la puntuación, no de una condición independiente que impida bajo riesgo cuando exista alguna incidencia ALTA. La cifra resume evidencia textual: no certifica el cumplimiento normativo ni prueba el comportamiento real del sitio web.
+
+Desde la versión de motor 3 (reglas 3) cada resultado incluye `desglosePuntuacion` («desglose-1»): puntos acreditados, penalización por riesgos globales y el reparto de los 100 puntos entre controles no aplicables, no verificables, contextuales evaluados y por palabras clave. El algoritmo y la cifra no cambian. No se calcula una puntuación ajustada porque los 47 puntos de reglas por palabras clave no determinan si aplican; el porcentaje contextual se marca no disponible cuando ningún control contextual es aplicable y verificable. Los resultados anteriores no tienen desglose y no se reconstruye.
 
 ### Resultado y evidencia
 

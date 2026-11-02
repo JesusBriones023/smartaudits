@@ -1,6 +1,8 @@
 package com.smartaudits.service.motor;
 
 import com.smartaudits.model.dto.ResultadoAuditoria;
+import com.smartaudits.model.dto.ResultadoAuditoria.ControlPuntuado;
+import com.smartaudits.model.dto.ResultadoAuditoria.DesglosePuntuacion;
 import com.smartaudits.model.dto.ResultadoAuditoria.ErrorAuditoria;
 import com.smartaudits.model.dto.ResultadoAuditoria.EstadoEvidencia;
 import com.smartaudits.model.dto.ResultadoAuditoria.EvaluacionRegla;
@@ -39,6 +41,10 @@ import java.util.stream.Collectors;
  * suman ni generan incidencia: la puntuación sigue siendo la suma de pesos acreditados sobre 100,
  * sin redistribuir pesos (eso exigiría recalibrar todas las reglas).
  *
+ * Cada resultado incluye un desglose ("desglose-1") que separa los puntos acreditados, las penalizaciones
+ * y los pesos no aplicables, no verificables, contextuales y por palabras clave; el algoritmo no cambia.
+ * La versión del motor 3 corresponde a esa salida y a un resumen que no presenta la cifra como cumplimiento.
+ *
  * Limitación conocida, pendiente de rediseñar la puntuación: como NO_APLICABLE y NO_VERIFICABLE suman
  * cero, la cifra no es comparable entre tipos de documento (un aviso legal correcto nunca se acerca a 100)
  * ni entre documentos con distinta información no verificable (un texto sin cookies ni consentimiento
@@ -50,7 +56,7 @@ import java.util.stream.Collectors;
 public class MotorAnalisisLegal implements AnalizadorLegal {
 
     private static final String MOTOR = "LEGAL_TEXT";
-    private static final VersionAnalizador VERSION = new VersionAnalizador("2", "3");
+    private static final VersionAnalizador VERSION = new VersionAnalizador("3", "3");
 
     @Override
     public VersionAnalizador version() {
@@ -673,7 +679,9 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
         int incumplimientosBaja = 0;
 
         // ---- Evaluar cada regla ----
+        List<ControlPuntuado> controles = new ArrayList<>();
         for (Regla regla : REGLAS) {
+            int antes = puntuacion;
             if (ReglasContextuales.IDS.contains(regla.id)) {
                 var e = ReglasContextuales.evaluar(regla.id, clausulas, entrada.tipoDocumento());
                 evaluaciones.add(new EvaluacionRegla(regla.id, e.estado(), e.evidencia(), e.detalle()));
@@ -726,6 +734,8 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
                         default -> incumplimientosBaja++;
                     }
                 }
+                controles.add(new ControlPuntuado(regla.id, regla.peso, puntuacion - antes,
+                        ResultadoAuditoria.MetodoControl.CONTEXTUAL, e.estado()));
                 continue;
             }
             boolean cumple = contienePalabraClave(textoNorm, regla.palabrasClave);
@@ -778,7 +788,10 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
                 // Cumplimiento completo → peso completo; con riesgo → mitad del peso
                 puntuacion += tieneRiesgo ? (regla.peso / 2) : regla.peso;
             }
+            controles.add(new ControlPuntuado(regla.id, regla.peso, puntuacion - antes,
+                    ResultadoAuditoria.MetodoControl.PALABRAS_CLAVE, null));
         }
+        int puntosAcreditados = puntuacion;
 
         // ---- Evaluar patrones de riesgo globales (restan hasta 2 pts cada uno) ----
         for (PatronRiesgo patron : PATRONES_RIESGO_GLOBALES) {
@@ -830,6 +843,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
 
         // Garantizar rango 0-100
         puntuacion = Math.max(0, Math.min(100, puntuacion));
+        DesglosePuntuacion desglose = desglose(puntuacion, puntosAcreditados, controles);
 
         // ---- Recomendaciones generales siempre presentes ----
         recomendaciones.add("Revisar y actualizar el documento al menos una vez al año o ante cambios normativos.");
@@ -838,7 +852,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
 
         // ---- Generar resumen ----
         String resumen = generarResumen(puntuacion, incumplimientosAlta, incumplimientosMedia, incumplimientosBaja, errores.size())
-                + resumenContextual(evaluaciones);
+                + resumenContextual(evaluaciones) + resumenPuntuacion(desglose);
 
         ResultadoAuditoria resultado = new ResultadoAuditoria();
         resultado.setResumen(resumen);
@@ -850,6 +864,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
         resultado.setReferenciasLegales(referenciasLegales);
         resultado.setFaltantes(faltantes);
         resultado.setEvaluaciones(evaluaciones);
+        resultado.setDesglosePuntuacion(desglose);
 
         return resultado;
     }
@@ -884,6 +899,43 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             case "ALTA" -> "MEDIA";
             default -> "BAJA";
         };
+    }
+
+    static final String VERSION_DESGLOSE = "desglose-1";
+
+    /** Splits the 100 points by what the text could and could not accredit; the score itself is unchanged. */
+    private static DesglosePuntuacion desglose(int puntuacion, int puntosAcreditados, List<ControlPuntuado> controles) {
+        int noAplicable = 0, noVerificable = 0, contextual = 0, puntosContextuales = 0, claves = 0, puntosClaves = 0;
+        for (ControlPuntuado c : controles) {
+            if (c.metodo() == ResultadoAuditoria.MetodoControl.PALABRAS_CLAVE) {
+                claves += c.peso();
+                puntosClaves += c.puntos();
+            } else if (c.estado() == EstadoEvidencia.NO_APLICABLE) {
+                noAplicable += c.peso();
+            } else if (c.estado() == EstadoEvidencia.NO_VERIFICABLE) {
+                noVerificable += c.peso();
+            } else {
+                contextual += c.peso();
+                puntosContextuales += c.puntos();
+            }
+        }
+        // Only contextual controls know whether they apply: the keyword ones cannot enter a denominator.
+        Integer porcentaje = contextual > 0 ? Math.round(100f * puntosContextuales / contextual) : null;
+        String motivo = contextual > 0 ? null
+                : "Ningún control evaluado por contexto es aplicable y verificable en este documento.";
+        return new DesglosePuntuacion(VERSION_DESGLOSE, puntuacion, 100, puntosAcreditados, puntosAcreditados - puntuacion,
+                noAplicable, noVerificable, contextual, puntosContextuales, claves, puntosClaves, porcentaje, motivo,
+                List.copyOf(controles));
+    }
+
+    private static String resumenPuntuacion(DesglosePuntuacion d) {
+        String fuera = d.pesoNoAplicable() + d.pesoNoVerificable() > 0
+                ? String.format(" %d de los 100 puntos corresponden a controles no aplicables a este tipo de documento o no "
+                        + "verificables con el texto, y no se suman: la puntuación no es comparable con la de otros tipos de documento.",
+                        d.pesoNoAplicable() + d.pesoNoVerificable())
+                : "";
+        return fuera + " La puntuación resume la evidencia encontrada en el texto; no certifica el cumplimiento normativo "
+                + "ni prueba el comportamiento real del sitio web.";
     }
 
     private static String resumenContextual(List<EvaluacionRegla> evaluaciones) {
@@ -946,16 +998,16 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
 
         if (puntuacion >= 85) {
             nivel = "BAJO RIESGO";
-            descripcionNivel = "El documento presenta un nivel de cumplimiento elevado. Se han detectado aspectos menores que conviene revisar para alcanzar el cumplimiento total.";
+            descripcionNivel = "El texto aporta evidencia para la mayoría de los controles evaluados; conviene revisar los aspectos señalados.";
         } else if (puntuacion >= 65) {
             nivel = "RIESGO MODERADO";
-            descripcionNivel = "El documento presenta carencias significativas. Se requieren mejoras concretas para alcanzar un nivel de cumplimiento adecuado y evitar sanciones.";
+            descripcionNivel = "El texto aporta evidencia para parte de los controles evaluados; hay carencias concretas que revisar.";
         } else if (puntuacion >= 40) {
             nivel = "RIESGO ALTO";
-            descripcionNivel = "El documento presenta incumplimientos graves de la normativa vigente. Es necesaria una revisión profunda e inmediata para evitar sanciones regulatorias.";
+            descripcionNivel = "El texto no aporta evidencia para varios controles relevantes; conviene una revisión detallada.";
         } else {
             nivel = "RIESGO MUY ALTO";
-            descripcionNivel = "El documento presenta incumplimientos críticos y generalizados. La situación actual supone una exposición máxima a sanciones de la AEPD y la Comisión Europea.";
+            descripcionNivel = "El texto aporta poca evidencia para los controles evaluados.";
         }
 
         return String.format(

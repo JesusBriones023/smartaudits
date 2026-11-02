@@ -40,9 +40,9 @@ describe('Active audit exports', () => {
     const copied = writeText.mock.calls[0][0]
     expect(copied).toBe(renderReportText(buildAuditReport(audit)))
     expect(copied.endsWith(audit.textoOriginal)).toBe(true)
-    expect(copied).toContain('Clasificación: Cumplimiento Bajo')
+    expect(copied).toContain('Nivel de la puntuación: Puntuación baja')
     expect(copied).toContain(`AUDITORÍA LEGAL — ${audit.titulo}`)
-    expect(copied).toContain('Puntuación de Cumplimiento: 62/100')
+    expect(copied).toContain('Puntuación del análisis automático: 62/100')
     expect(copied).toContain(`URL de referencia: ${audit.urlOpcional}`)
     for (const text of ['Resumen sintético', 'Plazo ausente', 'Conservación [MEDIA]', 'Falta plazo',
       'Evidencia: Sin duración', 'Impacto: Conservación excesiva', 'Acción correctiva: Indicar plazo',

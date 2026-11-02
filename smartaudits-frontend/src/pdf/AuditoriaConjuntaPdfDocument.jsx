@@ -180,6 +180,9 @@ const AuditoriaConjuntaPdfDocument = ({ informe }) => {
           <Campo label={JOINT_LABELS.score} value={d.score} field="score" />
           {d.classification && <Campo label={JOINT_LABELS.level} value={d.classification} field="classification" />}
           <Campo label={JOINT_LABELS.engine} value={d.engine} field="engine" />
+          <Text style={styles.h3}>{JOINT_LABELS.scoring}</Text>
+          {d.scoring.warning ? <T style={styles.item} data-joint-field="scoreWarning">{d.scoring.warning}</T> : null}
+          {d.scoring.lines.map((line, i) => <T key={i} style={styles.item}>- <Text data-joint-field="scoreLine">{line}</Text></T>)}
 
           <Text style={styles.h3}>{JOINT_LABELS.summary}</Text>
           <T data-joint-field="summary">{d.summary}</T>

@@ -82,7 +82,7 @@ test('registro, login explícito, creación y resultado persistido', async ({ pa
   await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible()
   await expect(page.getByText(audit.resultado.resumen, { exact: true })).toBeVisible()
   await expect(page.getByText(String(audit.puntuacionRiesgo), { exact: true })).toBeVisible()
-  await expect(page.getByText('Puntuación de Cumplimiento', { exact: true })).toBeVisible()
+  await expect(page.getByText('Puntuación del análisis automático', { exact: true })).toBeVisible()
   await expect(page.getByText(legalText, { exact: true })).toBeVisible()
 })
 
@@ -218,6 +218,9 @@ test('auditoría conjunta de tres HTML: informe persistente y recuperable desde 
     const card = page.getByRole('article', { name: documento.titulo, exact: true })
     await expect(card).toContainText(String(documento.puntuacionRiesgo))
     await expect(card).toContainText(documento.tipoDocumento)
+    // Each persisted document explains its own score; the joint report has no global one.
+    expect(documento.desglosePuntuacion.puntuacion).toBe(documento.puntuacionRiesgo)
+    await expect(card).toContainText(`Puntos acreditados por el texto: ${documento.desglosePuntuacion.puntosAcreditados} de 100`)
   }
   await expect(page.getByText('No se calcula una puntuación global', { exact: false }).first()).toBeVisible()
   await expect(page.getByRole('region', { name: 'Documentos no aportados' })).toContainText('Condiciones de Uso')
@@ -245,9 +248,9 @@ test('auditoría conjunta de tres HTML: informe persistente y recuperable desde 
         .map(op => [...op[1].matchAll(/<([0-9a-fA-F]*)>/g)].map(x => decoder.decode(Buffer.from(x[1], 'hex'))).join(''))
     } catch { return [] }
   }).join('\n')
-  for (const fragment of [title, 'Puntuación de Cumplimiento', 'Privacidad E2E', 'Aviso E2E', 'Cookies E2E',
+  for (const fragment of [title, 'Puntuación del análisis automático', 'Privacidad E2E', 'Aviso E2E', 'Cookies E2E',
     'Documentos no aportados', 'Limitaciones del análisis', String(report.documentos[0].puntuacionRiesgo) + '/100',
-    'Cobertura documental', 'Documento analizado']) {
+    'Cobertura documental', 'Documento analizado', 'Cómo se compone la puntuación', 'Puntos acreditados por el texto']) {
     expect(pdfText, fragment).toContain(fragment)
   }
   expect(pdfText).not.toContain('evil.example.invalid/p.png')

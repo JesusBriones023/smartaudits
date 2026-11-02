@@ -32,14 +32,39 @@ public class ResultadoAuditoria {
     @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private List<EvaluacionRegla> evaluaciones = new ArrayList<>();
 
+    /** How puntuacionRiesgo was made up; null for results produced before it existed (never reconstructed). */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private DesglosePuntuacion desglosePuntuacion;
+
     @JsonInclude(JsonInclude.Include.NON_NULL) // results stored before coverage existed stay byte-identical
     private CoberturaDocumento coberturaDocumento;
 
     /** Copy carrying this document's coverage; the analyser's own result is never modified. */
     public ResultadoAuditoria conCobertura(CoberturaDocumento cobertura) {
         return new ResultadoAuditoria(resumen, puntuacionRiesgo, riesgos, errores, recomendaciones, textosSugeridos,
-                referenciasLegales, faltantes, evaluaciones, cobertura);
+                referenciasLegales, faltantes, evaluaciones, desglosePuntuacion, cobertura);
     }
+
+    /** CONTEXTUAL: settled by evidence states; PALABRAS_CLAVE: legacy keyword match, applicability never determined. */
+    public enum MetodoControl { CONTEXTUAL, PALABRAS_CLAVE }
+
+    /** @param estado only for CONTEXTUAL controls */
+    public record ControlPuntuado(String ruleId, int peso, int puntos, MetodoControl metodo, EstadoEvidencia estado) {}
+
+    /**
+     * Breakdown of the unchanged 100-point score (interpretation "desglose-1"):
+     * puntuacion = puntosAcreditados - penalizacionRiesgos, and the 100 points split into weights
+     * not applicable, not verifiable, contextual evaluated and keyword-based.
+     *
+     * @param porcentajeContextual share of the evaluated contextual weight that the text accredits;
+     *                             null when no contextual control applies and is verifiable
+     * @param motivoSinPorcentaje  why porcentajeContextual is null
+     */
+    public record DesglosePuntuacion(String version, int puntuacion, int pesoTotal, int puntosAcreditados,
+                                     int penalizacionRiesgos, int pesoNoAplicable, int pesoNoVerificable,
+                                     int pesoContextualEvaluado, int puntosContextuales, int pesoPalabrasClave,
+                                     int puntosPalabrasClave, Integer porcentajeContextual, String motivoSinPorcentaje,
+                                     List<ControlPuntuado> controles) {}
 
     /**
      * SUFICIENTE: the text substantiates the information. INSUFICIENTE: it is mentioned or only

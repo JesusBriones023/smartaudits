@@ -41,7 +41,7 @@ function pdfTree(element) {
 const nodes = (tree, attr) => tree.flatMap(n => typeof n === 'string' ? [] : [
   ...(n.props[attr] !== undefined ? [n] : []), ...nodes(n.children, attr)])
 const textOf = tree => tree.map(n => typeof n === 'string' ? n : textOf(n.children)).join('')
-const FIELDS = ['category', 'url', 'score', 'classification', 'engine', 'summary', 'risk']
+const FIELDS = ['category', 'url', 'score', 'classification', 'engine', 'scoreWarning', 'scoreLine', 'summary', 'risk']
 const FINDING_FIELDS = ['findingTitle', 'severity', 'status', 'description', 'evidence', 'impact', 'action']
 const COVERAGE_FIELDS = ['coverageCategory', 'coverageState', 'coverageDocument', 'coverageEvidence', 'coverageLink',
   'coverageLinkSources', 'coverageContradiction', 'coverageEmpty']
@@ -128,6 +128,18 @@ describe('joint audit PDF download', () => {
       expect(doc.findings.map(f => f.evidence)).toEqual(d.incidencias.map(x => textoPdf(x.evidencia) || 'No disponible'))
       expect(doc.findings.map(f => f.status)).toEqual(d.incidencias.map(x => EVIDENCE_STATES[x.estado] ?? ''))
     })
+    // Each document explains its own score; the inconsistent breakdown is withheld; no global score anywhere.
+    expect(fromPdf.documents[0].scoreWarning).toEqual(['21 de los 100 puntos no pueden obtenerse en este documento: '
+      + 'la puntuación no es comparable con la de documentos de otro tipo.'])
+    expect(fromPdf.documents[0].scoreLine).toEqual([
+      'Puntos acreditados por el texto: 62 de 100.',
+      'Controles evaluados por contexto, aplicables y verificables: 20 de 32 puntos.',
+      'Controles evaluados por palabras clave, sin determinar si aplican: 42 de 47 puntos.',
+      'Controles no verificables con el texto: 21 puntos que no se suman.',
+      'Evidencia en los controles evaluados por contexto: 63 %.',
+      'No se calcula una puntuación ajustada: 47 puntos dependen de controles por palabras clave cuya aplicabilidad no se determina.'])
+    expect(fromPdf.documents[1].scoreLine).toEqual(['Desglose no disponible: no coincide con la puntuación guardada.'])
+    expect(fromPdf.documents[2].scoreLine).toEqual(['Desglose no disponible: este análisis es anterior a esa información y no se reconstruye.'])
     expect(fromPdf.recommendations).toEqual(informe.recomendaciones.map(r => [r.texto, r.documentos.join(', ')]))
     expect(fromPdf.missing).toEqual(informe.categoriasNoAportadas)
     expect(fromPdf.limitations).toEqual(buildJointReport(informe).limitations)

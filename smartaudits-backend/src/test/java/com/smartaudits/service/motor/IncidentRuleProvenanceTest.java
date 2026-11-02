@@ -64,9 +64,10 @@ class IncidentRuleProvenanceTest {
     }
 
     @Test
-    void contextAwareRulesAreRulesVersionTwoWithTheSameOutputContract() {
-        // The output only gained optional fields (estado, evaluaciones); stored audits keep their own versions.
-        assertThat(motor.version()).isEqualTo(new VersionAnalizador("2", "3"));
+    void rulesVersionThreeWithOutputContractThreeForTheScoreBreakdown() {
+        // Output 3 adds the score breakdown and a summary that does not present the score as compliance;
+        // the rules (and the numbers they produce) are still version 3. Stored audits keep their own versions.
+        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "3"));
     }
 
     @ParameterizedTest
