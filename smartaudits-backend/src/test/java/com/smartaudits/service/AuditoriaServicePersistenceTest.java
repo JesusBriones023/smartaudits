@@ -297,7 +297,10 @@ class AuditoriaServicePersistenceTest {
             assertThat(response.getVersionReglas()).isEqualTo(historical.getVersionReglas());
             assertThat(response.getFechaAnalisis()).isEqualTo(historical.getFechaAnalisis());
             assertThat(response.getTipoFuente()).isEqualTo(historical.getTipoFuente());
+            // Nothing is reconstructed for results stored before the evaluation coverage existed.
+            assertThat(response.getPorcentajeCoberturaEvaluacion()).isNull();
         }
+        assertThat(read.getResultado().getCoberturaEvaluacion()).isNull();
         assertThat(read.getResultado()).isEqualTo(mapper.readValue(originalJson, ResultadoAuditoria.class));
         assertThat(read.getResultado().getErrores()).singleElement().satisfies(error -> {
             assertThat(error.getRuleId()).isNull();
@@ -307,6 +310,30 @@ class AuditoriaServicePersistenceTest {
         entityManager.flush();
         entityManager.clear();
         assertThat(audits.findById(historical.getId()).orElseThrow().getResultadoJson()).isEqualTo(originalJson);
+        verifyNoInteractions(motor);
+    }
+
+    @Test
+    void historyRowsShowTheStoredEvaluationCoverageWithoutRecomputingIt() {
+        Usuario owner = user("coverage");
+        var conCobertura = audit(owner, "Con cobertura");
+        conCobertura.setResultadoJson("""
+                {"resumen":"r","puntuacionRiesgo":6,"errores":[],"coberturaEvaluacion":{"version":"cobertura-1",
+                "pesoAplicable":93,"pesoEvaluado":52,"porcentajeCobertura":56,"coberturaMinima":50,
+                "resultadoControlesEvaluados":12,"motivoSinResultado":null,"suficientes":1,"insuficientes":0,
+                "incidenciasRedaccion":1,"incidenciasAusencia":6,"controlesNoVerificables":["R03"],"noAplicables":1,
+                "riesgosGlobales":1}}""");
+        var ilegible = audit(owner, "Ilegible");
+        ilegible.setResultadoJson("{no es json");
+        entityManager.flush();
+        entityManager.clear();
+
+        var filas = service.obtenerMisAuditorias(owner.getId(), 0, 10).content();
+        assertThat(filas).extracting(r -> r.getTitulo() + "=" + r.getPorcentajeCoberturaEvaluacion())
+                .containsExactlyInAnyOrder("Con cobertura=56", "Ilegible=null");
+        assertThat(service.obtenerTodasLasAuditorias(0, 10, "").content())
+                .filteredOn(r -> r.getTitulo().equals("Con cobertura")).singleElement()
+                .satisfies(r -> assertThat(r.getPorcentajeCoberturaEvaluacion()).isEqualTo(56));
         verifyNoInteractions(motor);
     }
 

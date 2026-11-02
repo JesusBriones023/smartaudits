@@ -6,7 +6,7 @@ import {
   StyleSheet
 } from '@react-pdf/renderer'
 
-import { REPORT_LABELS, REPORT_POLICIES, SCORE_BREAKDOWN_TITLE, SCORE_DISCLAIMER, reportHeader, seccionesInforme } from '../report/reportPresentation'
+import { COVERAGE_TITLE, REPORT_LABELS, REPORT_POLICIES, SCORE_BREAKDOWN_TITLE, SCORE_DISCLAIMER, reportHeader, seccionesInforme } from '../report/reportPresentation'
 
 const levelColors = {
   BAJO: '#16a34a', MODERADO: '#ca8a04', ALTO: '#ea580c', MUY_ALTO: '#dc2626',
@@ -714,6 +714,16 @@ const AuditoriaPdfDocument = ({ report }) => {
               <View key={i} style={styles.listRow}>
                 <Text style={styles.bullet}>-</Text>
                 <Text data-report-field="scoreLine" style={styles.listText}>{line}</Text>
+              </View>
+            ))}
+            <Text style={[styles.paragraph, { fontFamily: 'Helvetica-Bold' }]}>{COVERAGE_TITLE}</Text>
+            {report.coverage.warnings.map((warning, i) => (
+              <Text key={i} data-report-field="coverageWarning" style={[styles.paragraph, { color: '#92400E' }]}>{warning}</Text>
+            ))}
+            {report.coverage.lines.map((line, i) => (
+              <View key={i} style={styles.listRow}>
+                <Text style={styles.bullet}>-</Text>
+                <Text data-report-field="coverageLine" style={styles.listText}>{line}</Text>
               </View>
             ))}
           </View>

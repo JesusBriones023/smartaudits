@@ -236,10 +236,12 @@ class AuditoriaAuthorizationTest {
     }
 
     private static void assertAuditFields(JsonNode response) {
+        // porcentajeCoberturaEvaluacion (output 4) is the stored evaluation coverage, null without one.
         assertThat(fieldNames(response)).containsExactlyInAnyOrder(
                 "id", "titulo", "tipoDocumento", "fechaCreacion", "versionMotor", "versionReglas",
-                "fechaAnalisis", "tipoFuente", "puntuacionRiesgo", "urlOpcional", "textoOriginal",
-                "resultado", "usuarioId", "usuarioNombre", "usuarioEmail");
+                "fechaAnalisis", "tipoFuente", "puntuacionRiesgo", "porcentajeCoberturaEvaluacion", "urlOpcional",
+                "textoOriginal", "resultado", "usuarioId", "usuarioNombre", "usuarioEmail");
+        assertThat(response.path("porcentajeCoberturaEvaluacion").isNull()).isTrue();
     }
 
     private static Set<String> fieldNames(JsonNode node) {

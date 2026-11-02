@@ -1,5 +1,5 @@
 import { getNivelCumplimiento } from '../utils/helpers'
-import { EVIDENCE_STATES, scoreExplanation } from './reportPresentation'
+import { EVIDENCE_STATES, coverageExplanation, scoreExplanation } from './reportPresentation'
 
 const text = value => value == null ? '' : String(value)
 const optionalText = value => value == null ? null : String(value)
@@ -59,7 +59,8 @@ export function buildAuditReport(auditoriaResponse) {
       referenceUrl: referenceUrl(audit.urlOpcional),
     }),
     score: Object.freeze({ value, level }),
-    scoring: scoreExplanation(result.desglosePuntuacion, value),
+    scoring: scoreExplanation(result.desglosePuntuacion, value, result.coberturaEvaluacion),
+    coverage: coverageExplanation(result.coberturaEvaluacion, value),
     summary: text(result.resumen),
     risks: texts(result.riesgos),
     findings: Object.freeze(items(result.errores).map(finding)),

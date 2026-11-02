@@ -19,6 +19,8 @@ public class AuditoriaResponse {
     private LocalDateTime fechaAnalisis;
     private TipoFuente tipoFuente;
     private Integer puntuacionRiesgo;
+    /** Cobertura de la evaluación (0-100) del resultado guardado, para el historial; null si no la tiene. */
+    private Integer porcentajeCoberturaEvaluacion;
     private String urlOpcional;
     private String textoOriginal;
     private ResultadoAuditoria resultado;

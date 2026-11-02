@@ -306,6 +306,6 @@ class MotorContextualV3Test {
         for (String campo : List.of("puntuacionRiesgo", "errores", "evaluaciones")) {
             assertThat(escrito.path(campo)).as(campo).isEqualTo(mapper.readTree(v2).path(campo));
         }
-        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "6"));
+        assertThat(motor.version()).isEqualTo(new VersionAnalizador("4", "6"));
     }
 }

@@ -39,10 +39,14 @@ public class ResultadoAuditoria {
     @JsonInclude(JsonInclude.Include.NON_NULL) // results stored before coverage existed stay byte-identical
     private CoberturaDocumento coberturaDocumento;
 
+    /** How much of what applies the text let the engine evaluate; null for results produced before it existed. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private CoberturaEvaluacion coberturaEvaluacion;
+
     /** Copy carrying this document's coverage; the analyser's own result is never modified. */
     public ResultadoAuditoria conCobertura(CoberturaDocumento cobertura) {
         return new ResultadoAuditoria(resumen, puntuacionRiesgo, riesgos, errores, recomendaciones, textosSugeridos,
-                referenciasLegales, faltantes, evaluaciones, desglosePuntuacion, cobertura);
+                referenciasLegales, faltantes, evaluaciones, desglosePuntuacion, cobertura, coberturaEvaluacion);
     }
 
     /**
@@ -68,6 +72,28 @@ public class ResultadoAuditoria {
                                      int pesoContextualEvaluado, int puntosContextuales, int pesoPalabrasClave,
                                      int puntosPalabrasClave, Integer porcentajeContextual, String motivoSinPorcentaje,
                                      List<ControlPuntuado> controles) {}
+
+    /**
+     * Evaluation coverage ("cobertura-1"), shown next to the unchanged score and never replacing it. The weights are the
+     * rules' own and add up to 100:
+     * <ul>
+     *   <li>pesoAplicable = weight of the controls that are not NO_APLICABLE;</li>
+     *   <li>pesoEvaluado = weight of the controls settled SUFICIENTE, INSUFICIENTE or POSIBLE_INCIDENCIA;</li>
+     *   <li>porcentajeCobertura = round(100 * pesoEvaluado / pesoAplicable); null when nothing applies;</li>
+     *   <li>resultadoControlesEvaluados = round(100 * puntuacion / pesoEvaluado): the very points and risk penalties of
+     *       the score, over the evaluated weight only, so NO_VERIFICABLE and NO_APLICABLE are not counted as failures.
+     *       Null, with motivoSinResultado, when nothing applies, nothing was evaluated or porcentajeCobertura is below
+     *       coberturaMinima: little evidence must not read as a good result.</li>
+     * </ul>
+     * Rounding is to the nearest integer, halves up. incidenciasRedaccion are problematic clauses found in the text and
+     * incidenciasAusencia information missing where the document should give it; neither proves an infringement.
+     * Not a statistical confidence: no empirical validation of the engine exists.
+     */
+    public record CoberturaEvaluacion(String version, int pesoAplicable, int pesoEvaluado, Integer porcentajeCobertura,
+                                      int coberturaMinima, Integer resultadoControlesEvaluados, String motivoSinResultado,
+                                      int suficientes, int insuficientes, int incidenciasRedaccion,
+                                      int incidenciasAusencia, List<String> controlesNoVerificables, int noAplicables,
+                                      int riesgosGlobales) {}
 
     /**
      * SUFICIENTE: the text substantiates the information. INSUFICIENTE: it is mentioned or only

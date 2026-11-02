@@ -174,6 +174,11 @@ const DetalleAuditoriaConjunta = () => {
               <ul className="list-disc pl-5">
                 {d.scoring.lines.map((line, i) => <li key={i} data-joint-field="scoreLine">{line}</li>)}
               </ul>
+              <p className="font-medium text-gray-700">{JOINT_LABELS.evaluationCoverage}</p>
+              {d.evaluationCoverage.warnings.map((w, i) => <p key={i} className="text-amber-800" data-joint-field="coverageWarning">{w}</p>)}
+              <ul className="list-disc pl-5">
+                {d.evaluationCoverage.lines.map((line, i) => <li key={i} data-joint-field="coverageLine">{line}</li>)}
+              </ul>
             </div>
             <p className="text-sm text-gray-700" data-joint-field="summary">{d.summary}</p>
             {d.risks.length > 0 && (

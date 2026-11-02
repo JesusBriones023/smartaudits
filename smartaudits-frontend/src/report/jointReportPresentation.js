@@ -1,5 +1,5 @@
 import { getNivelCumplimiento } from '../utils/helpers'
-import { EVIDENCE_STATES, REPORT_FALLBACKS, REPORT_LABELS, SCORE_DISCLAIMER, formatReportDate, scoreExplanation } from './reportPresentation'
+import { EVIDENCE_STATES, REPORT_FALLBACKS, REPORT_LABELS, SCORE_DISCLAIMER, coverageExplanation, formatReportDate, scoreExplanation } from './reportPresentation'
 
 // Single view model of a joint audit for the screen and the PDF: both render exactly
 // this, built from the persisted, authorized DTO. Nothing here computes a global score
@@ -11,6 +11,7 @@ export const JOINT_LABELS = Object.freeze({
   url: REPORT_LABELS.url,
   engine: 'Motor de análisis',
   scoring: 'Cómo se compone la puntuación',
+  evaluationCoverage: 'Cobertura de la evaluación',
   summary: 'Resumen',
   risks: 'Incumplimientos detectados',
   findings: 'Hallazgos',
@@ -120,7 +121,9 @@ export function buildJointReport(informe) {
       url: text(d.urlOpcional) || null,
       score: formatScore(d.puntuacionRiesgo),
       classification: scoreClassification(d.puntuacionRiesgo),
-      scoring: scoreExplanation(d.desglosePuntuacion, d.puntuacionRiesgo),
+      scoring: scoreExplanation(d.desglosePuntuacion, d.puntuacionRiesgo, d.coberturaEvaluacion),
+      // Each document's own coverage: there is no joint coverage, as there is no joint score.
+      evaluationCoverage: coverageExplanation(d.coberturaEvaluacion, d.puntuacionRiesgo),
       engine: `versión del motor ${text(d.versionMotor) || '?'} · reglas ${text(d.versionReglas) || '?'}`,
       summary: text(d.resumen) || REPORT_FALLBACKS.summary,
       risks: (Array.isArray(d.riesgos) ? d.riesgos : []).map(text),

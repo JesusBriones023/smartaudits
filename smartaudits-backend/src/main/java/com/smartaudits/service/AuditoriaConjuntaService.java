@@ -154,7 +154,7 @@ public class AuditoriaConjuntaService {
                     a.getUrlOpcional(), a.getPuntuacionRiesgo(), r == null ? null : r.getResumen(),
                     r == null || r.getRiesgos() == null ? List.of() : List.copyOf(r.getRiesgos()), a.getVersionMotor(),
                     a.getVersionReglas(), r == null || r.getErrores() == null ? List.of() : List.copyOf(r.getErrores()),
-                    r == null ? null : r.getDesglosePuntuacion()));
+                    r == null ? null : r.getDesglosePuntuacion(), r == null ? null : r.getCoberturaEvaluacion()));
             if (r != null && r.getRecomendaciones() != null) {
                 for (String recomendacion : r.getRecomendaciones()) {
                     List<AuditoriaResponse> lista = porRecomendacion.computeIfAbsent(recomendacion, k -> new ArrayList<>());

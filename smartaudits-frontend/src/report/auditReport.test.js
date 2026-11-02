@@ -21,6 +21,8 @@ describe('AuditReportModel contract', () => {
       // The fixture predates the score breakdown: it is reported as unavailable, never reconstructed.
       scoring: { available: false, warning: null,
         lines: ['Desglose no disponible: este análisis es anterior a esa información y no se reconstruye.'] },
+      coverage: { available: false, warnings: [],
+        lines: ['Cobertura no disponible: este análisis es anterior a esa información y no se reconstruye.'] },
       summary: 'Resumen sintético',
       risks: ['Plazo ausente', ' <script>riesgo</script> ', 'Plazo ausente'],
       findings: [

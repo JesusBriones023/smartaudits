@@ -1,6 +1,7 @@
 package com.smartaudits.service.motor;
 
 import com.smartaudits.model.dto.ResultadoAuditoria;
+import com.smartaudits.model.dto.ResultadoAuditoria.CoberturaEvaluacion;
 import com.smartaudits.model.dto.ResultadoAuditoria.ControlPuntuado;
 import com.smartaudits.model.dto.ResultadoAuditoria.DesglosePuntuacion;
 import com.smartaudits.model.dto.ResultadoAuditoria.ErrorAuditoria;
@@ -66,7 +67,8 @@ import java.util.stream.Collectors;
 public class MotorAnalisisLegal implements AnalizadorLegal {
 
     private static final String MOTOR = "LEGAL_TEXT";
-    private static final VersionAnalizador VERSION = new VersionAnalizador("3", "6");
+    // Output contract 4 adds coberturaEvaluacion; the rules (6) are unchanged.
+    private static final VersionAnalizador VERSION = new VersionAnalizador("4", "6");
 
     @Override
     public VersionAnalizador version() {
@@ -442,6 +444,8 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
 
         // ---- Evaluar cada regla ----
         List<ControlPuntuado> controles = new ArrayList<>();
+        Set<String> problematicas = new HashSet<>();
+        int riesgosGlobales = 0;
         for (Regla regla : REGLAS) {
             int antes = puntuacion;
             var e = ReglasContextuales.evaluar(regla.id, clausulas, entrada.tipoDocumento());
@@ -461,6 +465,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
                 }
                 case POSIBLE_INCIDENCIA -> {
                     if (e.problematica()) {
+                        problematicas.add(regla.id);
                         severidad = "ALTA";
                         errores.add(errorContextual(regla.id, PREFIJO_RIESGO + regla.titulo,
                                 "La cláusula contiene una redacción que puede ser contraria a la normativa. " + e.detalle(),
@@ -525,6 +530,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
                     errores.add(error);
                     riesgos.add(nombreRiesgo);
                     puntuacion = Math.max(0, puntuacion - 2);
+                    riesgosGlobales++;
                     incumplimientosAlta++;
                 }
                 continue;
@@ -541,6 +547,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
                     errores.add(error);
                     riesgos.add(nombreRiesgo);
                     puntuacion = Math.max(0, puntuacion - 2);
+                    riesgosGlobales++;
                     if ("ALTA".equals(severidadRiesgo)) incumplimientosAlta++;
                     else incumplimientosMedia++;
                     break;
@@ -551,6 +558,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
         // Garantizar rango 0-100
         puntuacion = Math.max(0, Math.min(100, puntuacion));
         DesglosePuntuacion desglose = desglose(puntuacion, puntosAcreditados, controles);
+        CoberturaEvaluacion cobertura = cobertura(puntuacion, controles, problematicas, riesgosGlobales);
 
         // ---- Recomendaciones generales siempre presentes ----
         recomendaciones.add("Revisar y actualizar el documento al menos una vez al año o ante cambios normativos.");
@@ -572,6 +580,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
         resultado.setFaltantes(faltantes);
         resultado.setEvaluaciones(evaluaciones);
         resultado.setDesglosePuntuacion(desglose);
+        resultado.setCoberturaEvaluacion(cobertura);
 
         return resultado;
     }
@@ -606,6 +615,52 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             case "ALTA" -> "MEDIA";
             default -> "BAJA";
         };
+    }
+
+    static final String VERSION_COBERTURA = "cobertura-1";
+    /**
+     * Below half of the applicable weight the text cannot characterise the document, so no result over the evaluated
+     * controls is given. A product rule, documented as such: it is not derived from any empirical validation.
+     */
+    static final int COBERTURA_MINIMA = 50;
+
+    /** See {@link CoberturaEvaluacion}: the score is untouched, only re-expressed over what could be evaluated. */
+    static CoberturaEvaluacion cobertura(int puntuacion, List<ControlPuntuado> controles, Set<String> problematicas,
+                                                 int riesgosGlobales) {
+        int aplicable = 0, evaluado = 0, suficientes = 0, insuficientes = 0, redaccion = 0, ausencia = 0, noAplicables = 0;
+        List<String> noVerificables = new ArrayList<>();
+        for (ControlPuntuado c : controles) {
+            if (c.estado() == null || c.estado() == EstadoEvidencia.NO_APLICABLE) {
+                noAplicables++;
+                continue;
+            }
+            aplicable += c.peso();
+            switch (c.estado()) {
+                case NO_VERIFICABLE -> noVerificables.add(c.ruleId());
+                case SUFICIENTE -> suficientes++;
+                case INSUFICIENTE -> insuficientes++;
+                default -> {
+                    if (problematicas.contains(c.ruleId())) redaccion++;
+                    else ausencia++;
+                }
+            }
+            if (c.estado() != EstadoEvidencia.NO_VERIFICABLE) evaluado += c.peso();
+        }
+        Integer porcentaje = aplicable > 0 ? redondear(100 * evaluado, aplicable) : null;
+        String motivo = aplicable == 0 ? "Ningún control es aplicable a este tipo de documento."
+                : evaluado == 0 ? "El texto no permite evaluar ninguno de los controles aplicables."
+                : porcentaje < COBERTURA_MINIMA ? "Se ha evaluado menos del " + COBERTURA_MINIMA + " % del peso de los "
+                        + "controles aplicables: el texto no permite valorar el documento en su conjunto."
+                : null;
+        Integer resultado = motivo == null ? redondear(100 * puntuacion, evaluado) : null;
+        return new CoberturaEvaluacion(VERSION_COBERTURA, aplicable, evaluado, porcentaje, COBERTURA_MINIMA, resultado,
+                motivo, suficientes, insuficientes, redaccion, ausencia, List.copyOf(noVerificables), noAplicables,
+                riesgosGlobales);
+    }
+
+    /** Nearest integer, halves up; both operands are non-negative and the denominator positive. */
+    private static int redondear(int numerador, int denominador) {
+        return (2 * numerador + denominador) / (2 * denominador);
     }
 
     static final String VERSION_DESGLOSE = "desglose-1";

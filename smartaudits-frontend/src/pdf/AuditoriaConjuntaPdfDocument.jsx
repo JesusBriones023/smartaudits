@@ -183,6 +183,9 @@ const AuditoriaConjuntaPdfDocument = ({ informe }) => {
           <Text style={styles.h3}>{JOINT_LABELS.scoring}</Text>
           {d.scoring.warning ? <T style={styles.item} data-joint-field="scoreWarning">{d.scoring.warning}</T> : null}
           {d.scoring.lines.map((line, i) => <T key={i} style={styles.item}>- <Text data-joint-field="scoreLine">{line}</Text></T>)}
+          <Text style={styles.h3}>{JOINT_LABELS.evaluationCoverage}</Text>
+          {d.evaluationCoverage.warnings.map((w, i) => <T key={i} style={styles.item} data-joint-field="coverageWarning">{w}</T>)}
+          {d.evaluationCoverage.lines.map((line, i) => <T key={i} style={styles.item}>- <Text data-joint-field="coverageLine">{line}</Text></T>)}
 
           <Text style={styles.h3}>{JOINT_LABELS.summary}</Text>
           <T data-joint-field="summary">{d.summary}</T>

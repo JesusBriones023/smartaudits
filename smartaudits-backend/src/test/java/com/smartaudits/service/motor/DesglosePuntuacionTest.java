@@ -157,6 +157,6 @@ class DesglosePuntuacionTest {
         assertThat(motor.analyze(new EntradaAnalisis("  ", null)).getDesglosePuntuacion()).isNull();
         var nuevo = motor.analyze(new EntradaAnalisis(AVISO, "Aviso Legal"));
         assertThat(mapper.readValue(mapper.writeValueAsString(nuevo), ResultadoAuditoria.class)).isEqualTo(nuevo);
-        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "6"));
+        assertThat(motor.version()).isEqualTo(new VersionAnalizador("4", "6"));
     }
 }

@@ -514,9 +514,15 @@ const HistorialAuditorias = () => {
                         {auditoria.puntuacionRiesgo}
                       </div>
 
+                      {/* The legacy score is no compliance measure; its coverage is shown when the result has it. */}
                       <div className="text-sm text-gray-500">
-                        Cumplimiento
+                        Puntuación
                       </div>
+                      {Number.isFinite(auditoria.porcentajeCoberturaEvaluacion) && (
+                        <div className="text-xs text-gray-500" data-history-field="coverage">
+                          Cobertura {auditoria.porcentajeCoberturaEvaluacion} %
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

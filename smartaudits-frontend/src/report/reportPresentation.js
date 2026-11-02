@@ -13,11 +13,60 @@ export const SCORE_BREAKDOWN_TITLE = 'Cómo se compone la puntuación'
 
 const count = value => (Number.isFinite(value) ? value : 0)
 
+export const COVERAGE_TITLE = 'Cobertura de la evaluación'
+const COVERAGE_UNAVAILABLE = 'Cobertura no disponible: este análisis es anterior a esa información y no se reconstruye.'
+
+const hasCoverage = cobertura => Boolean(cobertura) && typeof cobertura === 'object' && cobertura.version === 'cobertura-1'
+
+/**
+ * What the score could cover ("cobertura-1"): how much of the applicable weight the text let the engine evaluate,
+ * the score over that evaluated weight and how the controls were settled. The engine computes it; this only words it.
+ * Results without it say so; nothing is reconstructed for them.
+ */
+export function coverageExplanation(cobertura, score) {
+  if (!hasCoverage(cobertura)) {
+    return Object.freeze({ available: false, warnings: Object.freeze([]), lines: Object.freeze([COVERAGE_UNAVAILABLE]) })
+  }
+  const c = cobertura
+  const pendientes = Array.isArray(c.controlesNoVerificables) ? c.controlesNoVerificables.length : 0
+  const evaluados = count(c.suficientes) + count(c.insuficientes) + count(c.incidenciasRedaccion) + count(c.incidenciasAusencia)
+  const resultado = Number.isFinite(c.resultadoControlesEvaluados) ? c.resultadoControlesEvaluados : null
+  const cobertura100 = Number.isFinite(c.porcentajeCobertura) ? c.porcentajeCobertura : null
+  const lines = [
+    cobertura100 === null
+      ? 'Cobertura: ningún control es aplicable a este tipo de documento.'
+      : `Cobertura: ${cobertura100} % del peso de los controles aplicables (${count(c.pesoEvaluado)} de ${count(c.pesoAplicable)} puntos evaluados).`,
+    resultado === null
+      ? `Resultado en los controles evaluados: no se calcula. ${typeof c.motivoSinResultado === 'string' ? c.motivoSinResultado : ''}`.trim()
+      : `Resultado en los controles evaluados: ${resultado} %`
+        + (Number.isFinite(score) ? ` (${score} puntos sobre los ${count(c.pesoEvaluado)} evaluados).` : '.'),
+    `Controles: ${count(c.suficientes)} con evidencia suficiente, ${count(c.insuficientes)} con información insuficiente, `
+      + `${count(c.incidenciasRedaccion)} con redacción problemática, ${count(c.incidenciasAusencia)} sin la información que `
+      + `el documento debería dar, ${pendientes} pendientes de verificación y ${count(c.noAplicables)} no aplicables.`,
+  ]
+  if (count(c.riesgosGlobales) > 0) {
+    lines.push(`Riesgos detectados en el texto: ${count(c.riesgosGlobales)}; restan 2 puntos cada uno, también en el resultado anterior.`)
+  }
+  const warnings = []
+  if (pendientes > 0) {
+    warnings.push(`${pendientes} ${pendientes === 1 ? 'control aplicable está pendiente' : 'controles aplicables están pendientes'} `
+      + 'de verificación: el texto no permite saber si se cumplen y no se cuentan como incumplidos.')
+  }
+  if (resultado !== null && evaluados < 3) {
+    warnings.push(`Solo se ${evaluados === 1 ? 'ha evaluado 1 control' : `han evaluado ${evaluados} controles`}: el resultado describe únicamente ${evaluados === 1 ? 'ese control' : 'esos controles'}.`)
+  }
+  if (resultado !== null && resultado >= 85 && (cobertura100 < 100 || evaluados < 3)) {
+    warnings.push('Un resultado alto se limita a lo que el texto permite evaluar y no demuestra el cumplimiento del documento.')
+  }
+  return Object.freeze({ available: true, warnings: Object.freeze(warnings), lines: Object.freeze(lines) })
+}
+
 /**
  * How a score is made up ("desglose-1"), as final text lines shared by the screen, the PDF and the
- * copied report. Results without a breakdown say so; nothing is reconstructed for them.
+ * copied report. Results without a breakdown say so; nothing is reconstructed for them. With an evaluation
+ * coverage the share over evaluated controls is given there instead, so it is not repeated here.
  */
-export function scoreExplanation(desglose, score) {
+export function scoreExplanation(desglose, score, cobertura) {
   if (!desglose || typeof desglose !== 'object' || desglose.version !== 'desglose-1') {
     return Object.freeze({ available: false, warning: null, lines: Object.freeze([
       'Desglose no disponible: este análisis es anterior a esa información y no se reconstruye.',
@@ -40,12 +89,17 @@ export function scoreExplanation(desglose, score) {
   if (claves > 0) lines.push(`Controles evaluados por palabras clave, sin determinar si aplican: ${count(d.puntosPalabrasClave)} de ${claves} puntos.`)
   if (count(d.pesoNoAplicable) > 0) lines.push(`Controles no aplicables a este tipo de documento: ${count(d.pesoNoAplicable)} puntos que no se suman.`)
   if (count(d.pesoNoVerificable) > 0) lines.push(`Controles no verificables con el texto: ${count(d.pesoNoVerificable)} puntos que no se suman.`)
-  lines.push(Number.isFinite(d.porcentajeContextual)
-    ? `Evidencia en los controles evaluados por contexto: ${d.porcentajeContextual} %.`
-    : `Evidencia en los controles evaluados por contexto: no disponible. ${typeof d.motivoSinPorcentaje === 'string' ? d.motivoSinPorcentaje : ''}`.trim())
-  lines.push(claves > 0
-    ? `No se calcula una puntuación ajustada: ${claves} puntos dependen de controles por palabras clave cuya aplicabilidad no se determina.`
-    : 'No se calcula una puntuación ajustada: los puntos no aplicables o no verificables no se redistribuyen, y evaluar todos los controles por contexto no hace exacto el análisis.')
+  if (hasCoverage(cobertura)) {
+    lines.push('La puntuación global cuenta como 0 los controles no aplicables y no verificables; lo que el texto permite '
+      + 'evaluar se indica en la cobertura de la evaluación.')
+  } else {
+    lines.push(Number.isFinite(d.porcentajeContextual)
+      ? `Evidencia en los controles evaluados por contexto: ${d.porcentajeContextual} %.`
+      : `Evidencia en los controles evaluados por contexto: no disponible. ${typeof d.motivoSinPorcentaje === 'string' ? d.motivoSinPorcentaje : ''}`.trim())
+    lines.push(claves > 0
+      ? `No se calcula una puntuación ajustada: ${claves} puntos dependen de controles por palabras clave cuya aplicabilidad no se determina.`
+      : 'No se calcula una puntuación ajustada: los puntos no aplicables o no verificables no se redistribuyen, y evaluar todos los controles por contexto no hace exacto el análisis.')
+  }
   const fuera = count(d.pesoNoAplicable) + count(d.pesoNoVerificable)
   return Object.freeze({
     available: true,
@@ -125,6 +179,11 @@ export function renderReportText(report) {
   lines.push(SCORE_DISCLAIMER)
   if (report.scoring?.warning) lines.push(report.scoring.warning)
   for (const line of report.scoring?.lines ?? []) lines.push(`- ${line}`)
+  if (report.coverage) {
+    lines.push(`${COVERAGE_TITLE}:`)
+    for (const warning of report.coverage.warnings) lines.push(warning)
+    for (const line of report.coverage.lines) lines.push(`- ${line}`)
+  }
 
   const sections = seccionesInforme(report, REPORT_POLICIES.copy).map(section => {
     let body

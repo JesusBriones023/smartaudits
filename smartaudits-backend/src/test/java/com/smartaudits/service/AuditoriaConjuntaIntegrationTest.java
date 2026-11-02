@@ -123,6 +123,8 @@ class AuditoriaConjuntaIntegrationTest {
             assertThat(d.tipoDocumento()).isEqualTo(input.getTipoDocumento());
             assertThat(d.puntuacionRiesgo()).isEqualTo(expected.getPuntuacionRiesgo());
             assertThat(d.incidencias()).isEqualTo(expected.getErrores());
+            // Each document keeps its own evaluation coverage; there is no joint one.
+            assertThat(d.coberturaEvaluacion()).isNotNull().isEqualTo(expected.getCoberturaEvaluacion());
             Auditoria stored = audits.findById(d.auditoriaId()).orElseThrow();
             assertThat(stored.getTipoFuente()).isEqualTo(TipoFuente.MANUAL);
             assertThat(stored.getTextoOriginal()).doesNotContain("<", "alert");

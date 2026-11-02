@@ -451,6 +451,6 @@ class MotorContextualV5Test {
                 .containsExactly(MetodoControl.PALABRAS_CLAVE, MetodoControl.CONTEXTUAL);
         assertThat(mapper.readTree(mapper.writeValueAsString(leido)).path("desglosePuntuacion"))
                 .isEqualTo(mapper.readTree(v4).path("desglosePuntuacion"));
-        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "6"));
+        assertThat(motor.version()).isEqualTo(new VersionAnalizador("4", "6"));
     }
 }

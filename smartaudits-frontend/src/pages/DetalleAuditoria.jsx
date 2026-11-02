@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import api from '../api/axios'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { buildAuditReport } from '../report/auditReport'
-import { REPORT_LABELS, REPORT_POLICIES, SCORE_BREAKDOWN_TITLE, SCORE_DISCLAIMER, reportHeader, seccionesInforme, renderReportText } from '../report/reportPresentation'
+import { COVERAGE_TITLE, REPORT_LABELS, REPORT_POLICIES, SCORE_BREAKDOWN_TITLE, SCORE_DISCLAIMER, reportHeader, seccionesInforme, renderReportText } from '../report/reportPresentation'
 
 const levelBadges = {
   BAJO: 'bg-green-500 text-green-100',
@@ -616,6 +616,15 @@ const DetalleAuditoria = () => {
         <ul className="list-disc pl-5 space-y-1">
           {report.scoring.lines.map((line, i) => (
             <li key={i} className="text-sm text-gray-600" data-report-field="scoreLine">{line}</li>
+          ))}
+        </ul>
+        <h3 className="text-sm font-semibold text-gray-800 pt-2">{COVERAGE_TITLE}</h3>
+        {report.coverage.warnings.map((warning, i) => (
+          <p key={i} className="text-sm text-amber-800" data-report-field="coverageWarning">{warning}</p>
+        ))}
+        <ul className="list-disc pl-5 space-y-1">
+          {report.coverage.lines.map((line, i) => (
+            <li key={i} className="text-sm text-gray-600" data-report-field="coverageLine">{line}</li>
           ))}
         </ul>
       </section>

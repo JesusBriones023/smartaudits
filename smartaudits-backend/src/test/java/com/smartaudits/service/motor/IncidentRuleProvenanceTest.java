@@ -66,11 +66,10 @@ class IncidentRuleProvenanceTest {
     }
 
     @Test
-    void rulesVersionSixKeepsOutputContractThree() {
-        // Output 3 added the score breakdown; rules 4 and 5 moved the remaining rules to the contextual evaluation and
-        // rules 6 recalibrate R13, R14, R17, R18 and R19 and the legal wording, all without changing the output shape.
-        // Stored audits keep their own versions.
-        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "6"));
+    void rulesVersionSixWithOutputContractFour() {
+        // Output 3 added the score breakdown and output 4 the evaluation coverage; rules 4 and 5 moved the remaining
+        // rules to the contextual evaluation and rules 6 recalibrated them. Stored audits keep their own versions.
+        assertThat(motor.version()).isEqualTo(new VersionAnalizador("4", "6"));
     }
 
     @ParameterizedTest

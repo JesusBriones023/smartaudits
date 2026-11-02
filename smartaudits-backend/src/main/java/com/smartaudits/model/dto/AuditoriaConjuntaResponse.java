@@ -60,7 +60,9 @@ public record AuditoriaConjuntaResponse(
     /**
      * Resultado de un documento: es su auditoría individual, enlazable por auditoriaId.
      *
-     * @param desglosePuntuacion cómo se compone su puntuación; null en auditorías anteriores al desglose
+     * @param desglosePuntuacion  cómo se compone su puntuación; null en auditorías anteriores al desglose
+     * @param coberturaEvaluacion cobertura de la evaluación de ese documento; null en auditorías anteriores a ella.
+     *                            Tampoco hay cobertura global: cada documento conserva la suya.
      */
     public record Documento(
             Long auditoriaId,
@@ -73,7 +75,8 @@ public record AuditoriaConjuntaResponse(
             String versionMotor,
             String versionReglas,
             List<ResultadoAuditoria.ErrorAuditoria> incidencias,
-            ResultadoAuditoria.DesglosePuntuacion desglosePuntuacion) {}
+            ResultadoAuditoria.DesglosePuntuacion desglosePuntuacion,
+            ResultadoAuditoria.CoberturaEvaluacion coberturaEvaluacion) {}
 
     public record RecomendacionAgrupada(String texto, List<Long> auditoriaIds, List<String> documentos) {}
 

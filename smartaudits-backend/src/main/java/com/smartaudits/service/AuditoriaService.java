@@ -292,7 +292,25 @@ private Pageable crearPageable(int page, int size) {
         return auditoria;
     }
 
+    /** History row: the stored coverage is read as stored, never recomputed (older results have none). */
     private AuditoriaResponse toResponseSimple(Auditoria auditoria) {
+        AuditoriaResponse response = datosComunes(auditoria);
+        response.setPorcentajeCoberturaEvaluacion(coberturaGuardada(auditoria.getResultadoJson()));
+        return response;
+    }
+
+    private Integer coberturaGuardada(String resultadoJson) {
+        if (resultadoJson == null || resultadoJson.isBlank()) return null;
+        try {
+            var porcentaje = objectMapper.readTree(resultadoJson).path("coberturaEvaluacion").path("porcentajeCobertura");
+            return porcentaje.isInt() ? porcentaje.intValue() : null;
+        } catch (Exception e) {
+            // An unreadable stored result keeps its row in the history, without coverage.
+            return null;
+        }
+    }
+
+    private AuditoriaResponse datosComunes(Auditoria auditoria) {
         AuditoriaResponse response = new AuditoriaResponse();
         response.setId(auditoria.getId());
         response.setTitulo(auditoria.getTitulo());
@@ -311,7 +329,9 @@ private Pageable crearPageable(int page, int size) {
     }
 
     private AuditoriaResponse toResponseComplete(Auditoria auditoria, ResultadoAuditoria resultado) {
-        AuditoriaResponse response = toResponseSimple(auditoria);
+        AuditoriaResponse response = datosComunes(auditoria);
+        response.setPorcentajeCoberturaEvaluacion(resultado == null || resultado.getCoberturaEvaluacion() == null ? null
+                : resultado.getCoberturaEvaluacion().porcentajeCobertura());
         response.setTextoOriginal(auditoria.getTextoOriginal());
         response.setResultado(resultado);
         return response;

@@ -322,6 +322,6 @@ class MotorContextualV6Test {
         assertThat(reescrito.path("errores")).isEqualTo(mapper.readTree(v5).path("errores"));
         assertThat(reescrito.path("evaluaciones")).isEqualTo(mapper.readTree(v5).path("evaluaciones"));
         assertThat(reescrito.path("puntuacionRiesgo").asInt()).isEqualTo(92);
-        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "6"));
+        assertThat(motor.version()).isEqualTo(new VersionAnalizador("4", "6"));
     }
 }
