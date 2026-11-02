@@ -45,7 +45,10 @@ public class ResultadoAuditoria {
                 referenciasLegales, faltantes, evaluaciones, desglosePuntuacion, cobertura);
     }
 
-    /** CONTEXTUAL: settled by evidence states; PALABRAS_CLAVE: legacy keyword match, applicability never determined. */
+    /**
+     * CONTEXTUAL: settled by evidence states; PALABRAS_CLAVE: legacy keyword match, applicability never determined.
+     * Rules version 5 evaluates every control by context; PALABRAS_CLAVE remains for breakdowns stored before it.
+     */
     public enum MetodoControl { CONTEXTUAL, PALABRAS_CLAVE }
 
     /** @param estado only for CONTEXTUAL controls */

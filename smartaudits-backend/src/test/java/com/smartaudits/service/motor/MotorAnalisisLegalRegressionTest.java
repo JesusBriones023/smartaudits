@@ -13,7 +13,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Characterization of the current engine (rules v4), not assertions of legal correctness. */
+/** Characterization of the current engine (rules v5), not assertions of legal correctness. */
 class MotorAnalisisLegalRegressionTest {
     private static final String RISK_PREFIX = "Cláusula presente pero con redacción problemática: ";
     private static final Corpus CORPUS = loadCorpus();
@@ -115,10 +115,10 @@ class MotorAnalisisLegalRegressionTest {
 
     private static Corpus loadCorpus() {
         try (InputStream input = MotorAnalisisLegalRegressionTest.class
-                .getResourceAsStream("/motor/current-engine-v4.json")) {
+                .getResourceAsStream("/motor/current-engine-v5.json")) {
             assertThat(input).as("Versioned motor corpus must exist").isNotNull();
             Corpus corpus = new ObjectMapper().readValue(input, Corpus.class);
-            assertThat(corpus.schemaVersion()).isEqualTo(4);
+            assertThat(corpus.schemaVersion()).isEqualTo(5);
             assertThat(corpus.baselineCommit()).isNotBlank();
             assertThat(corpus.purpose()).isNotBlank();
             assertThat(corpus.rules()).hasSize(19);

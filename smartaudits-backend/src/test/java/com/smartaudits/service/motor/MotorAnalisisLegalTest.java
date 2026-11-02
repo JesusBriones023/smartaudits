@@ -10,6 +10,8 @@ class MotorAnalisisLegalTest {
 
     // Basic structural examples only; the regression corpus belongs to Phase 1.2.
     // Unlike corpus case M01 («NIF de prueba»), it carries a NIF-shaped value: rules v4 require one for R16.
+    // Rules v5 also require the Art. 9.2 exception for special categories and, for automated decisions, either
+    // their logic and consequences or an explicit statement that none are taken.
     static final String COMPLETE_TEXT = """
             Aviso legal. Responsable del tratamiento: Ejemplo S.L., NIF B12345678,
             domicilio social en Madrid e inscrita en el Registro Mercantil de Madrid.
@@ -27,9 +29,9 @@ class MotorAnalisisLegalTest {
             Puede presentar una reclamación ante la AEPD.
             El consentimiento se obtiene mediante una casilla desmarcada y puede retirarse.
             Los menores de 14 años requieren autorización parental.
-            Las categorías especiales de datos tienen garantías reforzadas.
+            Las categorías especiales de datos solo se tratan con su consentimiento explícito y garantías reforzadas.
             Aplicamos medidas de seguridad: cifrado, control de acceso y copias de seguridad.
-            Las decisiones automatizadas están sujetas a intervención humana.
+            No adoptamos decisiones basadas únicamente en un tratamiento automatizado.
             El procedimiento ante una brecha de seguridad contempla notificación en 72 horas.
             Las comunicaciones comerciales requieren consentimiento y permiten darse de baja.
             """;

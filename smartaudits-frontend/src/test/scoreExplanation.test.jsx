@@ -40,6 +40,25 @@ describe('score explanation', () => {
     expect(scoreExplanation(avisoLegal, 21)).toEqual({ available: true, warning: AVISO_NO_COMPARABLE, lines: LINEAS_AVISO })
   })
 
+  it('drops the keyword lines once every control is contextual (rules v5) without claiming accuracy', () => {
+    // The same legal notice as rules v5 score it: R13, R14, R17, R18 and R19 are not applicable either.
+    const avisoV5 = { ...avisoLegal, puntuacion: 13, puntosAcreditados: 13, pesoNoAplicable: 87, pesoContextualEvaluado: 13,
+      puntosContextuales: 13, pesoPalabrasClave: 0, puntosPalabrasClave: 0 }
+    expect(scoreExplanation(avisoV5, 13)).toEqual({
+      available: true,
+      warning: '87 de los 100 puntos no pueden obtenerse en este documento: la puntuación no es comparable con la de documentos de otro tipo.',
+      lines: [
+        'Puntos acreditados por el texto: 13 de 100.',
+        'Controles evaluados por contexto, aplicables y verificables: 13 de 13 puntos.',
+        'Controles no aplicables a este tipo de documento: 87 puntos que no se suman.',
+        'Evidencia en los controles evaluados por contexto: 100 %.',
+        'No se calcula una puntuación ajustada: los puntos no aplicables o no verificables no se redistribuyen, '
+          + 'y evaluar todos los controles por contexto no hace exacto el análisis.',
+      ],
+    })
+    expect(scoreExplanation(avisoV5, 13).lines.join(' ')).not.toMatch(/palabras clave|cumplimiento/i)
+  })
+
   it('shows penalties, not verifiable weight and an unavailable share without inventing a denominator', () => {
     const terminos = { ...avisoLegal, puntuacion: 3, puntosAcreditados: 5, penalizacionRiesgos: 2, pesoNoAplicable: 40,
       pesoNoVerificable: 13, pesoContextualEvaluado: 0, puntosContextuales: 0, puntosPalabrasClave: 5, porcentajeContextual: null,

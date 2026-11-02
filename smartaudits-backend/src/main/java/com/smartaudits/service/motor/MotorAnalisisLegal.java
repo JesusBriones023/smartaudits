@@ -33,18 +33,19 @@ import java.util.stream.Collectors;
  *   - No cumplirla no suma nada.
  *   - Resultado final = suma de puntos obtenidos (0-100). Nunca negativo.
  *
- * Reglas versión 4: R01, R02, R03, R04, R05, R06, R07, R08, R09, R10, R11, R12, R15 y R16 (y los riesgos
- * G01, G02 y G03) se evalúan por cláusulas, con palabras completas y negaciones ({@link ReglasContextuales});
- * la versión 3 cubría R02, R03, R05, R06, R07, R08, R10, R12, R15, G01, G02 y G03, y la versión 2 solo
- * R03, R05, R06, R07, R08, G01 y G02. R13, R14, R17, R18 y R19 (16 puntos) siguen siendo palabras clave
- * por subcadena. Cada una termina en un estado
+ * Reglas versión 5: las 19 reglas (y los riesgos G01, G02 y G03) se evalúan por cláusulas, con palabras
+ * completas y negaciones ({@link ReglasContextuales}); la versión 4 dejaba R13, R14, R17, R18 y R19 (16 puntos)
+ * como palabras clave por subcadena, la versión 3 cubría R02, R03, R05, R06, R07, R08, R10, R12, R15, G01, G02 y
+ * G03, y la versión 2 solo R03, R05, R06, R07, R08, G01 y G02. Que todas se evalúen por contexto no hace exacta la
+ * evaluación: sigue siendo una lectura automática del texto. Cada regla termina en un estado
  * de evidencia y suma: su peso si es SUFICIENTE; la mitad si es INSUFICIENTE o si la cláusula
  * suficiente tiene redacción problemática; nada en otro caso. NO_APLICABLE y NO_VERIFICABLE no
  * suman ni generan incidencia: la puntuación sigue siendo la suma de pesos acreditados sobre 100,
  * sin redistribuir pesos (eso exigiría recalibrar todas las reglas).
  *
  * Cada resultado incluye un desglose ("desglose-1") que separa los puntos acreditados, las penalizaciones
- * y los pesos no aplicables, no verificables, contextuales y por palabras clave; el algoritmo no cambia.
+ * y los pesos no aplicables, no verificables y contextuales; el peso por palabras clave es 0 desde las reglas 5
+ * y solo los desgloses guardados antes lo conservan. El algoritmo no cambia.
  * La versión del motor 3 corresponde a esa salida y a un resumen que no presenta la cifra como cumplimiento.
  *
  * Limitación conocida, pendiente de rediseñar la puntuación: como NO_APLICABLE y NO_VERIFICABLE suman
@@ -58,7 +59,7 @@ import java.util.stream.Collectors;
 public class MotorAnalisisLegal implements AnalizadorLegal {
 
     private static final String MOTOR = "LEGAL_TEXT";
-    private static final VersionAnalizador VERSION = new VersionAnalizador("3", "4");
+    private static final VersionAnalizador VERSION = new VersionAnalizador("3", "5");
 
     @Override
     public VersionAnalizador version() {
@@ -75,16 +76,13 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
         final String descripcion;
         final String severidad;           // ALTA, MEDIA, BAJA
         final int peso;                   // Puntos que aporta si se cumple (suma total = 100)
-        final List<String> palabrasClave; // Al menos UNA debe estar presente para cumplir
-        final List<String> patronesRiesgo; // Si ALGUNO aparece en cláusula existente → cumplimiento parcial
         final String impacto;
         final String accion;
         final String referenciaLegal;
         final String textoCumplimiento;
         final String campoFaltante;
 
-        Regla(String id, String titulo, String descripcion, String severidad,
-              int peso, List<String> palabrasClave, List<String> patronesRiesgo,
+        Regla(String id, String titulo, String descripcion, String severidad, int peso,
               String impacto, String accion, String referenciaLegal,
               String textoCumplimiento, String campoFaltante) {
             this.id = id;
@@ -92,8 +90,6 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             this.descripcion = descripcion;
             this.severidad = severidad;
             this.peso = peso;
-            this.palabrasClave = palabrasClave;
-            this.patronesRiesgo = patronesRiesgo;
             this.impacto = impacto;
             this.accion = accion;
             this.referenciaLegal = referenciaLegal;
@@ -103,7 +99,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
     }
 
     // -----------------------------------------------------------------------
-    // Catálogo de reglas
+    // Catálogo de reglas (cómo se evalúa cada una: ReglasContextuales)
     // Pesos diseñados para sumar exactamente 100 en total.
     // ALTA=6-8pts, MEDIA=3-5pts, BAJA=2-3pts
     // -----------------------------------------------------------------------
@@ -118,17 +114,6 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Identidad del responsable del tratamiento no especificada",
             "No se identifica el nombre, razón social o datos de contacto del responsable del tratamiento de datos personales.",
             "ALTA", 8,
-            Arrays.asList(
-                "responsable del tratamiento", "responsable de tratamiento",
-                "responsable es", "responsable:", "razon social", "razon social:",
-                "denominacion social", "empresa responsable", "identidad del responsable",
-                "titular del sitio", "titular de la web", "titular del portal",
-                "sociedad limitada", "sociedad anonima", " s.l.", " s.a.", " s.l.u.",
-                "con domicilio", "con domicilio social", "con nif", "con cif",
-                "inscrita en el registro", "registro mercantil",
-                "quien gestiona", "quien trata sus datos", "empresa que gestiona"
-            ),
-            Collections.emptyList(),
             "Incumplimiento del Art. 13.1.a y 14.1.a RGPD. El interesado no puede identificar quién trata sus datos. Sanciones de hasta 20 millones € o 4% del volumen de negocio anual.",
             "Incluir el nombre completo o razón social del responsable, NIF/CIF y dirección postal completa al inicio del documento.",
             "RGPD Art. 13.1.a — Identidad y datos de contacto del responsable",
@@ -142,16 +127,6 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Datos de contacto del responsable ausentes o incompletos",
             "No se proporcionan medios de contacto suficientes para que el interesado pueda comunicarse con el responsable.",
             "ALTA", 6,
-            Arrays.asList(
-                "contacto", "email", "correo electronico", "correo-electronico",
-                "telefono", "telefono de contacto", "numero de telefono",
-                "direccion postal", "apartado de correos",
-                "formulario de contacto", "atencion al cliente", "servicio al cliente",
-                "puede contactar", "puede contactarnos", "puede dirigirse",
-                "puede ponerse en contacto", "contactenos", "escribenos",
-                "para cualquier consulta", "ante cualquier duda"
-            ),
-            Collections.emptyList(),
             "Posible incumplimiento del Art. 13.1.a RGPD: sin un medio de contacto concreto el interesado no puede dirigirse al responsable ni ejercer sus derechos.",
             "Proporcionar al menos una dirección de correo electrónico de contacto y, preferiblemente, dirección postal.",
             "RGPD Art. 13.1.a — Datos de contacto del responsable",
@@ -165,15 +140,6 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Información sobre el Delegado de Protección de Datos (DPO) ausente",
             "No se menciona si se ha designado Delegado de Protección de Datos ni sus datos de contacto.",
             "MEDIA", 4,
-            Arrays.asList(
-                "delegado de proteccion de datos", "delegado de privacidad",
-                "dpo", "data protection officer", "dpd",
-                "responsable de privacidad", "responsable de proteccion",
-                "oficial de proteccion", "figura del delegado",
-                "no es obligatorio designar", "no procede la designacion",
-                "no estamos obligados a designar"
-            ),
-            Collections.emptyList(),
             "Incumplimiento del Art. 13.1.b RGPD. Si el responsable está obligado a designar DPO (Art. 37 RGPD), su ausencia es una infracción grave.",
             "Indicar si se ha designado DPO y sus datos de contacto. Si no aplica, indicarlo expresamente.",
             "RGPD Art. 13.1.b — Datos de contacto del DPO",
@@ -187,18 +153,6 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Finalidad del tratamiento de datos no especificada",
             "No se describen de forma clara las finalidades para las que se tratan los datos personales.",
             "ALTA", 8,
-            Arrays.asList(
-                "finalidad", "finalidades", "para que tratamos", "para que usamos",
-                "con el fin de", "con la finalidad de", "con el objeto de",
-                "objetivo del tratamiento", "proposito", "propositos",
-                "tratamos sus datos para", "usamos sus datos para",
-                "gestion de clientes", "gestion de usuarios", "prestacion del servicio",
-                "gestion de pedidos", "gestion de compras", "envio de comunicaciones",
-                "comunicaciones comerciales", "analitica web", "mejora del servicio",
-                "cumplimiento de obligaciones legales", "cumplimiento legal",
-                "para poder ofrecerle", "para gestionar su"
-            ),
-            Collections.emptyList(),
             "Incumplimiento del Art. 13.1.c RGPD. Sin finalidad declarada, el tratamiento carece de transparencia y puede considerarse ilícito.",
             "Describir todas las finalidades de tratamiento de forma clara, concreta y diferenciada.",
             "RGPD Art. 13.1.c — Fines del tratamiento",
@@ -212,17 +166,6 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Base legal del tratamiento no indicada",
             "No se especifica la base jurídica que legitima el tratamiento de datos personales.",
             "ALTA", 8,
-            Arrays.asList(
-                "base legal", "base juridica", "legitimacion", "legitimacion del tratamiento",
-                "consentimiento del interesado", "ejecucion del contrato", "cumplimiento del contrato",
-                "obligacion legal", "obligaciones legales", "interes legitimo",
-                "interes vital", "interes publico", "mision de interes publico",
-                "art. 6", "articulo 6", "articulo 6 rgpd", "6.1", "6.1.a", "6.1.b", "6.1.c",
-                "amparo legal", "amparo juridico", "nos ampara",
-                "legitima el tratamiento", "que legitima", "que autoriza el tratamiento",
-                "en virtud de", "en base a", "con fundamento en"
-            ),
-            Collections.emptyList(),
             "Posible incumplimiento del deber de información del Art. 13.1.c RGPD: el interesado no puede saber qué base del Art. 6.1 RGPD legitima cada tratamiento. El texto por sí solo no permite valorar si el tratamiento es lícito.",
             "Identificar y declarar explícitamente la base legal aplicable a cada tratamiento.",
             "RGPD Art. 6 — Licitud del tratamiento / Art. 13.1.c",
@@ -236,21 +179,6 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Derechos del interesado (ARSULIPO) no informados",
             "No se informa al usuario sobre sus derechos de Acceso, Rectificación, Supresión, Limitación, Portabilidad y Oposición.",
             "ALTA", 8,
-            Arrays.asList(
-                "derecho de acceso", "derecho de rectificacion", "derecho de supresion",
-                "derecho al olvido", "derecho de oposicion", "derecho de portabilidad",
-                "derecho de limitacion", "derecho a la limitacion",
-                "arsulipo", "arco", "derechos arco",
-                "puede ejercer sus derechos", "puede ejercitar sus derechos",
-                "ejercicio de derechos", "sus derechos como interesado",
-                "derechos que le asisten", "derechos reconocidos",
-                "acceder a sus datos", "rectificar sus datos", "suprimir sus datos",
-                "cancelar sus datos", "oponerse al tratamiento",
-                "solicitar la portabilidad", "limitar el tratamiento",
-                "art. 15", "art. 16", "art. 17", "art. 18", "art. 20", "art. 21",
-                "articulo 15", "articulo 17", "articulo 21"
-            ),
-            Collections.emptyList(),
             "Incumplimiento de los Arts. 15-22 y 13.2.b RGPD. El usuario desconoce sus derechos fundamentales sobre sus propios datos.",
             "Incluir sección dedicada a los derechos ARSULIPO con descripción de cada derecho y procedimiento claro para ejercerlos.",
             "RGPD Arts. 15-22 — Derechos del interesado / Art. 13.2.b",
@@ -264,21 +192,6 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Plazo de conservación de datos no especificado",
             "No se indica durante cuánto tiempo se conservarán los datos ni los criterios para determinarlo.",
             "MEDIA", 5,
-            Arrays.asList(
-                "plazo de conservacion", "periodo de conservacion", "tiempo de conservacion",
-                "durante cuanto tiempo", "conservaremos sus datos", "conservacion de datos",
-                "suprimiremos", "bloqueados durante", "plazo legal", "plazo maximo",
-                "mientras dure la relacion", "durante la vigencia del contrato",
-                "una vez finalizada la relacion", "transcurrido el plazo",
-                "anos desde", "meses desde", "anos a partir",
-                "obligacion de conservacion", "plazos legales de conservacion",
-                "cinco anos", "cuatro anos", "seis anos", "diez anos",
-                "5 anos", "4 anos", "6 anos", "10 anos"
-            ),
-            Arrays.asList(
-                "indefinidamente", "indefinido", "sin plazo determinado",
-                "hasta que lo solicite", "de forma indefinida", "sin limite de tiempo"
-            ),
             "Incumplimiento del principio de limitación del plazo de conservación (Art. 5.1.e RGPD) y del deber de información (Art. 13.2.a RGPD).",
             "Especificar plazos concretos de conservación para cada finalidad o indicar los criterios legales que los determinan.",
             "RGPD Art. 5.1.e — Limitación del plazo de conservación / Art. 13.2.a",
@@ -292,20 +205,6 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Destinatarios o cesiones de datos no informadas",
             "No se informa sobre si los datos serán comunicados a terceros ni quiénes son esos destinatarios.",
             "MEDIA", 5,
-            Arrays.asList(
-                "destinatarios", "cesion de datos", "comunicacion de datos",
-                "terceros", "encargados de tratamiento", "encargados del tratamiento",
-                "proveedores", "no se cedera", "no cedemos", "no compartimos",
-                "compartiremos", "compartimos sus datos", "acceso de terceros",
-                "prestadores de servicios", "empresas colaboradoras",
-                "socios comerciales", "entidades del grupo",
-                "plataforma de pago", "pasarela de pago", "proveedor de hosting",
-                "no se realizan cesiones", "no se producen cesiones"
-            ),
-            Arrays.asList(
-                "cederemos sus datos a terceros sin su consentimiento",
-                "vendemos sus datos", "compartimos sus datos con anunciantes sin restriccion"
-            ),
             "Incumplimiento del Art. 13.1.e RGPD. El usuario tiene derecho a saber si sus datos llegarán a terceros.",
             "Listar los destinatarios o categorías de destinatarios. Si no se ceden datos, indicarlo expresamente.",
             "RGPD Art. 13.1.e — Destinatarios o categorías de destinatarios",
@@ -319,17 +218,6 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Transferencias internacionales de datos no declaradas",
             "No se informa si se realizan transferencias fuera del Espacio Económico Europeo (EEE) ni las garantías aplicables.",
             "MEDIA", 4,
-            Arrays.asList(
-                "transferencias internacionales", "transferencia internacional",
-                "fuera del eee", "fuera de la union europea", "fuera de europa",
-                "terceros paises", "paises terceros", "clausulas tipo",
-                "clausulas contractuales tipo", "decision de adecuacion",
-                "privacy shield", "marco de privacidad", "bcr", "normas corporativas vinculantes",
-                "estados unidos", "reino unido", "servidores fuera",
-                "no se realizan transferencias", "no se producen transferencias internacionales",
-                "todos los datos se almacenan en la ue", "servidores en la union europea"
-            ),
-            Collections.emptyList(),
             "Incumplimiento del Art. 13.1.f y Arts. 44-46 RGPD. Si existen transferencias sin garantías, el tratamiento puede ser ilícito.",
             "Indicar si se realizan transferencias internacionales, los países de destino y el mecanismo de garantía aplicable.",
             "RGPD Arts. 44-46 — Transferencias internacionales / Art. 13.1.f",
@@ -343,22 +231,6 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Política de cookies ausente o incompleta",
             "No se proporciona información completa sobre cookies: tipos, finalidades, duración y gestión del consentimiento con botones de aceptar/rechazar al mismo nivel (AEPD 2025).",
             "ALTA", 7,
-            Arrays.asList(
-                "cookies", "cookie", "politica de cookies", "uso de cookies",
-                "gestion de cookies", "configurar cookies", "aceptar cookies",
-                "rechazar cookies", "cookies tecnicas", "cookies analiticas",
-                "cookies publicitarias", "cookies de seguimiento", "cookies de terceros",
-                "cookies propias", "cookies de sesion", "cookies persistentes",
-                "panel de cookies", "configuracion de cookies", "preferencias de cookies",
-                "consentimiento de cookies", "centro de preferencias",
-                "puede rechazar", "puede desactivar", "puede configurar",
-                "exentas de consentimiento", "no requieren consentimiento"
-            ),
-            Arrays.asList(
-                "instalamos cookies sin su consentimiento",
-                "no puede rechazar las cookies",
-                "continuar navegando implica aceptar"
-            ),
             "Posible incumplimiento del Art. 22.2 LSSI-CE: el usuario debe recibir información clara y completa sobre las cookies y sus finalidades. La Guía sobre el uso de las cookies de la AEPD indica que rechazar debe ser tan sencillo como aceptar.",
             "Implementar política de cookies completa con listado, mecanismo de consentimiento previo y panel de preferencias con botón de rechazo igual de visible que el de aceptación.",
             "LSSI-CE Art. 22.2 — Cookies / Directiva ePrivacy / Guía AEPD 2025",
@@ -372,16 +244,6 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Derecho a reclamar ante la autoridad de control (AEPD) no informado",
             "No se informa al interesado sobre su derecho a presentar reclamación ante la Agencia Española de Protección de Datos.",
             "MEDIA", 4,
-            Arrays.asList(
-                "aepd", "agencia espanola de proteccion de datos",
-                "autoridad de control", "autoridad de supervision",
-                "presentar una reclamacion", "reclamar ante",
-                "www.aepd.es", "aepd.es",
-                "organismo supervisor", "autoridad supervisora",
-                "derecho a reclamar", "puede reclamar ante",
-                "supervisora competente", "autoridad competente en materia de proteccion"
-            ),
-            Collections.emptyList(),
             "Incumplimiento del Art. 13.2.d RGPD. El usuario tiene derecho a conocer que puede recurrir a la autoridad supervisora.",
             "Añadir información sobre el derecho a presentar reclamación ante la AEPD (www.aepd.es).",
             "RGPD Art. 13.2.d — Derecho a reclamar ante la autoridad de control",
@@ -395,24 +257,6 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Mecanismo de consentimiento no descrito adecuadamente",
             "No se describe cómo se obtiene el consentimiento ni cómo puede retirarse.",
             "ALTA", 6,
-            Arrays.asList(
-                "consentimiento", "consent", "otorga su consentimiento",
-                "acepta el tratamiento", "prestar su consentimiento",
-                "retirar su consentimiento", "retirar el consentimiento",
-                "revocar consentimiento", "retirada del consentimiento",
-                "libre", "inequivoco", "especifico", "informado",
-                "manifestacion de voluntad", "acto positivo",
-                "casilla de verificacion", "casilla sin marcar", "checkbox",
-                "puede retirar", "puede revocar", "sin efecto retroactivo",
-                "sin perjuicio de la licitud"
-            ),
-            Arrays.asList(
-                "su consentimiento se entendera prestado",
-                "el silencio implica consentimiento",
-                "casilla marcada por defecto",
-                "continuar navegando implica consentimiento",
-                "al usar este sitio acepta"
-            ),
             "Posible incumplimiento del deber de información sobre el consentimiento (Arts. 4.11 y 7 RGPD): debe ser libre, específico, informado e inequívoco, y poder retirarse en cualquier momento.",
             "Describir el mecanismo de consentimiento: qué acción lo constituye, para qué tratamientos se pide y cómo puede retirarse en cualquier momento.",
             "RGPD Art. 7 — Condiciones para el consentimiento / Art. 4.11",
@@ -424,24 +268,11 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
         REGLAS.add(new Regla(
             "R13",
             "Tratamiento de datos de menores no regulado",
-            "No se especifican medidas relativas al tratamiento de datos de menores de 14 años (LOPDGDD consolidada 2025).",
+            "No se indica si se tratan datos de menores ni, en su caso, la edad mínima y el consentimiento de quien ejerce la patria potestad o tutela.",
             "BAJA", 3,
-            Arrays.asList(
-                "menores", "menor de edad", "menores de edad", "14 anos", "catorce anos",
-                "menor de 14", "menores de 14", "16 anos", "dieciseis anos",
-                "patria potestad", "autorizacion parental", "consentimiento parental",
-                "tutores", "representantes legales", "edad minima", "mayores de edad",
-                "nuestro servicio no esta dirigido a menores",
-                "no recopilamos datos de menores", "verificacion de edad",
-                "art. 8 rgpd", "articulo 8", "art. 7 lopdgdd"
-            ),
-            Arrays.asList(
-                "no verificamos la edad", "cualquier persona puede registrarse",
-                "no existe restriccion de edad"
-            ),
-            "Posible incumplimiento del Art. 8 RGPD y Art. 7 LOPDGDD. En España, los menores de 14 años requieren consentimiento parental. La LOPDGDD consolidada (dic. 2025) confirma este umbral.",
-            "Indicar la edad mínima (14 años en España) y las medidas para verificar la edad o recabar el consentimiento de los representantes legales.",
-            "RGPD Art. 8 — Consentimiento de menores / LOPDGDD Art. 7 (consolidada dic. 2025)",
+            "Si el tratamiento de datos de un menor se basa en su consentimiento, el Art. 7 LOPDGDD solo admite el del propio menor a partir de los 14 años; por debajo se requiere el de quien ejerce la patria potestad o tutela (Art. 8 RGPD). El texto no permite saber si se tratan datos de menores.",
+            "Si el servicio puede tratar datos de menores, indicar la edad mínima (14 años en España para consentir por sí mismos) y cómo se recaba y comprueba el consentimiento de sus representantes legales; si no se dirige a menores, indicarlo.",
+            "RGPD Art. 8 — Consentimiento de menores / LOPDGDD Art. 7",
             "\"Nuestros servicios están dirigidos a mayores de 14 años. Si tiene menos de 14 años, necesita el consentimiento de sus padres o tutores para utilizar este servicio.\"",
             "Tratamiento de datos de menores de 14 años y consentimiento parental"
         ));
@@ -450,22 +281,10 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
         REGLAS.add(new Regla(
             "R14",
             "Tratamiento de categorías especiales de datos no regulado",
-            "No se especifican medidas adicionales si se tratan categorías especiales de datos (salud, ideología, origen étnico, etc.).",
+            "No se indica si se tratan categorías especiales de datos (salud, ideología, origen étnico, etc.) ni, en su caso, la excepción del Art. 9.2 RGPD que lo permite.",
             "BAJA", 3,
-            Arrays.asList(
-                "categorias especiales", "datos especialmente protegidos",
-                "datos de salud", "datos medicos", "datos clinicos", "historial medico",
-                "origen etnico", "raza", "ideologia politica", "opinion politica",
-                "creencias religiosas", "religion", "orientacion sexual", "vida sexual",
-                "datos biometricos", "huella dactilar", "reconocimiento facial",
-                "datos geneticos", "antecedentes penales", "infracciones penales",
-                "art. 9", "articulo 9", "articulo 9 rgpd",
-                "no tratamos datos sensibles", "no recopilamos datos de salud",
-                "no tratamos categorias especiales"
-            ),
-            Collections.emptyList(),
-            "Si se tratan categorías especiales sin las garantías del Art. 9 RGPD, el tratamiento es directamente ilícito. Sanciones del nivel más alto.",
-            "Si se tratan datos sensibles, indicar explícitamente la excepción del Art. 9.2 RGPD aplicable y las medidas de seguridad adicionales implementadas.",
+            "Las categorías especiales de datos solo pueden tratarse si se aplica alguna excepción del Art. 9.2 RGPD. El texto no permite saber si se tratan ni comprobar las garantías que declare.",
+            "Si se tratan categorías especiales, indicar cuáles, para qué y qué excepción del Art. 9.2 RGPD se aplica, además de las garantías adoptadas; si no se tratan, indicarlo.",
             "RGPD Art. 9 — Tratamiento de categorías especiales de datos",
             "\"Tratamos datos de salud únicamente con su consentimiento explícito (Art. 9.2.a RGPD), con medidas de seguridad reforzadas. / No tratamos categorías especiales de datos.\"",
             "Tratamiento de categorías especiales de datos y garantías adicionales"
@@ -477,22 +296,6 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Medidas de seguridad técnicas no mencionadas",
             "No se hace referencia a las medidas de seguridad técnicas y organizativas implementadas para proteger los datos.",
             "MEDIA", 4,
-            Arrays.asList(
-                "medidas de seguridad", "seguridad de los datos", "cifrado",
-                "encriptacion", "ssl", "tls", "https", "protocolo seguro",
-                "acceso restringido", "control de acceso", "pseudonimizacion",
-                "anonimizacion", "copia de seguridad", "backup",
-                "proteccion de datos desde el diseno", "privacy by design",
-                "medidas tecnicas y organizativas", "medidas tecnicas",
-                "art. 32", "articulo 32",
-                "seguridad informatica", "ciberseguridad",
-                "acceso autorizado", "personal autorizado", "confidencialidad"
-            ),
-            Arrays.asList(
-                "no podemos garantizar la seguridad",
-                "no somos responsables de brechas de seguridad",
-                "transmision de datos no es segura", "transmision no garantizada"
-            ),
             "El documento no concreta las medidas aplicadas. El Art. 32 RGPD exige aplicar medidas técnicas y organizativas apropiadas; su implantación real no puede verificarse con el texto.",
             "Mencionar las principales medidas de seguridad: cifrado en tránsito (HTTPS/TLS), control de accesos, copias de seguridad y procedimientos ante brechas.",
             "RGPD Art. 32 — Seguridad del tratamiento",
@@ -506,18 +309,6 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Aviso legal con información LSSI-CE ausente o incompleto",
             "No se incluye la información obligatoria del Art. 10 LSSI-CE: razón social, NIF, domicilio, datos de inscripción registral y datos de contacto.",
             "ALTA", 7,
-            Arrays.asList(
-                "aviso legal", "informacion legal", "nota legal",
-                "datos identificativos", "datos del titular", "datos de la empresa",
-                "razon social", "nombre comercial", "denominacion social",
-                "nif", "cif", "numero de identificacion fiscal",
-                "domicilio social", "sede social", "direccion de la empresa",
-                "registro mercantil", "inscrita en el registro", "tomo", "folio", "seccion",
-                "numero de registro", "datos registrales",
-                "en cumplimiento de la ley 34/2002", "en cumplimiento de la lssi",
-                "art. 10 lssi", "articulo 10 de la ley 34"
-            ),
-            Collections.emptyList(),
             "Incumplimiento del Art. 10 LSSI-CE. Obligatorio para toda web que preste servicios de la sociedad de la información. Infracción leve-grave: hasta 150.000€.",
             "Incluir sección de Aviso Legal con: razón social, NIF/CIF, domicilio social, datos de inscripción registral, email de contacto y número de teléfono.",
             "LSSI-CE Art. 10 — Información general obligatoria del prestador de servicios",
@@ -529,20 +320,9 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
         REGLAS.add(new Regla(
             "R17",
             "Información sobre decisiones automatizadas o perfilado ausente",
-            "No se informa si el responsable realiza decisiones automatizadas o perfilado con efectos significativos sobre el interesado.",
+            "No se informa de si existen decisiones basadas únicamente en un tratamiento automatizado, incluida la elaboración de perfiles, con efectos jurídicos o significativos para el interesado.",
             "MEDIA", 4,
-            Arrays.asList(
-                "decisiones automatizadas", "decision automatizada", "toma de decisiones automatizada",
-                "perfilado", "elaboracion de perfiles", "creacion de perfiles",
-                "algoritmo", "sistema automatizado", "inteligencia artificial",
-                "tratamiento automatizado", "logica aplicada",
-                "no realizamos decisiones automatizadas", "no aplicamos perfilado",
-                "no utilizamos algoritmos para tomar decisiones",
-                "art. 22", "articulo 22", "articulo 22 rgpd",
-                "decision significativa", "efectos juridicos", "efecto significativo"
-            ),
-            Collections.emptyList(),
-            "Incumplimiento del Art. 13.2.f y Art. 22 RGPD. El interesado tiene derecho a no ser objeto de decisiones basadas únicamente en tratamiento automatizado que produzcan efectos significativos.",
+            "Si existen decisiones del Art. 22 RGPD, el Art. 13.2.f RGPD exige informar de su existencia, de la lógica aplicada y de sus consecuencias previstas. El texto no permite saber si existen.",
             "Indicar si se aplican decisiones automatizadas o perfilado. Si no aplica, declararlo expresamente. Si aplica, informar de la lógica aplicada y sus consecuencias.",
             "RGPD Art. 22 — Decisiones automatizadas y perfilado / Art. 13.2.f",
             "\"No adoptamos decisiones basadas únicamente en tratamiento automatizado que produzcan efectos jurídicos o significativos sobre usted. / Utilizamos perfilado para [finalidad]. Tiene derecho a obtener intervención humana y expresar su punto de vista.\"",
@@ -553,50 +333,24 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
         REGLAS.add(new Regla(
             "R18",
             "Procedimiento ante brechas de seguridad no mencionado",
-            "No se hace referencia al procedimiento de notificación de brechas de seguridad a la AEPD y a los interesados afectados.",
+            "No se informa de cómo se notifican las brechas de seguridad de los datos personales a la autoridad de control y a las personas afectadas.",
             "MEDIA", 3,
-            Arrays.asList(
-                "brecha de seguridad", "violacion de seguridad", "incidente de seguridad",
-                "notificacion de brecha", "comunicacion de brecha",
-                "notificaremos a la aepd", "comunicaremos el incidente",
-                "en caso de brecha", "ante un incidente",
-                "art. 33", "art. 34", "articulo 33", "articulo 34",
-                "plazo de 72 horas", "72 horas", "notificacion en 72",
-                "protocolo de seguridad", "plan de respuesta", "gestion de incidentes",
-                "comunicar brechas"
-            ),
-            Collections.emptyList(),
-            "Incumplimiento de los Arts. 33-34 RGPD. El responsable debe notificar brechas de seguridad a la AEPD en 72 horas y a los afectados si suponen alto riesgo.",
-            "Mencionar la existencia de un procedimiento de detección y notificación de brechas de seguridad conforme a los Arts. 33-34 RGPD.",
+            "Publicar el procedimiento interno no es una obligación de información. Si se produce una brecha, los Arts. 33 y 34 RGPD obligan a notificarla a la autoridad de control y, cuando suponga un alto riesgo, a comunicarla a los afectados; el texto no permite comprobarlo.",
+            "Si se quiere informar de ello, indicar que las brechas se notifican a la AEPD en 72 horas y a los afectados cuando supongan un alto riesgo (Arts. 33 y 34 RGPD).",
             "RGPD Arts. 33-34 — Notificación de brechas de seguridad",
             "\"Disponemos de procedimientos para detectar, analizar y notificar posibles brechas de seguridad a la AEPD en el plazo de 72 horas y a los interesados afectados cuando exista alto riesgo (Art. 34 RGPD).\"",
             "Procedimiento de notificación de brechas de seguridad (Arts. 33-34 RGPD)"
         ));
 
         // R19 — Exclusión publicitaria / comunicaciones comerciales (MEDIA, peso 3) — NUEVA
-        // Basada en LOPDGDD Art. 23 consolidado 2025 y Ley 10/2025
         REGLAS.add(new Regla(
             "R19",
             "Información sobre comunicaciones comerciales y derecho de exclusión publicitaria ausente",
-            "No se informa sobre el envío de comunicaciones comerciales ni sobre el derecho a oponerse o darse de baja.",
+            "No se informa de si se envían comunicaciones comerciales ni, en su caso, de en qué se basan y cómo darse de baja.",
             "MEDIA", 3,
-            Arrays.asList(
-                "comunicaciones comerciales", "comunicacion comercial",
-                "publicidad", "email marketing", "boletin", "newsletter",
-                "informacion comercial", "oferta comercial", "promociones",
-                "darse de baja", "cancelar la suscripcion", "dejar de recibir",
-                "derecho de exclusion publicitaria", "lista robinson", "lista de exclusion",
-                "no desea recibir", "puede darse de baja", "puede oponerse",
-                "baja en la lista", "desubscribirse", "unsubscribe",
-                "art. 21 lssi", "articulo 21 lssi", "art. 23 lopdgdd"
-            ),
-            Arrays.asList(
-                "enviaremos publicidad sin su consentimiento",
-                "no puede darse de baja de nuestras comunicaciones"
-            ),
-            "Incumplimiento del Art. 21 LSSI-CE y Art. 23 LOPDGDD (consolidada 2025). Las comunicaciones comerciales requieren consentimiento previo y el usuario debe poder oponerse fácilmente.",
-            "Informar sobre el envío de comunicaciones comerciales, la base legal que lo ampara y el mecanismo sencillo para oponerse o darse de baja.",
-            "LSSI-CE Art. 21 — Comunicaciones comerciales / LOPDGDD Art. 23 (consolidada 2025)",
+            "Si se envían comunicaciones comerciales por medios electrónicos, el Art. 21 LSSI-CE exige consentimiento previo, salvo relación contractual previa y productos o servicios similares, y una forma sencilla y gratuita de oponerse (Art. 22 LSSI-CE y Art. 21 RGPD). El texto no permite saber si se envían.",
+            "Informar sobre el envío de comunicaciones comerciales, la base que lo ampara y el mecanismo sencillo para oponerse o darse de baja.",
+            "LSSI-CE Arts. 21 y 22 — Comunicaciones comerciales / RGPD Art. 21 / LOPDGDD Art. 23",
             "\"Podemos enviarte comunicaciones comerciales si has dado tu consentimiento. Puedes darte de baja en cualquier momento haciendo clic en el enlace 'Cancelar suscripción' de cualquier email o escribiendo a [email].\"",
             "Información sobre comunicaciones comerciales y derecho de oposición/baja"
         ));
@@ -684,114 +438,59 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
         List<ControlPuntuado> controles = new ArrayList<>();
         for (Regla regla : REGLAS) {
             int antes = puntuacion;
-            if (ReglasContextuales.IDS.contains(regla.id)) {
-                var e = ReglasContextuales.evaluar(regla.id, clausulas, entrada.tipoDocumento());
-                evaluaciones.add(new EvaluacionRegla(regla.id, e.estado(), e.evidencia(), e.detalle()));
-                String severidad = null;
-                switch (e.estado()) {
-                    case SUFICIENTE -> puntuacion += regla.peso;
-                    case INSUFICIENTE -> {
-                        var textos = ReglasContextuales.TEXTOS.get(regla.id);
-                        severidad = rebajar(regla.severidad);
-                        errores.add(errorContextual(regla.id, textos.tituloInsuficiente(),
-                                textos.descripcionInsuficiente() + " " + e.detalle(), severidad, e.evidencia(),
-                                regla.impacto, regla.accion, e.estado()));
-                        riesgos.add(textos.tituloInsuficiente());
-                        anotarCarencia(regla, recomendaciones, textosSugeridos, faltantes, referenciasLegales);
-                        puntuacion += regla.peso / 2;
-                    }
-                    case POSIBLE_INCIDENCIA -> {
-                        if (e.problematica()) {
-                            severidad = "ALTA";
-                            errores.add(errorContextual(regla.id, PREFIJO_RIESGO + regla.titulo,
-                                    "La cláusula contiene una redacción que puede ser contraria a la normativa. " + e.detalle(),
-                                    severidad, e.evidencia(),
-                                    "Esta redacción puede ser considerada ilegal o abusiva según la normativa vigente.",
-                                    "Revisar y reformular la cláusula citada como evidencia.", e.estado()));
-                            riesgos.add("Redacción problemática en: " + regla.titulo);
-                            if (e.suficiente()) puntuacion += regla.peso / 2;
-                        } else {
-                            severidad = regla.severidad;
-                            errores.add(errorContextual(regla.id, regla.titulo, regla.descripcion + " " + e.detalle(),
-                                    severidad, "No se ha encontrado en el texto analizado ninguna cláusula sobre: "
-                                            + regla.campoFaltante + ".", regla.impacto, regla.accion, e.estado()));
-                            riesgos.add(regla.titulo);
-                        }
-                        if (!e.suficiente()) {
-                            anotarCarencia(regla, recomendaciones, textosSugeridos, faltantes, referenciasLegales);
-                        }
-                    }
-                    case NO_VERIFICABLE -> {
-                        // Not a finding: the text cannot tell whether the information is required.
-                        faltantes.add(regla.campoFaltante + ": " + e.detalle());
-                        recomendaciones.add(regla.accion);
-                        textosSugeridos.add(regla.textoCumplimiento);
-                    }
-                    case NO_APLICABLE -> { /* Not demanded from this type of document. */ }
+            var e = ReglasContextuales.evaluar(regla.id, clausulas, entrada.tipoDocumento());
+            evaluaciones.add(new EvaluacionRegla(regla.id, e.estado(), e.evidencia(), e.detalle()));
+            String severidad = null;
+            switch (e.estado()) {
+                case SUFICIENTE -> puntuacion += regla.peso;
+                case INSUFICIENTE -> {
+                    var textos = ReglasContextuales.TEXTOS.get(regla.id);
+                    severidad = rebajar(regla.severidad);
+                    errores.add(errorContextual(regla.id, textos.tituloInsuficiente(),
+                            textos.descripcionInsuficiente() + " " + e.detalle(), severidad, e.evidencia(),
+                            regla.impacto, regla.accion, e.estado()));
+                    riesgos.add(textos.tituloInsuficiente());
+                    anotarCarencia(regla, recomendaciones, textosSugeridos, faltantes, referenciasLegales);
+                    puntuacion += regla.peso / 2;
                 }
-                if (severidad != null) {
-                    switch (severidad) {
-                        case "ALTA" -> incumplimientosAlta++;
-                        case "MEDIA" -> incumplimientosMedia++;
-                        default -> incumplimientosBaja++;
-                    }
-                }
-                controles.add(new ControlPuntuado(regla.id, regla.peso, puntuacion - antes,
-                        ResultadoAuditoria.MetodoControl.CONTEXTUAL, e.estado()));
-                continue;
-            }
-            boolean cumple = contienePalabraClave(textoNorm, regla.palabrasClave);
-
-            if (!cumple) {
-                // No cumple → no suma puntos, genera incidencia
-                ErrorAuditoria error = nuevoError(regla.id);
-                error.setTitulo(regla.titulo);
-                error.setDescripcion(regla.descripcion);
-                error.setSeveridad(regla.severidad);
-                error.setEvidencia("Cláusula no detectada en el documento analizado.");
-                error.setImpacto(regla.impacto);
-                error.setAccion(regla.accion);
-                errores.add(error);
-
-                riesgos.add(regla.titulo);
-                recomendaciones.add(regla.accion);
-                textosSugeridos.add(regla.textoCumplimiento);
-                faltantes.add(regla.campoFaltante);
-
-                if (!referenciasLegales.contains(regla.referenciaLegal)) {
-                    referenciasLegales.add(regla.referenciaLegal);
-                }
-
-                switch (regla.severidad) {
-                    case "ALTA":  incumplimientosAlta++;  break;
-                    case "MEDIA": incumplimientosMedia++; break;
-                    default:      incumplimientosBaja++;  break;
-                }
-
-            } else {
-                // Cumple → comprobar si tiene lenguaje de riesgo dentro
-                boolean tieneRiesgo = false;
-                for (String patron : regla.patronesRiesgo) {
-                    if (textoNorm.contains(normalizar(patron))) {
-                        tieneRiesgo = true;
-                        ErrorAuditoria error = nuevoError(regla.id);
-                        error.setTitulo(PREFIJO_RIESGO + regla.titulo);
-                        error.setDescripcion("La cláusula existe pero contiene lenguaje que puede ser ilegal o abusivo: \"" + patron + "\"");
-                        error.setSeveridad("ALTA");
-                        error.setEvidencia("Patrón problemático detectado: \"" + patron + "\"");
-                        error.setImpacto("Esta redacción puede ser considerada ilegal o abusiva según la normativa vigente.");
-                        error.setAccion("Revisar y reformular el texto que contiene \"" + patron + "\"");
-                        errores.add(error);
+                case POSIBLE_INCIDENCIA -> {
+                    if (e.problematica()) {
+                        severidad = "ALTA";
+                        errores.add(errorContextual(regla.id, PREFIJO_RIESGO + regla.titulo,
+                                "La cláusula contiene una redacción que puede ser contraria a la normativa. " + e.detalle(),
+                                severidad, e.evidencia(),
+                                "Esta redacción puede ser considerada ilegal o abusiva según la normativa vigente.",
+                                "Revisar y reformular la cláusula citada como evidencia.", e.estado()));
                         riesgos.add("Redacción problemática en: " + regla.titulo);
-                        incumplimientosAlta++;
-                        break;
+                        if (e.suficiente()) puntuacion += regla.peso / 2;
+                    } else {
+                        severidad = regla.severidad;
+                        errores.add(errorContextual(regla.id, regla.titulo, regla.descripcion + " " + e.detalle(),
+                                severidad, "No se ha encontrado en el texto analizado ninguna cláusula sobre: "
+                                        + regla.campoFaltante + ".", regla.impacto, regla.accion, e.estado()));
+                        riesgos.add(regla.titulo);
+                    }
+                    if (!e.suficiente()) {
+                        anotarCarencia(regla, recomendaciones, textosSugeridos, faltantes, referenciasLegales);
                     }
                 }
-                // Cumplimiento completo → peso completo; con riesgo → mitad del peso
-                puntuacion += tieneRiesgo ? (regla.peso / 2) : regla.peso;
+                case NO_VERIFICABLE -> {
+                    // Not a finding: the text cannot tell whether the information is required.
+                    faltantes.add(regla.campoFaltante + ": " + e.detalle());
+                    recomendaciones.add(regla.accion);
+                    textosSugeridos.add(regla.textoCumplimiento);
+                }
+                case NO_APLICABLE -> { /* Not demanded from this type of document. */ }
+            }
+            if (severidad != null) {
+                switch (severidad) {
+                    case "ALTA" -> incumplimientosAlta++;
+                    case "MEDIA" -> incumplimientosMedia++;
+                    default -> incumplimientosBaja++;
+                }
             }
             controles.add(new ControlPuntuado(regla.id, regla.peso, puntuacion - antes,
-                    ResultadoAuditoria.MetodoControl.PALABRAS_CLAVE, null));
+                    ResultadoAuditoria.MetodoControl.CONTEXTUAL, e.estado()));
         }
         int puntosAcreditados = puntuacion;
 
@@ -921,7 +620,8 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
                 puntosContextuales += c.puntos();
             }
         }
-        // Only contextual controls know whether they apply: the keyword ones cannot enter a denominator.
+        // Only contextual controls know whether they apply. Since rules 5 every control is contextual, so the keyword
+        // weight is 0; the share stays an evidence measure, never a compliance percentage.
         Integer porcentaje = contextual > 0 ? Math.round(100f * puntosContextuales / contextual) : null;
         String motivo = contextual > 0 ? null
                 : "Ningún control evaluado por contexto es aplicable y verificable en este documento.";
@@ -944,10 +644,10 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
         Map<EstadoEvidencia, Long> cuenta = evaluaciones.stream()
                 .collect(Collectors.groupingBy(EvaluacionRegla::estado, () -> new EnumMap<>(EstadoEvidencia.class),
                         Collectors.counting()));
-        return String.format(" Información evaluada por contexto (R01, R02, R03, R04, R05, R06, R07, R08, R09, R10, R11, R12, "
-                        + "R15 y R16): "
+        return String.format(" Información evaluada por contexto (R01 a R19): "
                         + "%d con evidencia suficiente, %d con evidencia insuficiente, %d con posible incidencia, "
-                        + "%d no verificables con el texto y %d no aplicables a este tipo de documento.",
+                        + "%d no verificables con el texto y %d no aplicables a este tipo de documento. "
+                        + "La evaluación es automática y puede equivocarse aunque todos los controles se lean por contexto.",
                 cuenta.getOrDefault(EstadoEvidencia.SUFICIENTE, 0L), cuenta.getOrDefault(EstadoEvidencia.INSUFICIENTE, 0L),
                 cuenta.getOrDefault(EstadoEvidencia.POSIBLE_INCIDENCIA, 0L),
                 cuenta.getOrDefault(EstadoEvidencia.NO_VERIFICABLE, 0L), cuenta.getOrDefault(EstadoEvidencia.NO_APLICABLE, 0L));
@@ -978,18 +678,6 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
                 .replaceAll("[^a-z0-9\\s.,:;@/\\-]", " ")
                 .replaceAll("\\s+", " ")
                 .trim();
-    }
-
-    /**
-     * Comprueba si el texto contiene al menos una de las palabras clave.
-     */
-    private boolean contienePalabraClave(String textoNorm, List<String> palabrasClave) {
-        for (String clave : palabrasClave) {
-            if (textoNorm.contains(normalizar(clave))) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**

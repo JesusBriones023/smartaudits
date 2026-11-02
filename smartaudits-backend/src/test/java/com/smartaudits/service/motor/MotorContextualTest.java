@@ -263,12 +263,13 @@ class MotorContextualTest {
     void privacyInformationIsNotDemandedFromOtherDocumentTypesAndDoesNotInflateTheScore() {
         String aviso = "Titular: Ejemplo S.L., con NIF B12345678 y domicilio en Madrid.";
         var r = analizar(aviso, "Aviso Legal");
-        // Rules v4: only R16 (the provider's own data) is asked of a legal notice.
+        // Rules v4: only R16 (the provider's own data) is asked of a legal notice; rules v5 add R13, R14, R17, R18
+        // and R19 to the not applicable ones.
         assertThat(r.getEvaluaciones()).filteredOn(e -> !e.ruleId().equals("R16"))
                 .extracting(EvaluacionRegla::estado).containsOnly(NO_APLICABLE);
         assertThat(r.getErrores()).extracting(ErrorAuditoria::getRuleId).doesNotContain("R01", "R03", "R04", "R05", "R06",
                 "R07", "R08", "R09", "R11");
-        assertThat(r.getResumen()).contains("13 no aplicables a este tipo de documento");
+        assertThat(r.getResumen()).contains("18 no aplicables a este tipo de documento");
         // Not applicable earns nothing, exactly like the missing clause: no silent change of the score.
         assertThat(r.getDesglosePuntuacion().controles()).filteredOn(c -> c.estado() == NO_APLICABLE)
                 .allSatisfy(c -> assertThat(c.puntos()).isZero());
@@ -321,7 +322,7 @@ class MotorContextualTest {
         String json = mapper.writeValueAsString(nuevo);
         assertThat(json).contains("\"evaluaciones\"", "\"estado\":\"INSUFICIENTE\"");
         assertThat(mapper.readValue(json, ResultadoAuditoria.class)).isEqualTo(nuevo);
-        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "4"));
-        assertThat(nuevo.getErrores()).allSatisfy(e -> assertThat(e.getVersion()).isEqualTo("4"));
+        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "5"));
+        assertThat(nuevo.getErrores()).allSatisfy(e -> assertThat(e.getVersion()).isEqualTo("5"));
     }
 }

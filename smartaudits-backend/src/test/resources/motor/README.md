@@ -49,10 +49,11 @@ de derechos registran limitaciones actuales, no resultados jurídicamente correc
 
 ## Versiones posteriores
 
-`current-engine-v2.json`, `-v3.json` y `-v4.json` repiten los textos de v1 con las
-expectativas de cada versión de reglas; no se regeneran y cada salto tiene su test
-de diferencias escrito a mano (`ReglasV2DeltaTest`, `ReglasV3DeltaTest`,
-`ReglasV4DeltaTest`). `MotorAnalisisLegalRegressionTest` fija el motor a la última.
+`current-engine-v2.json`, `-v3.json`, `-v4.json` y `-v5.json` repiten los textos de v1
+con las expectativas de cada versión de reglas; no se regeneran y cada salto tiene su
+test de diferencias escrito a mano (`ReglasV2DeltaTest`, `ReglasV3DeltaTest`,
+`ReglasV4DeltaTest`, `ReglasV5DeltaTest`). `MotorAnalisisLegalRegressionTest` fija el
+motor a la última.
 
 - v2: R03, R05, R06, R07, R08, G01 y G02 por contexto, con estados de evidencia.
 - v3: además R02, R10, R12, R15 y G03.
@@ -61,6 +62,14 @@ de diferencias escrito a mano (`ReglasV2DeltaTest`, `ReglasV3DeltaTest`,
   M01, M08, M13 y M14 bajan 4 puntos: «NIF de prueba» no es un NIF, así que su aviso
   legal es INSUFICIENTE. La ausencia de transferencias o de datos del aviso legal en
   un documento completo pasa a ser NO_VERIFICABLE, sin incidencia.
+- v5: además R13, R14, R17, R18 y R19 (los 100 puntos por contexto). Añade M21–M27
+  (falsos positivos, declaraciones suficientes, redacciones problemáticas, menciones,
+  negaciones, un documento no aplicable y HTML hostil), cuya nota empieza por el score
+  observado con reglas v4. M01, M08, M13 y M14 bajan 4 puntos: las categorías especiales
+  sin excepción del Art. 9.2 RGPD y las decisiones automatizadas sin lógica ni
+  consecuencias son INSUFICIENTE; M08 pasa de 88 a 84 (RIESGO MODERADO). Sin mención de
+  esos cinco temas no se presume que existan: NO_VERIFICABLE, o NO_APLICABLE en un aviso
+  legal.
 
 `risk-boundaries.json` fija la clasificación en cada umbral; sus textos se reescriben
 para que el motor vigente alcance exactamente esos scores, que no cambian.

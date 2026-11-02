@@ -15,14 +15,15 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Context-aware evaluation of rules R01, R02, R03, R04, R05, R06, R07, R08, R09, R10, R11, R12, R15 and
- * R16 and of the global risks G01, G02 and G03, part of {@link MotorAnalisisLegal}. It reads the clean text as clauses
- * (sentences, paragraphs and list items) and matches whole words with their negation, so that:
+ * Context-aware evaluation of rules R01 to R19 and of the global risks G01, G02 and G03, part of
+ * {@link MotorAnalisisLegal}. It reads the clean text as clauses (sentences, paragraphs and list items) and matches
+ * whole words with their negation, so that:
  *
  * - a single keyword is never enough: mentioning an obligation is told apart from giving its content;
  * - "no cedemos sus datos" or "no los conservamos indefinidamente" are not read as the opposite;
  * - information that the text alone cannot settle is reported as such, not as a breach;
- * - Art. 13 RGPD information is not demanded from documents whose subject is something else.
+ * - Art. 13 RGPD information is not demanded from documents whose subject is something else;
+ * - a practice (minors' data, special categories, profiling, breaches, marketing) is never assumed to happen.
  *
  * Every evidence is a clause of the analysed text, with its whitespace collapsed.
  */
@@ -31,7 +32,7 @@ final class ReglasContextuales {
     private ReglasContextuales() {}
 
     static final Set<String> IDS = Set.of("R01", "R02", "R03", "R04", "R05", "R06", "R07", "R08", "R09", "R10", "R11",
-            "R12", "R15", "R16");
+            "R12", "R13", "R14", "R15", "R16", "R17", "R18", "R19");
     static final int MAX_EVIDENCIA = 300;
 
     private static final char LF = 10;
@@ -85,7 +86,22 @@ final class ReglasContextuales {
             Map.entry("R07", new Textos("Conservación de los datos mencionada sin plazo ni criterio",
                     "Se alude a la conservación de los datos sin un plazo concreto ni los criterios para determinarlo (Art. 13.2.a RGPD).")),
             Map.entry("R08", new Textos("Destinatarios de los datos mencionados sin identificarlos",
-                    "Se indica que los datos pueden comunicarse a terceros sin identificar a los destinatarios ni sus categorías (Art. 13.1.e RGPD).")));
+                    "Se indica que los datos pueden comunicarse a terceros sin identificar a los destinatarios ni sus categorías (Art. 13.1.e RGPD).")),
+            Map.entry("R13", new Textos("Tratamiento de datos de menores descrito sin edad mínima ni consentimiento parental",
+                    "Se describe el tratamiento de datos de menores sin indicar la edad mínima ni cómo se recaba el "
+                            + "consentimiento de quien ejerce la patria potestad o tutela (Art. 8 RGPD y Art. 7 LOPDGDD).")),
+            Map.entry("R14", new Textos("Categorías especiales de datos mencionadas sin la excepción que permite tratarlas",
+                    "Se menciona el tratamiento de categorías especiales de datos sin indicar cuál de las excepciones del "
+                            + "Art. 9.2 RGPD lo permite.")),
+            Map.entry("R17", new Textos("Decisiones automatizadas o perfilado informados de forma incompleta",
+                    "Se alude a decisiones automatizadas o a la elaboración de perfiles sin información suficiente sobre la "
+                            + "lógica aplicada, sus consecuencias o las garantías del interesado (Arts. 13.2.f y 22 RGPD).")),
+            Map.entry("R18", new Textos("Brechas de seguridad mencionadas sin indicar su notificación",
+                    "Se alude a brechas o incidentes de seguridad sin indicar si se notifican a la autoridad de control o a "
+                            + "las personas afectadas (Arts. 33 y 34 RGPD).")),
+            Map.entry("R19", new Textos("Comunicaciones comerciales informadas de forma incompleta",
+                    "Se informa del envío de comunicaciones comerciales sin indicar en qué se basa (consentimiento previo o "
+                            + "relación contractual previa) o cómo darse de baja (Arts. 21 y 22 LSSI-CE).")));
 
     // ---------------------------------------------------------------------------------------
     // Clauses and matching
@@ -179,7 +195,11 @@ final class ReglasContextuales {
     }
 
     private static boolean negada(List<String> tokens, int posicion) {
-        for (int k = posicion - 1; k >= 0 && k >= posicion - ALCANCE_NEGACION; k--) {
+        return negada(tokens, posicion, ALCANCE_NEGACION);
+    }
+
+    private static boolean negada(List<String> tokens, int posicion, int alcance) {
+        for (int k = posicion - 1; k >= 0 && k >= posicion - alcance; k--) {
             if (CORTES.contains(tokens.get(k))) return false;
             if (NEGADORES.contains(tokens.get(k))) return true;
         }
@@ -274,6 +294,11 @@ final class ReglasContextuales {
             case "R10" -> cookies(clausulas, tipo);
             case "R12" -> consentimiento(clausulas, tipo);
             case "R15" -> seguridad(clausulas, tipo);
+            case "R13" -> menores(clausulas, tipo);
+            case "R14" -> categoriasEspeciales(clausulas, tipo);
+            case "R17" -> decisionesAutomatizadas(clausulas, tipo);
+            case "R18" -> brechas(clausulas, tipo);
+            case "R19" -> comunicacionesComerciales(clausulas, tipo);
             default -> throw new IllegalArgumentException("Regla sin evaluación contextual: " + ruleId);
         };
     }
@@ -1299,5 +1324,649 @@ final class ReglasContextuales {
                 ? "Aparecen datos del titular, pero el documento no se presenta como aviso legal. " : "")
                 + "El texto no permite saber si el titular presta servicios de la sociedad de la información (Art. 10 "
                 + "LSSI-CE) ni si esa información figura en otra página.");
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Shared by R13, R14, R17, R18 and R19: a practice is never presumed, and what the text discloses
+    // prevails over a general denial elsewhere, which is still reported
+    // ---------------------------------------------------------------------------------------
+
+    /** Further than ALCANCE_NEGACION: «No recogemos datos de menores de 14 años sin el consentimiento de sus padres». */
+    private static final int ALCANCE_NEGACION_LARGO = 10;
+    private static final List<List<String>> TRATA = frases("tratamos", "trataremos", "tratar", "tratara", "trataran",
+            "tratan", "tratados", "tratadas", "tratamiento", "recogemos", "recogeremos", "recoger", "recogidos", "recogidas",
+            "recabamos", "recabaremos", "recabar", "recabados", "recopilamos", "recopilaremos", "recopilar", "solicitamos",
+            "solicitaremos", "solicitar", "pedimos", "pediremos", "almacenamos", "conservamos", "utilizamos", "utilizaremos",
+            "usamos", "usaremos", "registramos", "procesamos", "procesar", "facilite", "facilitar", "facilitarnos",
+            "proporcione", "proporcionar", "proporcionarnos", "permitimos", "aceptamos", "admitimos");
+    /** «Tratamos de mejorar» (we try) and «tratamos a todos por igual» (we treat) are not processing. */
+    private static final Set<String> TRATAR_VERBO = Set.of("tratamos", "trataremos", "tratar", "tratara", "trataran", "tratan");
+
+    private static boolean algunaAfirmadaLejos(Clausula c, List<List<String>> frases) {
+        return frases.stream().anyMatch(f -> posiciones(c, f).stream()
+                .anyMatch(p -> !negada(c.tokens(), p, ALCANCE_NEGACION_LARGO)));
+    }
+
+    /** Positions of a verb of processing personal data. */
+    private static List<Integer> tratamientos(Clausula c) {
+        List<Integer> resultado = new ArrayList<>();
+        List<String> t = c.tokens();
+        for (List<String> f : TRATA) {
+            for (int p : posiciones(c, f)) {
+                int siguiente = p + f.size();
+                boolean otroSentido = TRATAR_VERBO.contains(f.get(0)) && siguiente < t.size()
+                        && (t.get(siguiente).equals("de") || t.get(siguiente).equals("a"));
+                if (!otroSentido) resultado.add(p);
+            }
+        }
+        return resultado;
+    }
+
+    private static boolean trataAfirmado(Clausula c) {
+        return tratamientos(c).stream().anyMatch(p -> !negada(c.tokens(), p, ALCANCE_NEGACION_LARGO));
+    }
+
+    private static boolean trataNegado(Clausula c) {
+        return tratamientos(c).stream().anyMatch(p -> negada(c.tokens(), p, ALCANCE_NEGACION_LARGO));
+    }
+
+    /** The phrases affirmed in the clause, in catalogue order. */
+    private static List<String> afirmadas(Clausula c, List<List<String>> frases) {
+        return frases.stream().filter(f -> posiciones(c, f).stream().anyMatch(p -> !negada(c.tokens(), p)))
+                .map(f -> String.join(" ", f)).toList();
+    }
+
+    private static String contradiccion(Clausula negacion) {
+        return negacion == null ? "" : " El documento también declara lo contrario: " + cita(negacion) + ".";
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // R13 — Datos de menores (Art. 8 RGPD, Art. 7 LOPDGDD): a mention of children is no processing of their data
+    // ---------------------------------------------------------------------------------------
+
+    /** A minor's own consent is valid in Spain from this age (Art. 7.1 LOPDGDD). */
+    private static final int EDAD_CONSENTIMIENTO = 14;
+    /** Whole phrases: «cambios menores» or «el menor tiempo posible» are not about minors. */
+    private static final List<List<String>> MENORES = frases("menor de edad", "menores de edad", "los menores",
+            "las menores", "del menor", "de menores", "a menores", "para menores", "ninos", "ninas", "nino", "nina",
+            "sus hijos", "tus hijos", "hijos menores", "adolescentes");
+    private static final Map<String, Integer> EDADES_EN_LETRA = Map.of("diez", 10, "once", 11, "doce", 12, "trece", 13,
+            "catorce", 14, "quince", 15, "dieciseis", 16, "diecisiete", 17, "dieciocho", 18);
+    private static final Set<String> MENOR_O_MAYOR = Set.of("menor", "menores", "mayor", "mayores");
+    private static final Set<String> LIMITE_DE = Set.of("partir", "edad", "minima", "minimo");
+    private static final Set<String> TENER = Set.of("tener", "tenga", "tengan", "tengas", "tiene", "tienen", "tienes",
+            "cumplido", "cumplidos");
+    /** What turns a mention of minors into processing of their data: data, consent, registration or an account. */
+    private static final List<List<String>> DATOS_MENORES = frases("datos", "informacion personal", "consentimiento",
+            "consentir", "consienta", "consientan", "registrarse", "registrarte", "registro", "registren", "registre",
+            "cuenta", "formulario", "inscripcion", "inscribir", "suscribirse");
+    private static final List<List<String>> USO_SERVICIO = frases("usar", "utilizar", "uso", "acceder", "servicio",
+            "servicios", "sitio", "web", "plataforma", "aplicacion");
+    private static final List<List<String>> DIRIGIDO = frases("dirigido", "dirigida", "dirigidos", "dirigidas", "destinado",
+            "destinada", "destinados", "destinadas", "se dirige", "se dirigen");
+    private static final List<List<String>> PARENTAL = frases("consentimiento parental", "autorizacion parental",
+            "consentimiento de sus padres", "consentimiento de los padres", "consentimiento de tus padres",
+            "autorizacion de sus padres", "autorizacion de los padres", "autorizacion de tus padres", "padres o tutores",
+            "padre madre o tutor", "titulares de la patria potestad", "patria potestad", "tutores legales", "tutor legal");
+    /** Parental only in a clause about minors: «los representantes legales de la empresa» are not. */
+    private static final List<List<String>> PARENTAL_CON_MENOR = frases("representantes legales", "representante legal",
+            "tutores", "tutor", "sus padres", "tus padres", "los padres");
+    private static final List<List<String>> SIN_PARENTAL = frases("sin el consentimiento de sus padres",
+            "sin consentimiento de sus padres", "sin el consentimiento de los padres", "sin consentimiento de los padres",
+            "sin consentimiento parental", "sin autorizacion parental", "sin la autorizacion de sus padres",
+            "sin autorizacion de sus padres", "sin el consentimiento de sus representantes", "sin consentimiento de sus tutores");
+    /** They carry their own negation and are matched as written. */
+    private static final List<List<String>> EDAD_NO_VERIFICADA = frases("no verificamos la edad", "no comprobamos la edad",
+            "no verificamos su edad", "no comprobamos su edad", "no se verifica la edad", "no se comprueba la edad",
+            "sin verificar la edad", "sin comprobar la edad");
+    private static final List<List<String>> SIN_LIMITE_EDAD = frases("sin restriccion de edad", "sin restricciones de edad",
+            "no existe restriccion de edad", "no hay restriccion de edad", "sin limite de edad", "no hay limite de edad",
+            "no existe limite de edad", "cualquier edad");
+
+    private static Integer edad(String token) {
+        if (!token.isEmpty() && token.length() <= 2 && token.chars().allMatch(Character::isDigit)) return Integer.valueOf(token);
+        return EDADES_EN_LETRA.get(token);
+    }
+
+    /** Ages set as a limit: «menores de 14», «a partir de 16 años», «tener al menos 13 años», «mayor de edad». */
+    private static List<Integer> umbralesEdad(Clausula c) {
+        List<Integer> umbrales = new ArrayList<>();
+        List<String> t = c.tokens();
+        for (int i = 1; i < t.size(); i++) {
+            Integer n = edad(t.get(i));
+            if (n == null) continue;
+            String antes = t.get(i - 1);
+            boolean anos = i + 1 < t.size() && (t.get(i + 1).equals("anos") || t.get(i + 1).equals("ano"));
+            boolean menorDe = antes.equals("de") && i >= 2 && MENOR_O_MAYOR.contains(t.get(i - 2));
+            // A period alone is no age limit: «conservaremos sus datos al menos 5 años».
+            boolean limite = anos && (TENER.contains(antes)
+                    || (antes.equals("de") && i >= 2 && LIMITE_DE.contains(t.get(i - 2)))
+                    || (antes.equals("los") && i >= 3 && t.get(i - 2).equals("de") && t.get(i - 3).equals("partir"))
+                    || ((antes.equals("menos") || antes.equals("minimo")) && i >= 3 && TENER.contains(t.get(i - 3))));
+            if (menorDe || limite) umbrales.add(n);
+        }
+        if (alguna(c, frases("mayor de edad", "mayores de edad", "mayoria de edad"))) umbrales.add(18);
+        return umbrales;
+    }
+
+    private static Evaluacion menores(List<Clausula> cs, String tipo) {
+        Clausula condiciones = null;
+        Clausula exclusion = null;
+        Clausula problema = null;
+        Clausula mencion = null;
+        String detalleProblema = null;
+        String detalleCondiciones = null;
+        int ventana = 0;
+        for (Clausula c : cs) {
+            boolean trasEncabezado = ventana > 0;
+            if (ventana > 0) ventana--;
+            // A short «Menores» heading lets the following clauses speak of them.
+            if (encabezado(c, "menores")) ventana = 3;
+            List<String> t = c.tokens();
+            boolean menor = trasEncabezado || alguna(c, MENORES) || (!t.isEmpty() && t.get(0).equals("menores"));
+            List<Integer> umbrales = umbralesEdad(c);
+            boolean datos = alguna(c, DATOS_MENORES);
+            boolean sinParental = algunaAfirmadaLejos(c, SIN_PARENTAL);
+            boolean parental = !sinParental && (alguna(c, PARENTAL) || (menor && alguna(c, PARENTAL_CON_MENOR)));
+            List<Integer> bajos = umbrales.stream().filter(e -> e < EDAD_CONSENTIMIENTO).toList();
+            String motivo = null;
+            if (sinParental) {
+                motivo = "El texto admite datos de menores sin el consentimiento de sus padres o tutores, lo que puede ser "
+                        + "contrario al Art. 8 RGPD y al Art. 7 LOPDGDD si el tratamiento se basa en su consentimiento.";
+            } else if ((menor || alguna(c, frases("edad"))) && (alguna(c, EDAD_NO_VERIFICADA)
+                    || (alguna(c, SIN_LIMITE_EDAD) && (datos || alguna(c, USO_SERVICIO))))) {
+                motivo = "El texto declara que no se comprueba ni se limita la edad de los usuarios. Si el servicio se dirige "
+                        + "a menores o se basa en su consentimiento, el Art. 8.2 RGPD exige esfuerzos razonables para "
+                        + "verificar el consentimiento de sus padres o tutores.";
+            } else if (!bajos.isEmpty() && datos) {
+                motivo = "El texto fija en " + bajos.get(0) + " años la edad a partir de la cual se admite el registro o el "
+                        + "consentimiento del menor; en España el menor solo puede consentir por sí mismo desde los 14 años "
+                        + "(Art. 7 LOPDGDD).";
+            }
+            if (motivo != null) {
+                if (problema == null) {
+                    problema = c;
+                    detalleProblema = motivo;
+                }
+                continue;
+            }
+            boolean noDirigido = menor && algunaNegada(c, DIRIGIDO);
+            boolean relevante = parental || noDirigido || (menor && datos)
+                    || (!umbrales.isEmpty() && (datos || alguna(c, USO_SERVICIO)));
+            if (!relevante) continue;
+            List<Integer> validos = umbrales.stream().filter(e -> e >= EDAD_CONSENTIMIENTO).sorted().toList();
+            if (parental || !validos.isEmpty()) {
+                if (condiciones == null) {
+                    condiciones = c;
+                    List<String> partes = new ArrayList<>();
+                    if (!validos.isEmpty()) partes.add("edad mínima de " + validos.get(0) + " años");
+                    if (parental) partes.add("consentimiento de sus padres o tutores");
+                    detalleCondiciones = "Se indican condiciones para los datos de menores: " + String.join(" y ", partes)
+                            + ". El texto no permite comprobar cómo se verifican la edad ni el consentimiento.";
+                }
+            } else if (noDirigido || (menor && trataNegado(c) && !trataAfirmado(c))) {
+                if (exclusion == null) exclusion = c;
+            } else if (mencion == null) {
+                mencion = c;
+            }
+        }
+        // Processing described without conditions outweighs a general statement that minors are not addressed.
+        Clausula suficiente = condiciones != null ? condiciones : mencion == null ? exclusion : null;
+        String detalleSuficiente = condiciones != null ? detalleCondiciones
+                : "El documento declara que no se dirige a menores o que no trata sus datos; el texto no permite comprobarlo.";
+        return cerrar(tipo, suficiente, detalleSuficiente, problema, detalleProblema, mencion,
+                "Se describe el tratamiento de datos de menores sin indicar la edad mínima ni el consentimiento de sus padres "
+                        + "o tutores." + contradiccion(exclusion),
+                "El documento no indica si se tratan datos de menores; el texto no permite saber si el servicio se dirige a "
+                        + "ellos ni si algún tratamiento se basa en su consentimiento.", true);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // R14 — Categorías especiales de datos (Art. 9 RGPD): naming a sensitive topic is no processing
+    // ---------------------------------------------------------------------------------------
+
+    private static final Map<String, List<List<String>>> CATEGORIAS_ESPECIALES = new LinkedHashMap<>();
+    /** Bare words that are special-category data only in a clause about collecting personal information. */
+    private static final Map<String, List<List<String>>> CATEGORIAS_SI_SON_DATOS = new LinkedHashMap<>();
+    private static final Map<String, List<List<String>>> EXCEPCIONES_ART_9 = new LinkedHashMap<>();
+
+    static {
+        CATEGORIAS_ESPECIALES.put("salud", frases("datos de salud", "datos relativos a la salud", "datos sobre su salud",
+                "datos sobre la salud", "datos de su salud", "datos medicos", "datos clinicos", "datos sanitarios",
+                "informacion medica", "informacion sanitaria", "informacion de salud", "informacion sobre su salud",
+                "historial medico", "historia clinica", "historial clinico", "informes medicos", "estado de salud",
+                "grado de discapacidad", "certificado de discapacidad"));
+        CATEGORIAS_ESPECIALES.put("datos biométricos", frases("datos biometricos", "huella dactilar", "huellas dactilares",
+                "reconocimiento facial", "biometria"));
+        CATEGORIAS_ESPECIALES.put("datos genéticos", frases("datos geneticos", "informacion genetica"));
+        CATEGORIAS_ESPECIALES.put("origen étnico o racial", frases("origen etnico", "origen racial"));
+        CATEGORIAS_ESPECIALES.put("opiniones políticas", frases("opiniones politicas", "opinion politica",
+                "ideologia politica", "afiliacion politica"));
+        CATEGORIAS_ESPECIALES.put("convicciones religiosas o filosóficas", frases("creencias religiosas",
+                "convicciones religiosas", "convicciones filosoficas"));
+        CATEGORIAS_ESPECIALES.put("afiliación sindical", frases("afiliacion sindical"));
+        CATEGORIAS_ESPECIALES.put("vida u orientación sexual", frases("orientacion sexual", "vida sexual"));
+        CATEGORIAS_ESPECIALES.put("condenas e infracciones penales (Art. 10 RGPD)", frases("antecedentes penales",
+                "condenas penales", "infracciones penales", "delitos de naturaleza sexual", "datos penales"));
+        CATEGORIAS_ESPECIALES.put("categorías especiales sin concretar", frases("categorias especiales",
+                "datos especialmente protegidos", "datos sensibles"));
+        CATEGORIAS_SI_SON_DATOS.put("salud", frases("alergias", "intolerancias", "enfermedades", "medicacion"));
+        CATEGORIAS_SI_SON_DATOS.put("convicciones religiosas o filosóficas", frases("religion", "creencias"));
+        CATEGORIAS_SI_SON_DATOS.put("opiniones políticas", frases("ideologia"));
+
+        EXCEPCIONES_ART_9.put("consentimiento explícito", frases("consentimiento explicito", "consentimiento expreso"));
+        EXCEPCIONES_ART_9.put("obligaciones laborales o de protección social", frases("derecho laboral",
+                "obligaciones laborales", "ambito laboral", "seguridad social", "proteccion social",
+                "prevencion de riesgos laborales", "vigilancia de la salud", "medicina del trabajo"));
+        EXCEPCIONES_ART_9.put("interés vital", frases("interes vital", "intereses vitales"));
+        EXCEPCIONES_ART_9.put("asistencia sanitaria", frases("asistencia sanitaria", "diagnostico medico",
+                "medicina preventiva", "tratamiento sanitario"));
+        EXCEPCIONES_ART_9.put("interés público", frases("interes publico esencial", "salud publica"));
+        EXCEPCIONES_ART_9.put("reclamaciones judiciales", frases("defensa de reclamaciones", "ejercicio o defensa"));
+        EXCEPCIONES_ART_9.put("datos hechos manifiestamente públicos", frases("manifiestamente publicos"));
+        EXCEPCIONES_ART_9.put("habilitación legal", frases("obligacion legal", "habilitacion legal", "exigido por ley",
+                "exigida por ley", "lo exige la ley", "norma con rango de ley"));
+    }
+
+    /** Stated safeguards: the text can only say they exist, never prove it. */
+    private static final List<List<String>> GARANTIAS_ESPECIALES = frases("garantias reforzadas", "garantias adicionales",
+            "medidas reforzadas", "medidas adicionales", "seguridad reforzada", "cifrado", "cifrados", "cifradas",
+            "acceso restringido", "seudonimizacion", "pseudonimizacion", "secreto profesional", "deber de confidencialidad",
+            "personal autorizado");
+    private static final List<List<String>> SIN_CONSENTIMIENTO = frases("sin su consentimiento", "sin consentimiento",
+            "sin necesidad de consentimiento", "sin su autorizacion", "sin autorizacion");
+
+    private static final List<List<String>> INFORMACION_PERSONAL = frases("datos", "informacion");
+
+    /** Categories named, negated or not: «No tratamos datos de salud» names one too. */
+    private static Set<String> categorias(Clausula c) {
+        Set<String> categorias = new LinkedHashSet<>();
+        CATEGORIAS_ESPECIALES.forEach((categoria, frases) -> {
+            if (alguna(c, frases)) categorias.add(categoria);
+        });
+        // «Tratamos a todos por igual, sin importar su religión» names a belief, not data about it.
+        if (alguna(c, INFORMACION_PERSONAL) && !tratamientos(c).isEmpty()) {
+            CATEGORIAS_SI_SON_DATOS.forEach((categoria, frases) -> {
+                if (alguna(c, frases)) categorias.add(categoria);
+            });
+        }
+        return categorias;
+    }
+
+    private static Set<String> excepcionesArt9(Clausula c) {
+        Set<String> excepciones = etiquetasAfirmadas(c, EXCEPCIONES_ART_9);
+        List<String> t = c.tokens();
+        for (int i = 1; i + 1 < t.size(); i++) {
+            if (ARTICULO.contains(t.get(i - 1)) && t.get(i).equals("9") && t.get(i + 1).equals("2")) excepciones.add("Art. 9.2 RGPD");
+        }
+        return excepciones;
+    }
+
+    private static Evaluacion categoriasEspeciales(List<Clausula> cs, String tipo) {
+        Clausula suficiente = null;
+        Clausula problema = null;
+        Clausula mencion = null;
+        Clausula noTrata = null;
+        Set<String> nombradas = new LinkedHashSet<>();
+        Set<String> excepciones = new LinkedHashSet<>();
+        Set<String> garantias = new LinkedHashSet<>();
+        for (int i = 0; i < cs.size(); i++) {
+            Clausula c = cs.get(i);
+            Set<String> aqui = categorias(c);
+            if (aqui.isEmpty()) continue;
+            boolean afirma = trataAfirmado(c);
+            Set<String> excepcionesAqui = excepcionesArt9(c);
+            List<String> garantiasAqui = afirmadas(c, GARANTIAS_ESPECIALES);
+            if (trataNegado(c) && !afirma && excepcionesAqui.isEmpty()) {
+                // «No tratamos datos sensibles, salvo los de salud» discloses the exception.
+                if (!alguna(c, EXCEPCION)) {
+                    if (noTrata == null) noTrata = c;
+                    continue;
+                }
+                afirma = true;
+            }
+            // A definition or an incidental mention («respetamos todas las creencias religiosas») is no processing.
+            if (!afirma && excepcionesAqui.isEmpty() && garantiasAqui.isEmpty()) continue;
+            if (excepcionesAqui.isEmpty() && afirma && (algunaAfirmadaLejos(c, SIN_CONSENTIMIENTO)
+                    || algunaAfirmada(c, VENTA) || algunaAfirmada(c, FINES_ABIERTOS))) {
+                if (problema == null) problema = c;
+                continue;
+            }
+            Clausula evidencia = c;
+            // «Tratamos datos de salud. La base es su consentimiento explícito.»
+            if (excepcionesAqui.isEmpty() && i + 1 < cs.size() && categorias(cs.get(i + 1)).isEmpty()) {
+                excepcionesAqui = excepcionesArt9(cs.get(i + 1));
+                if (!excepcionesAqui.isEmpty()) evidencia = unir(c, cs.get(i + 1));
+            }
+            nombradas.addAll(aqui);
+            garantias.addAll(garantiasAqui);
+            if (!excepcionesAqui.isEmpty()) {
+                excepciones.addAll(excepcionesAqui);
+                if (suficiente == null) suficiente = evidencia;
+            } else if (mencion == null) {
+                mencion = c;
+            }
+        }
+        String declaradas = garantias.isEmpty() ? "" : " Garantías declaradas: " + String.join(", ", garantias) + ".";
+        String detalleSuficiente = suficiente != null
+                ? "Categorías especiales: " + String.join(", ", nombradas) + ". Excepción del Art. 9.2 RGPD indicada: "
+                        + String.join(", ", excepciones) + "." + declaradas
+                        + " El texto no acredita que la excepción se aplique ni que las garantías estén implantadas."
+                : "El documento declara que no trata categorías especiales de datos; el texto no permite comprobarlo.";
+        return cerrar(tipo, suficiente != null ? suficiente : mencion == null ? noTrata : null, detalleSuficiente, problema,
+                "El texto declara tratar categorías especiales de datos sin consentimiento ni otra excepción del Art. 9.2 "
+                        + "RGPD, para su venta o para cualquier finalidad.", mencion,
+                "Se menciona el tratamiento de categorías especiales (" + String.join(", ", nombradas) + ") sin indicar la "
+                        + "excepción del Art. 9.2 RGPD que lo permite." + declaradas
+                        + (garantias.isEmpty() ? "" : " Declararlas no acredita que estén implantadas.")
+                        + contradiccion(noTrata),
+                "El documento no indica si se tratan categorías especiales de datos (Art. 9 RGPD); puede que no se traten, "
+                        + "y el texto no permite saberlo.", true);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // R17 — Decisiones automatizadas y perfilado (Arts. 13.2.f y 22 RGPD): an algorithm is no automated decision
+    // ---------------------------------------------------------------------------------------
+
+    private static final Set<String> DECISION = Set.of("decision", "decisiones");
+    private static final Set<String> AUTOMATIZACION = Set.of("automatizada", "automatizadas", "automatizado",
+            "automatizados", "automatica", "automaticas", "automatico", "automaticos", "automaticamente");
+    /** «Un algoritmo decide», «se rechazan automáticamente»: a decision verb next to its automation. */
+    private static final Set<String> DECIDE = Set.of("decide", "deciden", "decidira", "decidiran", "aprueba", "aprueban",
+            "aprobara", "aprobada", "aprobadas", "rechaza", "rechazan", "rechazara", "rechazada", "rechazadas", "deniega",
+            "deniegan", "denegara", "denegada", "denegadas", "concede", "conceden", "concedera", "resuelve", "resuelven",
+            "admite", "admiten", "excluye", "excluyen");
+    private static final Set<String> ALGORITMO = Set.of("algoritmo", "algoritmos");
+    private static final int CERCANIA_DECISION = 8;
+    private static final int CERCANIA_VERBO = 4;
+    /** «Tratamiento automatizado» or «fichero automatizado» alone only meant computerised processing. */
+    private static final List<List<String>> PERFILES = frases("elaboracion de perfiles", "elaborar perfiles",
+            "elaboramos perfiles", "elaboraremos perfiles", "creacion de perfiles", "crear perfiles", "creamos perfiles",
+            "crearemos perfiles", "perfilado", "perfilamiento", "perfiles comerciales", "perfil comercial",
+            "perfiles de consumo", "perfil de consumo", "perfiles de cliente");
+    private static final Map<String, List<List<String>>> ASPECTOS_DECISION = new LinkedHashMap<>();
+
+    static {
+        ASPECTOS_DECISION.put("lógica aplicada", frases("logica", "criterios", "criterio", "variables", "factores",
+                "se basa en", "se basan en", "basandose en", "en funcion de", "teniendo en cuenta", "a partir de", "segun su",
+                "segun sus", "analiza", "analizamos", "analizando", "puntuacion"));
+        ASPECTOS_DECISION.put("consecuencias", frases("consecuencias", "consecuencia", "efectos", "importancia",
+                "puede suponer", "podra suponer", "puede implicar", "podra implicar", "denegacion", "denegar", "rechazo",
+                "aprobacion", "para ofrecerle", "para ofrecerte", "para mostrarle", "para mostrarte", "para enviarle",
+                "para enviarte", "personalizadas", "personalizados", "personalizar", "con el fin de", "con la finalidad de"));
+        ASPECTOS_DECISION.put("garantías del interesado", frases("intervencion humana", "supervision humana",
+                "revision humana", "participacion humana", "punto de vista", "impugnar", "impugnarla", "impugnacion",
+                "oponerse", "oponerte", "oposicion", "no ser objeto", "solicitar la revision", "revision por una persona"));
+    }
+
+    private static final List<List<String>> SIN_RECURSO = frases("sin posibilidad de recurso", "sin posibilidad de impugnar",
+            "sin posibilidad de impugnarla", "sin posibilidad de revision", "sin posibilidad de reclamar", "no cabe recurso",
+            "no admite recurso", "no admiten recurso", "no es posible solicitar la revision");
+
+    /** Positions where the clause speaks of an automated decision or of profiling. */
+    private static List<Integer> anclasDecision(Clausula c) {
+        List<Integer> anclas = new ArrayList<>();
+        List<String> t = c.tokens();
+        for (int p = 0; p < t.size(); p++) {
+            if (DECISION.contains(t.get(p))) {
+                if (cerca(t, p, CERCANIA_DECISION, AUTOMATIZACION)) anclas.add(p);
+            } else if (DECIDE.contains(t.get(p))) {
+                if (cerca(t, p, CERCANIA_VERBO, AUTOMATIZACION) || cerca(t, p, CERCANIA_VERBO, ALGORITMO)) anclas.add(p);
+            }
+        }
+        PERFILES.forEach(f -> anclas.addAll(posiciones(c, f)));
+        return anclas;
+    }
+
+    private static boolean cerca(List<String> t, int p, int distancia, Set<String> palabras) {
+        for (int q = Math.max(0, p - distancia); q < Math.min(t.size(), p + distancia + 1); q++) {
+            if (palabras.contains(t.get(q))) return true;
+        }
+        return false;
+    }
+
+    /** Affirmed, and not «sin intervención humana», which describes the decision instead of a safeguard. */
+    private static boolean aspectoAfirmado(Clausula c, List<List<String>> frases) {
+        List<String> t = c.tokens();
+        return frases.stream().anyMatch(f -> posiciones(c, f).stream()
+                .anyMatch(p -> !negada(t, p) && !(p > 0 && t.get(p - 1).equals("sin"))));
+    }
+
+    private static Evaluacion decisionesAutomatizadas(List<Clausula> cs, String tipo) {
+        Clausula informada = null;
+        Clausula problema = null;
+        Clausula noDecide = null;
+        Map<String, Clausula> aspectos = new LinkedHashMap<>();
+        List<List<String>> garantias = ASPECTOS_DECISION.get("garantías del interesado");
+        for (int i = 0; i < cs.size(); i++) {
+            Clausula c = cs.get(i);
+            List<Integer> anclas = anclasDecision(c);
+            if (anclas.isEmpty()) continue;
+            if (anclas.stream().allMatch(p -> negada(c.tokens(), p, ALCANCE_NEGACION_LARGO))) {
+                if (noDecide == null) noDecide = c;
+                continue;
+            }
+            // The next sentence often completes it: «… para enviarle ofertas. Puede oponerse en cualquier momento.»
+            Clausula siguiente = i + 1 < cs.size() && anclasDecision(cs.get(i + 1)).isEmpty() ? cs.get(i + 1) : null;
+            boolean completa = false;
+            for (Clausula x : siguiente == null ? List.of(c) : List.of(c, siguiente)) {
+                boolean garantiaNegada = algunaNegada(x, garantias) && !algunaAfirmada(x, garantias);
+                if (problema == null && (garantiaNegada || alguna(x, SIN_RECURSO))) problema = x;
+                for (var aspecto : ASPECTOS_DECISION.entrySet()) {
+                    if (aspectoAfirmado(x, aspecto.getValue())) {
+                        aspectos.putIfAbsent(aspecto.getKey(), c);
+                        completa |= x != c;
+                    }
+                }
+            }
+            if (informada == null) informada = completa ? unir(c, siguiente) : c;
+        }
+        List<String> faltan = ASPECTOS_DECISION.keySet().stream().filter(a -> !aspectos.containsKey(a)).toList();
+        String informado = (aspectos.isEmpty() ? "nada concreto" : String.join(", ", aspectos.keySet()))
+                + (faltan.isEmpty() ? "." : "; falta: " + String.join(", ", faltan) + ".");
+        boolean suficiente = informada != null && aspectos.size() >= 2;
+        String detalleSuficiente = informada != null
+                ? "Se informa de decisiones automatizadas o perfilado: " + informado
+                        + " El texto no permite comprobar cómo se adoptan las decisiones." + contradiccion(noDecide)
+                : "El documento declara que no adopta decisiones automatizadas o que no elabora perfiles; el texto no "
+                        + "permite comprobarlo.";
+        return cerrar(tipo, suficiente ? informada : informada == null ? noDecide : null, detalleSuficiente, problema,
+                "El texto impide oponerse, impugnar o pedir la revisión de decisiones automatizadas, lo que puede ser "
+                        + "contrario al Art. 22.3 RGPD.", informada,
+                "Se alude a decisiones automatizadas o perfilado. Se informa de: " + informado + contradiccion(noDecide),
+                "El documento no menciona decisiones automatizadas ni la elaboración de perfiles; el texto no permite saber "
+                        + "si existen.", true);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // R18 — Notificación de brechas (Arts. 33 y 34 RGPD): publishing it is no information duty, and a
+    // mention of breaches never means one has happened
+    // ---------------------------------------------------------------------------------------
+
+    /** Whole phrases: «brecha digital» or «violación de estas condiciones» are not personal data breaches. */
+    private static final List<List<String>> BRECHA = frases("brecha de seguridad", "brechas de seguridad", "brecha de datos",
+            "brechas de datos", "violacion de seguridad", "violaciones de seguridad", "violacion de la seguridad",
+            "violaciones de la seguridad", "violacion de datos", "violaciones de datos", "incidente de seguridad",
+            "incidentes de seguridad", "fuga de datos", "fugas de datos", "filtracion de datos", "filtraciones de datos",
+            "data breach");
+    private static final List<List<String>> NOTIFICA = frases("notificar", "notificaremos", "notificara", "notificamos",
+            "notifica", "notificada", "notificadas", "notificado", "notificados", "notificacion", "notificaciones",
+            "notificarla", "notificarlas", "comunicar", "comunicaremos", "comunicara", "comunicaran", "comunicamos",
+            "comunicarla", "comunicarlas", "informar", "informaremos", "informara", "informamos", "avisar", "avisaremos");
+    private static final Map<String, List<List<String>>> DESTINOS_BRECHA = new LinkedHashMap<>();
+
+    static {
+        DESTINOS_BRECHA.put("autoridad de control", frases("aepd", "agencia espanola de proteccion de datos",
+                "autoridad de control", "autoridades de control", "autoridad competente", "autoridades competentes"));
+        DESTINOS_BRECHA.put("personas afectadas", frases("afectados", "afectadas", "interesados", "usuarios",
+                "titulares de los datos", "le informaremos", "le notificaremos", "le comunicaremos", "le avisaremos",
+                "les informaremos", "les comunicaremos"));
+    }
+
+    private static final List<List<String>> PLAZO_BRECHA = frases("72 horas", "setenta y dos horas", "sin dilacion indebida",
+            "sin demora");
+    /** Not notifying is lawful in the cases of Arts. 33.1 and 34.3 RGPD. */
+    private static final List<List<String>> NOTIFICACION_LIMITADA = frases("improbable", "no constituya un riesgo",
+            "no constituyan un riesgo", "no suponga un riesgo", "no supongan un riesgo", "alto riesgo", "cuando lo exija",
+            "cuando proceda", "cuando sea obligatorio", "cuando la ley", "en los casos previstos", "todas las brechas",
+            "todos los incidentes", "salvo", "excepto");
+    /** Disclaimers of liability are R15's subject (and G04's), not a statement about notification. */
+    private static final List<List<String>> EXIME = frases("no somos responsables", "no nos hacemos responsables",
+            "no seremos responsables", "declinamos", "no asumimos");
+
+    private static Evaluacion brechas(List<Clausula> cs, String tipo) {
+        Clausula suficiente = null;
+        Clausula problema = null;
+        Clausula mencion = null;
+        Set<String> destinos = new LinkedHashSet<>();
+        boolean plazo = false;
+        for (int i = 0; i < cs.size(); i++) {
+            Clausula c = cs.get(i);
+            if (!alguna(c, BRECHA) || alguna(c, EXIME)) continue;
+            Clausula evidencia = c;
+            boolean afirma = algunaAfirmada(c, NOTIFICA);
+            boolean niega = algunaNegada(c, NOTIFICA);
+            // «Si se produce una brecha de seguridad, actuaremos con rapidez. La notificaremos a la AEPD.»
+            if (!afirma && !niega && i + 1 < cs.size() && !alguna(cs.get(i + 1), BRECHA)
+                    && algunaAfirmada(cs.get(i + 1), NOTIFICA)) {
+                evidencia = unir(c, cs.get(i + 1));
+                afirma = true;
+            }
+            if (niega && !afirma && !alguna(c, NOTIFICACION_LIMITADA)) {
+                if (problema == null) problema = c;
+            } else if (afirma || niega) {
+                if (suficiente == null) {
+                    suficiente = evidencia;
+                    destinos.addAll(etiquetasAfirmadas(evidencia, DESTINOS_BRECHA));
+                    plazo = alguna(evidencia, PLAZO_BRECHA);
+                }
+            } else if (mencion == null) {
+                mencion = c;
+            }
+        }
+        return cerrar(tipo, suficiente, "Se informa de la notificación de brechas de seguridad"
+                        + (destinos.isEmpty() ? "" : " (destinatarios: " + String.join(", ", destinos) + ")")
+                        + (plazo ? ", con un plazo" : "") + ". El texto no acredita que exista un procedimiento ni que se aplique.",
+                problema, "El texto declara que no se notificarán las brechas de seguridad, sin limitarlo a los casos en "
+                        + "que los Arts. 33.1 y 34.3 RGPD lo permiten.", mencion,
+                "Se alude a brechas o incidentes de seguridad sin indicar si se notifican a la autoridad de control o a las "
+                        + "personas afectadas. Mencionarlas no implica que se haya producido ninguna.",
+                "El documento no informa sobre la notificación de brechas de seguridad. Publicarla no es una obligación de "
+                        + "información, y si se produjera una brecha su notificación (Arts. 33 y 34 RGPD) no podría "
+                        + "comprobarse con el texto.", true);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // R19 — Comunicaciones comerciales (Arts. 21 y 22 LSSI-CE, Art. 21 RGPD): marketing is never presumed,
+    // and transactional messages are not marketing
+    // ---------------------------------------------------------------------------------------
+
+    private static final List<List<String>> COMERCIAL = frases("comunicaciones comerciales", "comunicacion comercial",
+            "comunicaciones publicitarias", "comunicaciones promocionales", "comunicaciones de marketing", "publicidad",
+            "newsletter", "newsletters", "boletin", "boletines", "ofertas", "promociones", "informacion comercial",
+            "marketing", "mercadotecnia", "prospeccion comercial", "mailing");
+    /** Marketing that is a message by itself; «publicidad» or «ofertas» may be shown on the site instead. */
+    private static final List<List<String>> COMERCIAL_ENVIADA = frases("comunicaciones comerciales", "comunicacion comercial",
+            "comunicaciones publicitarias", "comunicaciones promocionales", "comunicaciones de marketing", "newsletter",
+            "newsletters", "boletin", "boletines", "mailing");
+    private static final List<List<String>> ENVIO = frases("enviar", "enviaremos", "enviamos", "enviarle", "enviarte",
+            "enviarles", "enviara", "envio", "envios", "remitir", "remitiremos", "remitirle", "recibir", "reciba", "recibira",
+            "recibiras", "correo", "correos", "email", "e mail", "sms", "whatsapp", "llamadas", "mensajes", "suscripcion",
+            "suscribirse", "suscrito", "suscrita");
+    private static final List<List<String>> COMUNICACIONES = frases("comunicaciones", "correos", "mensajes", "newsletter",
+            "boletin", "suscripcion");
+    private static final List<List<String>> BAJA = frases("darse de baja", "darte de baja", "dar de baja", "darle de baja",
+            "solicitar la baja", "cancelar la suscripcion", "cancelar su suscripcion", "anular la suscripcion",
+            "dejar de recibir", "desuscribirse", "unsubscribe", "oponerse", "oponerte", "oposicion", "revocar", "retirar",
+            "lista robinson", "exclusion publicitaria");
+    private static final List<List<String>> CONSENTIMIENTO_COMERCIAL = frases("consentimiento", "consiente", "consienta",
+            "consentido", "autorizacion", "autorice", "autoriza", "autorizado", "autorizada", "solicitado", "solicite",
+            "suscribirse", "se suscriba", "se suscribe", "se suscriben", "suscrito", "suscrita", "marque la casilla",
+            "marcando la casilla");
+    private static final String RELACION_PREVIA = "relación contractual previa (Art. 21.2 LSSI-CE)";
+    private static final List<List<String>> CLIENTES = frases("cliente", "clientes", "contrataron", "contratado", "contratados",
+            "contrato", "adquirido", "adquiridos", "compra", "compras", "relacion contractual");
+    private static final List<List<String>> MEDIOS_ELECTRONICOS = frases("correo electronico", "email", "e mail", "sms",
+            "whatsapp", "medios electronicos");
+    private static final List<List<String>> SIN_CONSENTIMIENTO_COMERCIAL = frases("sin su consentimiento",
+            "sin consentimiento", "sin su autorizacion", "sin autorizacion", "sin haberlo solicitado",
+            "aunque no lo haya solicitado", "aunque no lo haya autorizado", "aunque se oponga", "aunque se haya dado de baja",
+            "aunque solicite la baja");
+    /** Consent tied to registration or to the terms is neither free nor specific (Arts. 7.4 RGPD, 6.3 LOPDGDD). */
+    private static final List<List<String>> CONSENTIMIENTO_VINCULADO = frases("al registrarse acepta recibir",
+            "al registrarte aceptas recibir", "al registrarse consiente", "al registrarte consientes",
+            "al crear una cuenta acepta recibir", "al crear tu cuenta aceptas recibir", "al contratar acepta recibir",
+            "al aceptar estas condiciones acepta recibir", "al aceptar estas condiciones consiente");
+    private static final List<List<String>> CONDICION = frases("salvo", "excepto", "a menos que", "salvo que", "si nos",
+            "si lo", "si usted", "si nos da", "si se suscribe");
+
+    private static boolean comercial(Clausula c) {
+        // Advertising cookies are R10's subject.
+        if (alguna(c, COOKIES)) return false;
+        return alguna(c, COMERCIAL_ENVIADA) || (alguna(c, COMERCIAL) && alguna(c, ENVIO))
+                || (alguna(c, BAJA) && alguna(c, COMUNICACIONES));
+    }
+
+    private static boolean relacionPrevia(Clausula c) {
+        return alguna(c, frases("similares", "analogos")) && alguna(c, CLIENTES);
+    }
+
+    private static Evaluacion comunicacionesComerciales(List<Clausula> cs, String tipo) {
+        Clausula primera = null;
+        Clausula conBase = null;
+        Clausula problema = null;
+        Clausula noEnvia = null;
+        Set<String> bases = new LinkedHashSet<>();
+        boolean baja = false;
+        boolean electronico = false;
+        for (int i = 0; i < cs.size(); i++) {
+            Clausula c = cs.get(i);
+            if (!comercial(c)) continue;
+            boolean bajaNegada = algunaNegada(c, BAJA) && !algunaAfirmada(c, BAJA);
+            if (alguna(c, CONSENTIMIENTO_VINCULADO) || bajaNegada
+                    || (algunaAfirmadaLejos(c, SIN_CONSENTIMIENTO_COMERCIAL) && !relacionPrevia(c))) {
+                if (problema == null) problema = c;
+                continue;
+            }
+            // «No le enviaremos publicidad sin su consentimiento» is a condition, not an absence.
+            boolean condicionada = alguna(c, SIN_CONSENTIMIENTO_COMERCIAL) || alguna(c, CONDICION);
+            if (algunaNegada(c, ENVIO) && !algunaAfirmada(c, ENVIO) && !condicionada) {
+                if (noEnvia == null) noEnvia = c;
+                continue;
+            }
+            if (primera == null) primera = c;
+            Set<String> aqui = new LinkedHashSet<>();
+            if (alguna(c, CONSENTIMIENTO_COMERCIAL)) aqui.add("consentimiento");
+            if (relacionPrevia(c)) aqui.add(RELACION_PREVIA);
+            if (alguna(c, frases("interes legitimo"))) aqui.add("interés legítimo");
+            if (!aqui.isEmpty() && conBase == null) conBase = c;
+            bases.addAll(aqui);
+            electronico |= alguna(c, MEDIOS_ELECTRONICOS);
+            baja |= algunaAfirmada(c, BAJA);
+            // The way to unsubscribe often follows: «… ofertas de productos similares; pueden oponerse en cualquier momento.»
+            Clausula siguiente = i + 1 < cs.size() && !comercial(cs.get(i + 1)) ? cs.get(i + 1) : null;
+            if (siguiente != null) {
+                if (problema == null && algunaNegada(siguiente, BAJA) && !algunaAfirmada(siguiente, BAJA)) problema = siguiente;
+                baja |= algunaAfirmada(siguiente, BAJA);
+            }
+        }
+        boolean completa = !bases.isEmpty() && baja;
+        String notaLssi = bases.equals(Set.of("interés legítimo")) && electronico
+                ? " Por medios electrónicos, el Art. 21 LSSI-CE exige consentimiento previo salvo relación contractual previa "
+                        + "y productos o servicios similares; el texto no permite saber cuál se aplica." : "";
+        String detalleSuficiente = primera != null
+                ? "Se informa de las comunicaciones comerciales y de cómo darse de baja. Se basan en: "
+                        + String.join(", ", bases) + "." + notaLssi + " El texto no permite comprobar que los envíos se "
+                        + "ajusten a lo declarado." + contradiccion(noEnvia)
+                : "El documento declara que no envía comunicaciones comerciales; el texto no permite comprobarlo.";
+        String falta = bases.isEmpty() && !baja ? "en qué se basan ni cómo darse de baja"
+                : bases.isEmpty() ? "en qué se basan (consentimiento previo o relación contractual previa)" : "cómo darse de baja";
+        return cerrar(tipo, completa ? (conBase != null ? conBase : primera) : primera == null ? noEnvia : null,
+                detalleSuficiente, problema,
+                "El texto describe comunicaciones comerciales sin consentimiento, sin posibilidad de darse de baja o con un "
+                        + "consentimiento ligado al registro, lo que puede ser contrario a los Arts. 21 y 22 LSSI-CE y al "
+                        + "Art. 21 RGPD.", primera,
+                "Se informa de comunicaciones comerciales sin indicar " + falta + "." + notaLssi + contradiccion(noEnvia),
+                "El documento no menciona comunicaciones comerciales; el texto no permite saber si se envían.", true);
     }
 }

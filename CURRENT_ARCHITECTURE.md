@@ -18,7 +18,7 @@ Los hallazgos distinguen comportamientos comprobables por inspección de código
 
 SmartAudits es una aplicación de análisis orientativo de textos legales introducidos manualmente. Permite registrar usuarios, iniciar sesión, analizar un documento, consultar el historial y visualizar, copiar o descargar un informe PDF. El PDF es el artefacto imprimible actual; no existe un flujo propio de impresión. Incluye gestión administrativa de usuarios y trazabilidad de determinadas acciones.
 
-El motor es propio y determinista: aplica reglas de palabras clave en Java. No utiliza IA, modelos de lenguaje ni APIs externas para analizar el contenido, aunque algunos nombres y textos de la aplicación incluyen «IA».
+El motor es propio y determinista: aplica reglas en Java que leen el texto por cláusulas, con palabras completas, negaciones y el tipo de documento (desde las reglas 5, las 19 reglas). No utiliza IA, modelos de lenguaje ni APIs externas para analizar el contenido, aunque algunos nombres y textos de la aplicación incluyen «IA».
 
 La URL es un dato opcional de referencia. No se visita, descarga ni analiza. Cada auditoría representa un bloque de texto, no un dominio ni un conjunto estructurado de páginas.
 
@@ -332,15 +332,15 @@ Referencias: [CrearAuditoria.jsx](smartaudits-frontend/src/pages/CrearAuditoria.
 
 ### Normalización y detección
 
-`MotorAnalisisLegal.analyze(String texto, String tipoDocumento)` recibe el texto y su tipo. El tipo no se utiliza en la evaluación.
+`MotorAnalisisLegal.analyze(String texto, String tipoDocumento)` recibe el texto y su tipo. El tipo decide qué controles se exigen: los que no corresponden a ese documento quedan NO_APLICABLE; un tipo nulo se evalúa como un documento completo.
 
 Para texto nulo o en blanco devuelve un resultado especial con puntuación cero y mensaje de entrada vacía. El endpoint normal exige texto no vacío, por lo que ese caso actúa como defensa interna del motor.
 
-La normalización aplica Unicode NFD, elimina diacríticos, convierte a minúsculas con locale español, sustituye caracteres fuera del conjunto permitido y colapsa espacios. Las palabras clave y patrones se normalizan también. La comparación utiliza `String.contains`, sin límites de palabra ni interpretación semántica.
+`ReglasContextuales` divide el texto en cláusulas (frases, párrafos y elementos de lista), las normaliza (Unicode NFD sin diacríticos, minúsculas) y compara frases de palabras completas teniendo en cuenta la negación previa. Solo los riesgos globales G04 y G05 siguen buscando subcadenas normalizadas con `String.contains`.
 
 ### Catálogo de reglas
 
-Cada regla contiene ID, título, descripción, severidad, peso, palabras clave, patrones de riesgo, impacto, acción, referencia legal, texto de cumplimiento sugerido y campo faltante.
+Cada regla contiene ID, título, descripción, severidad, peso, impacto, acción, referencia legal, texto de cumplimiento sugerido y campo faltante; su evaluación está en `ReglasContextuales`.
 
 | Regla | Tema | Severidad base | Peso |
 |---|---|---|---:|
@@ -387,9 +387,11 @@ La puntuación final se limita a 0–100. Se añaden siempre tres recomendacione
 
 El campo `puntuacionRiesgo` es la puntuación del análisis automático: cuanto mayor, mejor. La clasificación depende de la puntuación, no de una condición independiente que impida bajo riesgo cuando exista alguna incidencia ALTA. La cifra resume evidencia textual: no certifica el cumplimiento normativo ni prueba el comportamiento real del sitio web.
 
-Desde la versión de motor 3 (reglas 3) cada resultado incluye `desglosePuntuacion` («desglose-1»): puntos acreditados, penalización por riesgos globales y el reparto de los 100 puntos entre controles no aplicables, no verificables, contextuales evaluados y por palabras clave. El algoritmo y la cifra no cambian. No se calcula una puntuación ajustada porque los puntos de reglas por palabras clave no determinan si aplican; el porcentaje contextual se marca no disponible cuando ningún control contextual es aplicable y verificable. Los resultados anteriores no tienen desglose y no se reconstruye.
+Desde la versión de motor 3 (reglas 3) cada resultado incluye `desglosePuntuacion` («desglose-1»): puntos acreditados, penalización por riesgos globales y el reparto de los 100 puntos entre controles no aplicables, no verificables, contextuales evaluados y por palabras clave. El algoritmo y la cifra no cambian. No se calcula una puntuación ajustada porque los puntos de reglas por palabras clave no determinan si aplican (desde las reglas 5 no quedan reglas por palabras clave, y tampoco se calcula: los puntos no aplicables o no verificables no se redistribuyen); el porcentaje contextual se marca no disponible cuando ningún control contextual es aplicable y verificable. Los resultados anteriores no tienen desglose y no se reconstruye.
 
 Reglas 4 (motor 3): R01, R04, R09, R11 y R16 pasan a evaluarse por contexto, junto con R02, R03, R05, R06, R07, R08, R10, R12 y R15. El reparto queda en 84 puntos contextuales y 16 por palabras clave (R13, R14, R17, R18 y R19); con reglas 3 era 53 / 47, y los desgloses guardados conservan su reparto original. R16 deja de aceptar «cif» dentro de «cifrado» y exige identidad, NIF, domicilio, correo electrónico y, en sociedades mercantiles, datos registrales; solo se exige a un aviso legal y no es verificable en documentos completos o sin tipo. Las transferencias internacionales ausentes no son verificables: nunca se presume que existan. Corpus: `current-engine-v4.json` y `ReglasV4DeltaTest`.
+
+Reglas 5 (motor 3): R13, R14, R17, R18 y R19 pasan a evaluarse por contexto y desaparece la evaluación por palabras clave: los 100 puntos son contextuales y el peso por palabras clave del desglose es 0 (los desgloses guardados conservan su reparto). Ninguno de los cinco tratamientos se presume: si el texto no los menciona quedan NO_VERIFICABLE, y no se exigen en avisos legales, políticas de cookies, condiciones ni accesibilidad. R13 distingue el tratamiento de datos de menores de una mención de niños, acepta una edad mínima de 14 años o más, el consentimiento de padres o tutores o la declaración de no dirigirse a menores, y marca como posible incidencia una edad inferior a 14 años para consentir, el registro sin consentimiento parental o la falta de control de edad. R14 exige, cuando se describe un tratamiento de categorías especiales, la excepción del Art. 9.2 RGPD; las garantías declaradas se citan como declaradas, no como implantadas, y los temas sensibles o las definiciones no son tratamiento. R17 distingue las decisiones automatizadas y la elaboración de perfiles de las referencias a algoritmos o al «tratamiento automatizado» de la antigua LOPD, y pide al menos dos de lógica, consecuencias y garantías. R18 acepta información sobre la notificación de brechas sin exigir publicar el procedimiento interno ni inferir que haya habido una brecha. R19 separa comunicaciones comerciales, mensajes transaccionales y publicidad en el sitio, y pide una base (consentimiento, relación contractual previa o interés legítimo, con una nota sobre el Art. 21 LSSI-CE) y la forma de darse de baja. Que todos los controles se evalúen por contexto no hace exacta la evaluación. Corpus: `current-engine-v5.json` y `ReglasV5DeltaTest`.
 
 ### Resultado y evidencia
 

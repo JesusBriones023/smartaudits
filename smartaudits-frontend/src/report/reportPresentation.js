@@ -30,18 +30,22 @@ export function scoreExplanation(desglose, score) {
     ]) })
   }
   const d = desglose
+  // Rules version 5 evaluates every control by context; only breakdowns stored before it carry keyword weight.
+  const claves = count(d.pesoPalabrasClave)
   const lines = [
     `Puntos acreditados por el texto: ${count(d.puntosAcreditados)} de ${count(d.pesoTotal)}`
       + (count(d.penalizacionRiesgos) > 0 ? `; se restan ${count(d.penalizacionRiesgos)} por riesgos detectados.` : '.'),
     `Controles evaluados por contexto, aplicables y verificables: ${count(d.puntosContextuales)} de ${count(d.pesoContextualEvaluado)} puntos.`,
-    `Controles evaluados por palabras clave, sin determinar si aplican: ${count(d.puntosPalabrasClave)} de ${count(d.pesoPalabrasClave)} puntos.`,
   ]
+  if (claves > 0) lines.push(`Controles evaluados por palabras clave, sin determinar si aplican: ${count(d.puntosPalabrasClave)} de ${claves} puntos.`)
   if (count(d.pesoNoAplicable) > 0) lines.push(`Controles no aplicables a este tipo de documento: ${count(d.pesoNoAplicable)} puntos que no se suman.`)
   if (count(d.pesoNoVerificable) > 0) lines.push(`Controles no verificables con el texto: ${count(d.pesoNoVerificable)} puntos que no se suman.`)
   lines.push(Number.isFinite(d.porcentajeContextual)
     ? `Evidencia en los controles evaluados por contexto: ${d.porcentajeContextual} %.`
     : `Evidencia en los controles evaluados por contexto: no disponible. ${typeof d.motivoSinPorcentaje === 'string' ? d.motivoSinPorcentaje : ''}`.trim())
-  lines.push(`No se calcula una puntuación ajustada: ${count(d.pesoPalabrasClave)} puntos dependen de controles por palabras clave cuya aplicabilidad no se determina.`)
+  lines.push(claves > 0
+    ? `No se calcula una puntuación ajustada: ${claves} puntos dependen de controles por palabras clave cuya aplicabilidad no se determina.`
+    : 'No se calcula una puntuación ajustada: los puntos no aplicables o no verificables no se redistribuyen, y evaluar todos los controles por contexto no hace exacto el análisis.')
   const fuera = count(d.pesoNoAplicable) + count(d.pesoNoVerificable)
   return Object.freeze({
     available: true,

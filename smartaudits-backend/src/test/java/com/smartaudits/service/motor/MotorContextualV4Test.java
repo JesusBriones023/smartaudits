@@ -403,9 +403,9 @@ class MotorContextualV4Test {
                     assertThat(c.metodo()).isEqualTo(MetodoControl.CONTEXTUAL);
                     assertThat(c.estado()).isNotNull();
                 });
-        assertThat(d.controles()).filteredOn(c -> c.metodo() == MetodoControl.PALABRAS_CLAVE)
-                .extracting(c -> c.ruleId()).containsExactly("R13", "R14", "R17", "R18", "R19");
-        assertThat(d.pesoPalabrasClave()).isEqualTo(16);
+        // Rules v5 moved the last keyword controls (R13, R14, R17, R18 and R19) to the contextual evaluation.
+        assertThat(d.controles()).noneMatch(c -> c.metodo() == MetodoControl.PALABRAS_CLAVE);
+        assertThat(d.pesoPalabrasClave()).isZero();
     }
 
     @Test
@@ -425,6 +425,6 @@ class MotorContextualV4Test {
                 .containsOnly(MetodoControl.PALABRAS_CLAVE);
         assertThat(mapper.readTree(mapper.writeValueAsString(leido)).path("desglosePuntuacion"))
                 .isEqualTo(mapper.readTree(v3).path("desglosePuntuacion"));
-        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "4"));
+        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "5"));
     }
 }
