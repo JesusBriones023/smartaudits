@@ -146,7 +146,7 @@ const Dashboard = () => {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {[
             { code: 'ePrivacy', name: 'Directiva 2002/58/CE', ruta: '/normativa/eprivacy', color: 'text-indigo-700 bg-indigo-50 border-indigo-100' },
-            { code: 'Ley 10/2025', name: 'Privacidad y telecomunicaciones', ruta: '/normativa/ley-10-2025', color: 'text-emerald-700 bg-emerald-50 border-emerald-100' },
+            { code: 'Ley 10/2025', name: 'Atención a la clientela', ruta: '/normativa/ley-10-2025', color: 'text-emerald-700 bg-emerald-50 border-emerald-100' },
             { code: 'AEPD Cookies', name: 'Guía de cookies 2025', ruta: '/normativa/aepd-cookies', color: 'text-rose-700 bg-rose-50 border-rose-100' },
           ].map((item) => (
             <div

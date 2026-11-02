@@ -66,17 +66,18 @@ class IncidentRuleProvenanceTest {
     }
 
     @Test
-    void rulesVersionFiveKeepsOutputContractThree() {
-        // Output 3 added the score breakdown; rules 4 added R01, R04, R09, R11 and R16 and rules 5 add R13, R14,
-        // R17, R18 and R19 to the contextual evaluation without changing the output shape. Stored audits keep
-        // their own versions.
-        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "5"));
+    void rulesVersionSixKeepsOutputContractThree() {
+        // Output 3 added the score breakdown; rules 4 and 5 moved the remaining rules to the contextual evaluation and
+        // rules 6 recalibrate R13, R14, R17, R18 and R19 and the legal wording, all without changing the output shape.
+        // Stored audits keep their own versions.
+        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "6"));
     }
 
     @ParameterizedTest
     @CsvSource({
             "R10, instalamos cookies sin su consentimiento",
-            "R13, menores: no verificamos la edad",
+            // Rules v6: «no verificamos la edad» alone is no longer a possible incident.
+            "R13, Los menores de 14 años pueden registrarse sin el consentimiento de sus padres",
             "R19, no puede darse de baja de nuestras comunicaciones"})
     void problematicClauseRetainsItsOriginalRuleId(String ruleId, String text) {
         assertThat(motor.analyze(new EntradaAnalisis(text, "Aviso Legal")).getErrores())

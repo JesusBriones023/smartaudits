@@ -322,7 +322,7 @@ class MotorContextualTest {
         String json = mapper.writeValueAsString(nuevo);
         assertThat(json).contains("\"evaluaciones\"", "\"estado\":\"INSUFICIENTE\"");
         assertThat(mapper.readValue(json, ResultadoAuditoria.class)).isEqualTo(nuevo);
-        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "5"));
-        assertThat(nuevo.getErrores()).allSatisfy(e -> assertThat(e.getVersion()).isEqualTo("5"));
+        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "6"));
+        assertThat(nuevo.getErrores()).allSatisfy(e -> assertThat(e.getVersion()).isEqualTo("6"));
     }
 }

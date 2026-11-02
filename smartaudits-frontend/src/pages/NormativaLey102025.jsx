@@ -16,8 +16,8 @@ const NormativaLey102025 = () => {
       reglas: ['R19'],
     },
     {
-      art: 'Disposición Final 2ª',
-      titulo: 'Modificación de la Ley General de Telecomunicaciones (Ley 11/2022)',
+      art: 'Disposición Final 5ª',
+      titulo: 'Modificación del art. 65.2 de la Ley General de Telecomunicaciones (Ley 11/2022)',
       antes: 'Los operadores de telecomunicaciones tenían obligaciones de atención al cliente dispersas en normativa sectorial.',
       despues: 'Se refuerza la obligación de que los operadores dispongan de un servicio de atención a la clientela gratuito. Si el canal de reclamaciones es telefónico, deben informar del derecho del consumidor a solicitar un justificante de la reclamación en soporte duradero.',
       impacto: 'Los operadores de telecomunicaciones tienen nuevas obligaciones de trazabilidad de reclamaciones y grabación de llamadas según desarrollo reglamentario.',
@@ -51,12 +51,12 @@ const NormativaLey102025 = () => {
     },
     {
       aspecto: 'Listas de exclusión publicitaria',
-      desc: 'La modificación del Art. 23.1 LOPDGDD refuerza la Lista Robinson y los sistemas de exclusión sectoriales. Las empresas deben consultar estas listas antes de realizar comunicaciones comerciales y tratar esos datos para cumplir las oposiciones recibidas.',
+      desc: 'La modificación del Art. 23.1 LOPDGDD refuerza la Lista Robinson y los sistemas de exclusión sectoriales. Quien pretenda realizar mercadotecnia directa debe consultarlos previamente (Art. 23.4 LOPDGDD, no modificado) y puede tratar esos datos para cumplir las oposiciones recibidas.',
       accion: 'Revisar el proceso de envío de comunicaciones comerciales e integrar la consulta a listas de exclusión.',
     },
     {
       aspecto: 'Contratos por teléfono nulos sin consentimiento',
-      desc: 'La Ley declara nulos los contratos cerrados en llamadas telefónicas no consentidas. Los operadores de telecomunicaciones deben bloquear llamadas de empresas que no usen los códigos identificativos previstos.',
+      desc: 'Al modificar el Art. 62.1 TRLGDCU, la Ley declara nulos los contratos celebrados por teléfono cuando se incumpla la normativa sobre llamadas no solicitadas. Los operadores de telecomunicaciones deben bloquear llamadas de empresas que no usen los códigos identificativos previstos.',
       accion: 'Asegurarse de que todos los procesos de contratación telefónica cuentan con consentimiento documentado y verificable.',
     },
   ]
@@ -89,7 +89,7 @@ const NormativaLey102025 = () => {
               <h1 className="text-3xl font-bold text-white mb-2 leading-tight">Ley 10/2025 de Servicios<br/>de Atención a la Clientela</h1>
               <p className="text-white/70 text-sm leading-relaxed max-w-xl">
                 Ley 10/2025, de 26 de diciembre, por la que se regulan los servicios de atención a la clientela.
-                Publicada en el BOE el 27 de diciembre de 2025. Modifica la LOPDGDD y la Ley General de Telecomunicaciones.
+                Publicada en el BOE el 27 de diciembre de 2025. No es una ley general de privacidad: regula la atención a la clientela de determinadas empresas y, entre otras normas, modifica el art. 23.1 de la LOPDGDD y el art. 65.2 de la Ley General de Telecomunicaciones.
               </p>
               <p className="text-white/50 text-xs mt-2">Período de adaptación: 12 meses desde el 28/12/2025 · Plenamente exigible desde diciembre 2026</p>
             </div>

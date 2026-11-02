@@ -46,11 +46,11 @@ class DesglosePuntuacionTest {
     void theBreakdownAlwaysAddsUpToTheUnchangedScore() throws Exception {
         List<String[]> textos = new ArrayList<>(List.of(new String[]{AVISO, "Aviso Legal"},
                 new String[]{COOKIES, "Política de Cookies"}, new String[]{TERMINOS, "Términos y Condiciones"}));
-        try (InputStream input = getClass().getResourceAsStream("/motor/current-engine-v5.json")) {
+        try (InputStream input = getClass().getResourceAsStream("/motor/current-engine-v6.json")) {
             for (JsonNode c : new ObjectMapper().readTree(input).path("cases")) {
                 if (!c.path("texto").asText().isBlank()) {
                     textos.add(new String[]{c.path("texto").asText(), c.path("tipoDocumento").asText()});
-                    // The breakdown reports the very score the corpus pins for rules v5.
+                    // The breakdown reports the very score the corpus pins for rules v6.
                     assertThat(motor.analyze(new EntradaAnalisis(c.path("texto").asText(), c.path("tipoDocumento").asText()))
                             .getPuntuacionRiesgo()).as(c.path("id").asText()).isEqualTo(c.path("expectedScore").asInt());
                 }
@@ -132,15 +132,16 @@ class DesglosePuntuacionTest {
 
     @Test
     void globalRiskPenaltiesAreShownSeparately() throws Exception {
-        try (InputStream input = getClass().getResourceAsStream("/motor/current-engine-v5.json")) {
+        try (InputStream input = getClass().getResourceAsStream("/motor/current-engine-v6.json")) {
             for (JsonNode c : new ObjectMapper().readTree(input).path("cases")) {
                 if (c.path("id").asText().equals("M13")) {
                     var d = desglose(c.path("texto").asText(), c.path("tipoDocumento").asText());
-                    // Five global risks at 2 points each on top of 81 accredited points (rules v4: 85, before R14
-                    // and R17 became INSUFICIENTE; rules v3: 89, before R16 stopped accepting «NIF de prueba»).
+                    // Five global risks at 2 points each on top of 83 accredited points (rules v5: 81, when R17 read
+                    // human intervention as missing logic; rules v4: 85; rules v3: 89, before R16 stopped accepting
+                    // «NIF de prueba»).
                     assertThat(d.penalizacionRiesgos()).isEqualTo(10);
-                    assertThat(d.puntosAcreditados()).isEqualTo(81);
-                    assertThat(d.puntuacion()).isEqualTo(71);
+                    assertThat(d.puntosAcreditados()).isEqualTo(83);
+                    assertThat(d.puntuacion()).isEqualTo(73);
                 }
             }
         }
@@ -156,6 +157,6 @@ class DesglosePuntuacionTest {
         assertThat(motor.analyze(new EntradaAnalisis("  ", null)).getDesglosePuntuacion()).isNull();
         var nuevo = motor.analyze(new EntradaAnalisis(AVISO, "Aviso Legal"));
         assertThat(mapper.readValue(mapper.writeValueAsString(nuevo), ResultadoAuditoria.class)).isEqualTo(nuevo);
-        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "5"));
+        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "6"));
     }
 }

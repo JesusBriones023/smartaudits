@@ -126,10 +126,12 @@ class MotorContextualV5Test {
 
     @Test
     void processingMinorsDataWithoutConditionsIsInsufficient() {
-        insuficiente("También tratamos datos de menores.", "R13", 1,
+        // Rules v6: only consent-based processing is held to the age of Art. 7 LOPDGDD («También tratamos datos de
+        // menores» is now NO_VERIFICABLE, see MotorContextualV6Test).
+        insuficiente("Tratamos datos de menores con su consentimiento.", "R13", 1,
                 "Tratamiento de datos de menores descrito sin edad mínima ni consentimiento parental",
-                "Se describe el tratamiento de datos de menores sin indicar la edad mínima ni el consentimiento de sus padres "
-                        + "o tutores.");
+                "El texto basa en el consentimiento el tratamiento de datos de menores sin indicar la edad mínima ni el "
+                        + "consentimiento de sus padres o tutores.");
     }
 
     @Test
@@ -144,13 +146,12 @@ class MotorContextualV5Test {
     @Test
     void consentBelowFourteenOrWithoutParentsIsAPossibleIncident() {
         problematica("Los mayores de 13 años pueden registrarse y prestar su consentimiento.", "R13",
-                "El texto fija en 13 años la edad a partir de la cual se admite el registro o el consentimiento del menor; "
-                        + "en España el menor solo puede consentir por sí mismo desde los 14 años (Art. 7 LOPDGDD).");
+                // Rules v6: the detail now uses the wording of the law («mayor de catorce años»).
+                "El texto admite el consentimiento propio de menores desde los 13 años; el Art. 7 LOPDGDD solo lo admite "
+                        + "cuando el menor es mayor de 14 años.");
         problematica("Los menores de 14 años pueden registrarse sin el consentimiento de sus padres.", "R13",
                 "lo que puede ser contrario al Art. 8 RGPD y al Art. 7 LOPDGDD si el tratamiento se basa en su consentimiento.");
-        // v4: the risk pattern earned half the weight; the clause offers no condition at all.
-        problematica("Menores: no verificamos la edad de los usuarios.", "R13",
-                "el Art. 8.2 RGPD exige esfuerzos razonables para verificar el consentimiento de sus padres o tutores.");
+        // Rules v6: «Menores: no verificamos la edad de los usuarios» alone is INSUFICIENTE (MotorContextualV6Test).
     }
 
     @Test
@@ -232,14 +233,14 @@ class MotorContextualV5Test {
                         + "Puede oponerse en cualquier momento.", "R17", 4,
                 "Elaboramos perfiles comerciales a partir de su historial de compras para enviarle ofertas personalizadas. "
                         + "Puede oponerse en cualquier momento.",
-                "Se informa de decisiones automatizadas o perfilado: lógica aplicada, consecuencias, garantías del interesado.");
+                "Se informa de la elaboración de perfiles y de su finalidad.");
         // «sin intervención humana» describes the decision; it is no safeguard.
         suficiente("Un sistema automático decide, sin intervención humana, si se concede el préstamo según su puntuación "
                         + "crediticia, lo que puede suponer la denegación.", "R17", 4,
                 "Un sistema automático decide, sin intervención humana, si se concede el préstamo según su puntuación "
                         + "crediticia, lo que puede suponer la denegación.",
-                "Se informa de decisiones automatizadas o perfilado: lógica aplicada, consecuencias; falta: garantías del "
-                        + "interesado.");
+                "Se informa de decisiones automatizadas con efectos significativos, de su lógica y de sus consecuencias "
+                        + "(Arts. 13.2.f y 22 RGPD). No se describen las garantías del Art. 22.3 RGPD");
     }
 
     @ParameterizedTest
@@ -252,10 +253,10 @@ class MotorContextualV5Test {
 
     @ParameterizedTest
     @CsvSource(delimiter = '|', textBlock = """
-            Utilizamos decisiones automatizadas para evaluar las solicitudes.  | Se informa de: nada concreto; falta: lógica aplicada, consecuencias, garantías del interesado.
-            Las decisiones automatizadas están sujetas a intervención humana.  | Se informa de: garantías del interesado; falta: lógica aplicada, consecuencias.
+            Utilizamos decisiones automatizadas para evaluar las solicitudes.  | sin indicar si producen efectos jurídicos o significativos (Art. 22 RGPD) ni la lógica aplicada ni sus consecuencias.
             """)
     void aPartialDisclosureIsInsufficient(String texto, String detalle) {
+        // Rules v6: «sujetas a intervención humana» states human involvement and is SUFICIENTE (MotorContextualV6Test).
         insuficiente(texto, "R17", 2, "Decisiones automatizadas o perfilado informados de forma incompleta", detalle);
     }
 
@@ -263,8 +264,8 @@ class MotorContextualV5Test {
     void denyingTheRightToContestIsAPossibleIncident() {
         // v4: neither «automáticamente» nor «impugnar» was a keyword.
         problematica("Las solicitudes de financiación se rechazan automáticamente y no podrá impugnar la decisión.", "R17",
-                "El texto impide oponerse, impugnar o pedir la revisión de decisiones automatizadas, lo que puede ser "
-                        + "contrario al Art. 22.3 RGPD.");
+                "El texto impide impugnar o pedir la revisión de decisiones automatizadas con efectos significativos, lo "
+                        + "que puede ser contrario al Art. 22.3 RGPD.");
     }
 
     // ---- R18 Brechas de seguridad -----------------------------------------------------------------
@@ -273,9 +274,9 @@ class MotorContextualV5Test {
     void notificationInformationIsSufficientWithoutProvingIt() {
         String texto = "Si se produce una brecha de seguridad que afecte a sus datos, la notificaremos a la AEPD en un plazo "
                 + "de 72 horas y le informaremos cuando suponga un alto riesgo.";
-        suficiente(texto, "R18", 3, texto, "Se informa de la notificación de brechas de seguridad (destinatarios: autoridad "
-                + "de control, personas afectadas), con un plazo. El texto no acredita que exista un procedimiento ni que se "
-                + "aplique.");
+        suficiente(texto, "R18", 3, texto, "Se informa de la notificación a la autoridad de control en 72 horas y la "
+                + "comunicación a las personas afectadas cuando entrañe un alto riesgo. El texto no acredita que exista un "
+                + "procedimiento ni que se aplique.");
         // Not notifying breaches unlikely to be a risk is what Art. 33.1 RGPD allows.
         assertThat(evaluacion("No notificaremos las brechas de seguridad que sea improbable que supongan un riesgo para sus "
                 + "derechos; las demás se comunicarán a la AEPD.", PRIVACIDAD, "R18").estado()).isEqualTo(SUFICIENTE);
@@ -302,8 +303,8 @@ class MotorContextualV5Test {
     @Test
     void refusingToNotifyIsAPossibleIncident() {
         problematica("No notificaremos a los usuarios las brechas de seguridad.", "R18",
-                "El texto declara que no se notificarán las brechas de seguridad, sin limitarlo a los casos en que los "
-                        + "Arts. 33.1 y 34.3 RGPD lo permiten.");
+                "El texto declara que no se comunicarán las brechas a las personas afectadas; el Art. 34 RGPD obliga a "
+                        + "hacerlo cuando entrañen un alto riesgo, salvo las excepciones de su apartado 3.");
     }
 
     // ---- R19 Comunicaciones comerciales ----------------------------------------------------------------
@@ -326,13 +327,12 @@ class MotorContextualV5Test {
     }
 
     @Test
-    void legitimateInterestByEmailCarriesAnLssiNote() {
+    void legitimateInterestByEmailIsNotEnough() {
+        // Rules v6: it was SUFICIENTE with a note; legitimate interest does not replace Art. 21 LSSI-CE.
         var e = evaluacion("Le enviaremos ofertas por correo electrónico sobre la base de nuestro interés legítimo, y puede "
                 + "darse de baja en cualquier momento.", PRIVACIDAD, "R19");
-        assertThat(e.estado()).isEqualTo(SUFICIENTE);
-        assertThat(e.detalle()).contains("Se basan en: interés legítimo. Por medios electrónicos, el Art. 21 LSSI-CE exige "
-                + "consentimiento previo salvo relación contractual previa y productos o servicios similares; el texto no "
-                + "permite saber cuál se aplica.");
+        assertThat(e.estado()).isEqualTo(INSUFICIENTE);
+        assertThat(e.detalle()).startsWith("Se invoca el interés legítimo para las comunicaciones comerciales.");
     }
 
     @ParameterizedTest
@@ -410,7 +410,7 @@ class MotorContextualV5Test {
         // R11 (AEPD without the right to complain) 2 and R12 (consent without how it is given or withdrawn) 3.
         assertThat(d.puntuacion()).isEqualTo(21);
         // Half of an odd weight is rounded down, as for every rule since rules v1.
-        assertThat(puntos("También tratamos datos de menores.", PRIVACIDAD, "R13")).isEqualTo(1);
+        assertThat(puntos("Tratamos datos de menores con su consentimiento.", PRIVACIDAD, "R13")).isEqualTo(1);
         assertThat(puntos("Utilizamos decisiones automatizadas para evaluar las solicitudes.", PRIVACIDAD, "R17")).isEqualTo(2);
     }
 
@@ -451,6 +451,6 @@ class MotorContextualV5Test {
                 .containsExactly(MetodoControl.PALABRAS_CLAVE, MetodoControl.CONTEXTUAL);
         assertThat(mapper.readTree(mapper.writeValueAsString(leido)).path("desglosePuntuacion"))
                 .isEqualTo(mapper.readTree(v4).path("desglosePuntuacion"));
-        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "5"));
+        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "6"));
     }
 }

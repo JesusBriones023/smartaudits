@@ -36,8 +36,8 @@ const NormativaRGPD = () => {
   ]
 
   const sanciones = [
-    { nivel: 'Muy graves', importe: '20M€ o 4%', color: 'red', infracciones: ['Tratar datos sin base legal (Art. 6)', 'Vulnerar los principios del Art. 5', 'Infringir los derechos ARSULIPO (Arts. 15-22)', 'Transferencias internacionales sin garantías', 'Condiciones de consentimiento inválidas', 'Tratar categorías especiales sin excepción válida'] },
-    { nivel: 'Graves', importe: '10M€ o 2%', color: 'amber', infracciones: ['No mantener registro de actividades (Art. 30)', 'No cooperar con la autoridad de control', 'No notificar brechas en plazo (Arts. 33-34)', 'No designar DPO cuando es obligatorio', 'No realizar evaluación de impacto cuando proceda', 'No aplicar medidas de seguridad adecuadas'] },
+    { nivel: 'del Art. 83.5', importe: 'Hasta 20M€ o 4 % (máximo)', color: 'red', infracciones: ['Tratar datos sin base legal (Art. 6)', 'Vulnerar los principios del Art. 5', 'Infringir los derechos ARSULIPO (Arts. 15-22)', 'Transferencias internacionales sin garantías', 'Condiciones de consentimiento inválidas', 'Tratar categorías especiales sin excepción válida'] },
+    { nivel: 'del Art. 83.4', importe: 'Hasta 10M€ o 2 % (máximo)', color: 'amber', infracciones: ['No mantener registro de actividades (Art. 30)', 'No cooperar con la autoridad de control', 'No notificar brechas en plazo (Arts. 33-34)', 'No designar DPO cuando es obligatorio', 'No realizar evaluación de impacto cuando proceda', 'No aplicar medidas de seguridad adecuadas'] },
   ]
 
   const casosReales = [
@@ -225,7 +225,7 @@ const NormativaRGPD = () => {
 
           {tabActiva === 'sanciones' && (
             <div className="space-y-4">
-              <p className="text-sm text-slate-500 mb-4">El Art. 83 RGPD establece un sistema sancionador de dos niveles. Las multas se calculan sobre el volumen de negocio <strong>global</strong> anual, aplicándose el importe mayor entre la cuantía fija y el porcentaje.</p>
+              <p className="text-sm text-slate-500 mb-4">El Art. 83 RGPD establece un sistema sancionador de dos niveles. Son cuantías <strong>máximas</strong>: cada multa se fija según las circunstancias del caso (Art. 83.2). Para empresas se toma el volumen de negocio <strong>global</strong> anual, aplicándose el importe mayor entre la cuantía fija y el porcentaje.</p>
               {sanciones.map((s) => (
                 <div key={s.nivel} className={`p-5 rounded-xl border ${s.color === 'red' ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
                   <div className="flex items-center justify-between mb-4">

@@ -19,11 +19,13 @@ import java.util.stream.Collectors;
  * cookies, etc.) aplicando un conjunto de reglas basadas en:
  *
  *   - RGPD        — Reglamento (UE) 2016/679
- *   - LOPDGDD     — Ley Orgánica 3/2018 (versión consolidada diciembre 2025)
+ *   - LOPDGDD     — Ley Orgánica 3/2018, de 5 de diciembre (texto consolidado; su art. 23.1 fue modificado por
+ *                   la disposición final cuarta de la Ley 10/2025)
  *   - LSSI-CE     — Ley 34/2002 de Servicios de la Sociedad de la Información
  *   - Directiva ePrivacy 2002/58/CE
- *   - Ley 10/2025 — Modificaciones en privacidad y telecomunicaciones
- *   - Guía de cookies AEPD 2023/2025
+ *   - Ley 10/2025 — de servicios de atención a la clientela; no es una norma general de privacidad: solo se
+ *                   cita por la modificación del art. 23.1 LOPDGDD (sistemas de exclusión publicitaria, R19)
+ *   - Guía sobre el uso de las cookies de la AEPD
  *
  * Sistema de puntuación porcentual (Opción B):
  *   - Cada regla tiene un PESO proporcional a su gravedad.
@@ -33,7 +35,12 @@ import java.util.stream.Collectors;
  *   - No cumplirla no suma nada.
  *   - Resultado final = suma de puntos obtenidos (0-100). Nunca negativo.
  *
- * Reglas versión 5: las 19 reglas (y los riesgos G01, G02 y G03) se evalúan por cláusulas, con palabras
+ * Reglas versión 6: calibra R13 (la edad del Art. 7 LOPDGDD solo rige el tratamiento basado en el consentimiento),
+ * R14 (cada tratamiento de categorías especiales necesita su propia excepción), R17 (solo las decisiones únicamente
+ * automatizadas con efectos significativos exigen lógica y consecuencias), R18 (notificación a la autoridad frente a
+ * comunicación a los afectados) y R19 (el interés legítimo no sustituye el Art. 21 LSSI-CE), y revisa la redacción
+ * jurídica de impactos, descripciones y referencias. Desde la versión 5 las 19 reglas (y los riesgos G01, G02 y G03)
+ * se evalúan por cláusulas, con palabras
  * completas y negaciones ({@link ReglasContextuales}); la versión 4 dejaba R13, R14, R17, R18 y R19 (16 puntos)
  * como palabras clave por subcadena, la versión 3 cubría R02, R03, R05, R06, R07, R08, R10, R12, R15, G01, G02 y
  * G03, y la versión 2 solo R03, R05, R06, R07, R08, G01 y G02. Que todas se evalúen por contexto no hace exacta la
@@ -59,7 +66,7 @@ import java.util.stream.Collectors;
 public class MotorAnalisisLegal implements AnalizadorLegal {
 
     private static final String MOTOR = "LEGAL_TEXT";
-    private static final VersionAnalizador VERSION = new VersionAnalizador("3", "5");
+    private static final VersionAnalizador VERSION = new VersionAnalizador("3", "6");
 
     @Override
     public VersionAnalizador version() {
@@ -114,7 +121,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Identidad del responsable del tratamiento no especificada",
             "No se identifica el nombre, razón social o datos de contacto del responsable del tratamiento de datos personales.",
             "ALTA", 8,
-            "Incumplimiento del Art. 13.1.a y 14.1.a RGPD. El interesado no puede identificar quién trata sus datos. Sanciones de hasta 20 millones € o 4% del volumen de negocio anual.",
+            "Los Arts. 13.1.a y 14.1.a RGPD exigen informar de la identidad y los datos de contacto del responsable. Sin ellos el interesado no puede saber quién trata sus datos.",
             "Incluir el nombre completo o razón social del responsable, NIF/CIF y dirección postal completa al inicio del documento.",
             "RGPD Art. 13.1.a — Identidad y datos de contacto del responsable",
             "\"Responsable del tratamiento: [Nombre o Razón Social], con NIF/CIF [XXX], domicilio en [Dirección completa, CP, Ciudad].\"",
@@ -140,7 +147,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Información sobre el Delegado de Protección de Datos (DPO) ausente",
             "No se menciona si se ha designado Delegado de Protección de Datos ni sus datos de contacto.",
             "MEDIA", 4,
-            "Incumplimiento del Art. 13.1.b RGPD. Si el responsable está obligado a designar DPO (Art. 37 RGPD), su ausencia es una infracción grave.",
+            "Si se ha designado un delegado de protección de datos, el Art. 13.1.b RGPD exige facilitar sus datos de contacto. Designarlo solo es obligatorio en los supuestos del Art. 37 RGPD y del Art. 34 LOPDGDD, que el texto no permite comprobar.",
             "Indicar si se ha designado DPO y sus datos de contacto. Si no aplica, indicarlo expresamente.",
             "RGPD Art. 13.1.b — Datos de contacto del DPO",
             "\"Delegado de Protección de Datos: [nombre o departamento]. Contacto: [dpo@empresa.com]. / El responsable no está obligado a designar DPO conforme al Art. 37 RGPD.\"",
@@ -153,7 +160,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Finalidad del tratamiento de datos no especificada",
             "No se describen de forma clara las finalidades para las que se tratan los datos personales.",
             "ALTA", 8,
-            "Incumplimiento del Art. 13.1.c RGPD. Sin finalidad declarada, el tratamiento carece de transparencia y puede considerarse ilícito.",
+            "El Art. 13.1.c RGPD exige informar de los fines del tratamiento. Sin ellos el interesado no puede saber para qué se usan sus datos; el texto no permite valorar si el tratamiento es lícito.",
             "Describir todas las finalidades de tratamiento de forma clara, concreta y diferenciada.",
             "RGPD Art. 13.1.c — Fines del tratamiento",
             "\"Sus datos personales serán tratados para: (1) Gestión de la relación contractual. (2) Envío de comunicaciones comerciales si ha prestado consentimiento. (3) Cumplimiento de obligaciones legales.\"",
@@ -179,7 +186,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Derechos del interesado (ARSULIPO) no informados",
             "No se informa al usuario sobre sus derechos de Acceso, Rectificación, Supresión, Limitación, Portabilidad y Oposición.",
             "ALTA", 8,
-            "Incumplimiento de los Arts. 15-22 y 13.2.b RGPD. El usuario desconoce sus derechos fundamentales sobre sus propios datos.",
+            "El Art. 13.2.b RGPD exige informar de los derechos de acceso, rectificación, supresión, limitación, oposición y portabilidad (Arts. 15 a 21). Sin esa información el interesado puede no saber cómo ejercerlos.",
             "Incluir sección dedicada a los derechos ARSULIPO con descripción de cada derecho y procedimiento claro para ejercerlos.",
             "RGPD Arts. 15-22 — Derechos del interesado / Art. 13.2.b",
             "\"Tiene derecho a: Acceder, Rectificar, Suprimir, Limitar, Oponerse y Portar sus datos. Para ejercerlos, dirígase a [email/dirección]. Responderemos en el plazo máximo de un mes.\"",
@@ -192,7 +199,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Plazo de conservación de datos no especificado",
             "No se indica durante cuánto tiempo se conservarán los datos ni los criterios para determinarlo.",
             "MEDIA", 5,
-            "Incumplimiento del principio de limitación del plazo de conservación (Art. 5.1.e RGPD) y del deber de información (Art. 13.2.a RGPD).",
+            "El Art. 13.2.a RGPD exige informar del plazo de conservación o de los criterios para determinarlo. Que el texto no lo indique no prueba que los datos se conserven más de lo necesario (Art. 5.1.e RGPD).",
             "Especificar plazos concretos de conservación para cada finalidad o indicar los criterios legales que los determinan.",
             "RGPD Art. 5.1.e — Limitación del plazo de conservación / Art. 13.2.a",
             "\"Sus datos se conservarán durante [X años] y, transcurrido ese plazo, serán bloqueados y posteriormente suprimidos conforme a los plazos legales aplicables.\"",
@@ -205,7 +212,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Destinatarios o cesiones de datos no informadas",
             "No se informa sobre si los datos serán comunicados a terceros ni quiénes son esos destinatarios.",
             "MEDIA", 5,
-            "Incumplimiento del Art. 13.1.e RGPD. El usuario tiene derecho a saber si sus datos llegarán a terceros.",
+            "El Art. 13.1.e RGPD exige informar, en su caso, de los destinatarios o categorías de destinatarios. Sin esa información el interesado no puede saber si sus datos llegan a terceros.",
             "Listar los destinatarios o categorías de destinatarios. Si no se ceden datos, indicarlo expresamente.",
             "RGPD Art. 13.1.e — Destinatarios o categorías de destinatarios",
             "\"Sus datos no serán cedidos a terceros, salvo obligación legal. Podrán acceder a ellos como encargados del tratamiento: [proveedor de hosting], [plataforma de pago], bajo las garantías del Art. 28 RGPD.\"",
@@ -218,22 +225,22 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Transferencias internacionales de datos no declaradas",
             "No se informa si se realizan transferencias fuera del Espacio Económico Europeo (EEE) ni las garantías aplicables.",
             "MEDIA", 4,
-            "Incumplimiento del Art. 13.1.f y Arts. 44-46 RGPD. Si existen transferencias sin garantías, el tratamiento puede ser ilícito.",
+            "Si se transfieren datos a un tercer país, el Art. 13.1.f RGPD exige informar de ello y de las garantías aplicables (Arts. 44 a 49 RGPD). El texto no permite saber si existen transferencias ni comprobar las garantías.",
             "Indicar si se realizan transferencias internacionales, los países de destino y el mecanismo de garantía aplicable.",
             "RGPD Arts. 44-46 — Transferencias internacionales / Art. 13.1.f",
             "\"Sus datos no se transferirán fuera del EEE. / Sus datos podrán ser transferidos a [país] mediante cláusulas contractuales tipo aprobadas por la Comisión Europea.\"",
             "Transferencias internacionales de datos y garantías aplicables"
         ));
 
-        // R10 — Política de cookies actualizada AEPD 2025 (ALTA, peso 7)
+        // R10 — Política de cookies, Art. 22.2 LSSI-CE y guía de la AEPD (ALTA, peso 7)
         REGLAS.add(new Regla(
             "R10",
             "Política de cookies ausente o incompleta",
-            "No se proporciona información completa sobre cookies: tipos, finalidades, duración y gestión del consentimiento con botones de aceptar/rechazar al mismo nivel (AEPD 2025).",
+            "No se proporciona información completa sobre cookies: tipos, finalidades, duración y gestión del consentimiento con botones de aceptar/rechazar al mismo nivel (Guía sobre el uso de las cookies de la AEPD).",
             "ALTA", 7,
             "Posible incumplimiento del Art. 22.2 LSSI-CE: el usuario debe recibir información clara y completa sobre las cookies y sus finalidades. La Guía sobre el uso de las cookies de la AEPD indica que rechazar debe ser tan sencillo como aceptar.",
             "Implementar política de cookies completa con listado, mecanismo de consentimiento previo y panel de preferencias con botón de rechazo igual de visible que el de aceptación.",
-            "LSSI-CE Art. 22.2 — Cookies / Directiva ePrivacy / Guía AEPD 2025",
+            "LSSI-CE Art. 22.2 — Cookies / Directiva ePrivacy / Guía sobre el uso de las cookies de la AEPD",
             "\"Utilizamos cookies propias y de terceros. Cookies técnicas (exentas): [listado]. Cookies analíticas y publicitarias: requieren consentimiento previo. [Botón Aceptar] [Botón Rechazar] [Configurar].\"",
             "Política de cookies completa con tipología, finalidades y botones de gestión equivalentes"
         ));
@@ -244,7 +251,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Derecho a reclamar ante la autoridad de control (AEPD) no informado",
             "No se informa al interesado sobre su derecho a presentar reclamación ante la Agencia Española de Protección de Datos.",
             "MEDIA", 4,
-            "Incumplimiento del Art. 13.2.d RGPD. El usuario tiene derecho a conocer que puede recurrir a la autoridad supervisora.",
+            "El Art. 13.2.d RGPD exige informar del derecho a presentar una reclamación ante una autoridad de control (en España, la AEPD o la autoridad autonómica competente).",
             "Añadir información sobre el derecho a presentar reclamación ante la AEPD (www.aepd.es).",
             "RGPD Art. 13.2.d — Derecho a reclamar ante la autoridad de control",
             "\"Tiene derecho a presentar una reclamación ante la Agencia Española de Protección de Datos (www.aepd.es) si considera que el tratamiento de sus datos no es adecuado.\"",
@@ -270,8 +277,8 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Tratamiento de datos de menores no regulado",
             "No se indica si se tratan datos de menores ni, en su caso, la edad mínima y el consentimiento de quien ejerce la patria potestad o tutela.",
             "BAJA", 3,
-            "Si el tratamiento de datos de un menor se basa en su consentimiento, el Art. 7 LOPDGDD solo admite el del propio menor a partir de los 14 años; por debajo se requiere el de quien ejerce la patria potestad o tutela (Art. 8 RGPD). El texto no permite saber si se tratan datos de menores.",
-            "Si el servicio puede tratar datos de menores, indicar la edad mínima (14 años en España para consentir por sí mismos) y cómo se recaba y comprueba el consentimiento de sus representantes legales; si no se dirige a menores, indicarlo.",
+            "Si el tratamiento de datos de un menor se basa en su consentimiento, el Art. 7 LOPDGDD solo admite el del propio menor cuando es mayor de 14 años; por debajo se requiere el de quien ejerce la patria potestad o tutela. Otras bases jurídicas no dependen de esa edad. El texto no permite saber si se tratan datos de menores.",
+            "Si el servicio puede tratar datos de menores, indicar si algún tratamiento se basa en su consentimiento y, en ese caso, la edad mínima (en España, mayores de 14 años para consentir por sí mismos) y cómo se recaba y comprueba el consentimiento de sus representantes legales; si no se dirige a menores, indicarlo.",
             "RGPD Art. 8 — Consentimiento de menores / LOPDGDD Art. 7",
             "\"Nuestros servicios están dirigidos a mayores de 14 años. Si tiene menos de 14 años, necesita el consentimiento de sus padres o tutores para utilizar este servicio.\"",
             "Tratamiento de datos de menores de 14 años y consentimiento parental"
@@ -307,11 +314,11 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
         REGLAS.add(new Regla(
             "R16",
             "Aviso legal con información LSSI-CE ausente o incompleto",
-            "No se incluye la información obligatoria del Art. 10 LSSI-CE: razón social, NIF, domicilio, datos de inscripción registral y datos de contacto.",
+            "No se incluye la información general del Art. 10.1 LSSI-CE: nombre o denominación social, domicilio, correo electrónico, NIF y, en su caso, datos de inscripción registral.",
             "ALTA", 7,
-            "Incumplimiento del Art. 10 LSSI-CE. Obligatorio para toda web que preste servicios de la sociedad de la información. Infracción leve-grave: hasta 150.000€.",
-            "Incluir sección de Aviso Legal con: razón social, NIF/CIF, domicilio social, datos de inscripción registral, email de contacto y número de teléfono.",
-            "LSSI-CE Art. 10 — Información general obligatoria del prestador de servicios",
+            "El Art. 10.1 LSSI-CE exige a los prestadores de servicios de la sociedad de la información dar acceso permanente, fácil, directo y gratuito a esos datos. El texto no permite saber si el titular presta esos servicios.",
+            "Incluir un aviso legal con nombre o razón social, NIF, domicilio, correo electrónico y otro dato de contacto directo y, si la entidad está inscrita en el Registro Mercantil u otro registro público, sus datos de inscripción.",
+            "LSSI-CE Art. 10.1 — Información general del prestador de servicios de la sociedad de la información",
             "\"En cumplimiento del Art. 10 de la Ley 34/2002, LSSI-CE: Razón social: [Nombre S.L.]. NIF: [BXXXXXXXX]. Domicilio: [dirección]. Inscrita en el Registro Mercantil de [ciudad], Tomo [X], Folio [X]. Email: [contacto@empresa.com].\"",
             "Aviso legal con datos identificativos completos del prestador (LSSI-CE Art. 10)"
         ));
@@ -335,7 +342,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Procedimiento ante brechas de seguridad no mencionado",
             "No se informa de cómo se notifican las brechas de seguridad de los datos personales a la autoridad de control y a las personas afectadas.",
             "MEDIA", 3,
-            "Publicar el procedimiento interno no es una obligación de información. Si se produce una brecha, los Arts. 33 y 34 RGPD obligan a notificarla a la autoridad de control y, cuando suponga un alto riesgo, a comunicarla a los afectados; el texto no permite comprobarlo.",
+            "Publicar el procedimiento interno no es una obligación de información. Si se produce una brecha, el Art. 33 RGPD obliga a notificarla a la autoridad de control en 72 horas, salvo que sea improbable que entrañe un riesgo, y el Art. 34 a comunicarla sin dilación indebida a los afectados cuando entrañe un alto riesgo; el texto no permite comprobarlo.",
             "Si se quiere informar de ello, indicar que las brechas se notifican a la AEPD en 72 horas y a los afectados cuando supongan un alto riesgo (Arts. 33 y 34 RGPD).",
             "RGPD Arts. 33-34 — Notificación de brechas de seguridad",
             "\"Disponemos de procedimientos para detectar, analizar y notificar posibles brechas de seguridad a la AEPD en el plazo de 72 horas y a los interesados afectados cuando exista alto riesgo (Art. 34 RGPD).\"",
@@ -350,7 +357,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "MEDIA", 3,
             "Si se envían comunicaciones comerciales por medios electrónicos, el Art. 21 LSSI-CE exige consentimiento previo, salvo relación contractual previa y productos o servicios similares, y una forma sencilla y gratuita de oponerse (Art. 22 LSSI-CE y Art. 21 RGPD). El texto no permite saber si se envían.",
             "Informar sobre el envío de comunicaciones comerciales, la base que lo ampara y el mecanismo sencillo para oponerse o darse de baja.",
-            "LSSI-CE Arts. 21 y 22 — Comunicaciones comerciales / RGPD Art. 21 / LOPDGDD Art. 23",
+            "LSSI-CE Arts. 21 y 22 — Comunicaciones comerciales / RGPD Art. 21 / LOPDGDD Art. 23 (apartado 1 modificado por la Ley 10/2025, de servicios de atención a la clientela)",
             "\"Podemos enviarte comunicaciones comerciales si has dado tu consentimiento. Puedes darte de baja en cualquier momento haciendo clic en el enlace 'Cancelar suscripción' de cualquier email o escribiendo a [email].\"",
             "Información sobre comunicaciones comerciales y derecho de oposición/baja"
         ));
@@ -373,27 +380,27 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
     private static final List<PatronRiesgo> PATRONES_RIESGO_GLOBALES = List.of(
         new PatronRiesgo("G01",
             "Cláusula abusiva de cesión de datos",
-            "Se detecta lenguaje que indica cesión o venta de datos sin base legal adecuada.",
+            "El texto declara la cesión o la venta de datos sin indicar su base jurídica ni garantías.",
             "ALTA",
             List.of("cederemos sus datos", "venderemos sus datos", "vendemos sus datos", "transferimos sus datos a socios publicitarios sin restriccion")),
         new PatronRiesgo("G02",
             "Conservación de datos de forma indefinida",
-            "Se detecta referencia a conservación de datos sin límite temporal, contraria al principio de limitación del plazo de conservación (Art. 5.1.e RGPD).",
+            "El texto declara conservar datos sin límite temporal, lo que puede ser contrario al principio de limitación del plazo de conservación (Art. 5.1.e RGPD).",
             "ALTA",
             List.of("indefinidamente", "sin limite de tiempo", "de forma indefinida", "almacenamos sus datos permanentemente")),
         new PatronRiesgo("G03",
             "Consentimiento tácito o por defecto",
-            "Se detectan prácticas de consentimiento que no cumplen con los requisitos del Art. 7 RGPD (libre, específico, informado e inequívoco).",
+            "El texto describe un consentimiento que puede no cumplir los requisitos de los Arts. 4.11 y 7 RGPD (libre, específico, informado e inequívoco).",
             "ALTA",
             List.of("continuar navegando implica", "al usar este sitio acepta", "se entiende prestado el consentimiento", "el silencio implica aceptacion")),
         new PatronRiesgo("G04",
             "Exclusión de responsabilidad en seguridad",
-            "El documento declina responsabilidad sobre la seguridad, contradiciendo el Art. 32 RGPD.",
+            "El documento declina la responsabilidad sobre la seguridad de los datos. El Art. 32 RGPD obliga al responsable a aplicar medidas apropiadas, y esa declaración no indica cuáles aplica.",
             "MEDIA",
             List.of("no podemos garantizar la seguridad", "no somos responsables de brechas", "transmision no es segura", "no garantizamos la confidencialidad")),
         new PatronRiesgo("G05",
             "Tecnologías de seguimiento invasivo sin información",
-            "Se detectan tecnologías de seguimiento (tracking, fingerprinting, beacons) que requieren información y consentimiento explícito.",
+            "Se mencionan tecnologías de seguimiento (fingerprinting, balizas web) que, salvo las estrictamente necesarias, requieren información clara y completa y consentimiento (Art. 22.2 LSSI-CE).",
             "MEDIA",
             List.of("fingerprinting", "web beacon", "pixel de seguimiento", "pixel de rastreo", "supercookie", "local shared object"))
     );
@@ -420,11 +427,10 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
         List<String> textosSugeridos = new ArrayList<>();
         List<String> referenciasLegales = new ArrayList<>(Arrays.asList(
             "RGPD - Reglamento (UE) 2016/679",
-            "LOPDGDD - Ley Orgánica 3/2018 (consolidada diciembre 2025)",
+            "LOPDGDD - Ley Orgánica 3/2018, de 5 de diciembre",
             "LSSI-CE - Ley 34/2002",
             "Directiva ePrivacy 2002/58/CE",
-            "Ley 10/2025 - Modificaciones privacidad y telecomunicaciones",
-            "Guía sobre uso de cookies - AEPD (2025)"
+            "Guía sobre el uso de las cookies - AEPD"
         ));
         List<String> faltantes = new ArrayList<>();
 
@@ -459,7 +465,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
                         errores.add(errorContextual(regla.id, PREFIJO_RIESGO + regla.titulo,
                                 "La cláusula contiene una redacción que puede ser contraria a la normativa. " + e.detalle(),
                                 severidad, e.evidencia(),
-                                "Esta redacción puede ser considerada ilegal o abusiva según la normativa vigente.",
+                                "Esta redacción puede ser contraria a la normativa citada en el detalle; el texto por sí solo no prueba cómo se aplica en la práctica.",
                                 "Revisar y reformular la cláusula citada como evidencia.", e.estado()));
                         riesgos.add("Redacción problemática en: " + regla.titulo);
                         if (e.suficiente()) puntuacion += regla.peso / 2;
@@ -548,7 +554,7 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
 
         // ---- Recomendaciones generales siempre presentes ----
         recomendaciones.add("Revisar y actualizar el documento al menos una vez al año o ante cambios normativos.");
-        recomendaciones.add("Asegurar que todos los formularios de recogida de datos incluyen información en dos capas (básica + enlace a política completa).");
+        recomendaciones.add("Valorar ofrecer la información en dos capas en los formularios de recogida de datos (básica y enlace a la política completa), como permite el Art. 11 LOPDGDD.");
         recomendaciones.add("Formar al personal en protección de datos y establecer un procedimiento interno de gestión de brechas de seguridad (Arts. 33-34 RGPD).");
 
         // ---- Generar resumen ----
@@ -705,8 +711,8 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
             "Análisis SmartAudits completado. Nivel de riesgo: %s (puntuación: %d/100). " +
             "%s Se han detectado %d incidencia(s) en total: %d de severidad ALTA, " +
             "%d de severidad MEDIA y %d de severidad BAJA. " +
-            "Normativa evaluada: RGPD (UE 2016/679), LOPDGDD (LO 3/2018, consolidada dic. 2025), " +
-            "LSSI-CE (Ley 34/2002), Ley 10/2025 y Directiva ePrivacy 2002/58/CE.",
+            "Normativa de referencia: RGPD (UE 2016/679), LOPDGDD (LO 3/2018), LSSI-CE (Ley 34/2002) y " +
+            "Directiva ePrivacy 2002/58/CE.",
             nivel, puntuacion, descripcionNivel, totalErrores, alta, media, baja
         );
     }

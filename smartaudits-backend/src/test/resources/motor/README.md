@@ -49,10 +49,9 @@ de derechos registran limitaciones actuales, no resultados jurídicamente correc
 
 ## Versiones posteriores
 
-`current-engine-v2.json`, `-v3.json`, `-v4.json` y `-v5.json` repiten los textos de v1
-con las expectativas de cada versión de reglas; no se regeneran y cada salto tiene su
-test de diferencias escrito a mano (`ReglasV2DeltaTest`, `ReglasV3DeltaTest`,
-`ReglasV4DeltaTest`, `ReglasV5DeltaTest`). `MotorAnalisisLegalRegressionTest` fija el
+`current-engine-v2.json` a `-v6.json` repiten los textos de v1 con las expectativas de
+cada versión de reglas; no se regeneran y cada salto tiene su test de diferencias
+escrito a mano (`ReglasV2DeltaTest` a `ReglasV6DeltaTest`). `MotorAnalisisLegalRegressionTest` fija el
 motor a la última.
 
 - v2: R03, R05, R06, R07, R08, G01 y G02 por contexto, con estados de evidencia.
@@ -70,6 +69,13 @@ motor a la última.
   consecuencias son INSUFICIENTE; M08 pasa de 88 a 84 (RIESGO MODERADO). Sin mención de
   esos cinco temas no se presume que existan: NO_VERIFICABLE, o NO_APLICABLE en un aviso
   legal.
+- v6: calibración jurídica. Añade M28–M34 (dos tratamientos de categorías especiales,
+  perfilado ordinario, decisión significativa, umbral de brechas, interés legítimo,
+  clientes del Art. 21.2 LSSI-CE y control de edad), cuya nota empieza por el score
+  observado con reglas v5. M01, M08, M13 y M14 suben 2 puntos (la intervención humana
+  excluye el Art. 22 RGPD; M08 vuelve a 86) y M24 baja 1 (datos de menores sin base
+  de consentimiento: NO_VERIFICABLE). Todos los textos analizados tienen una referencia
+  legal menos: la Ley 10/2025 ya no figura por defecto.
 
 `risk-boundaries.json` fija la clasificación en cada umbral; sus textos se reescriben
 para que el motor vigente alcance exactamente esos scores, que no cambian.

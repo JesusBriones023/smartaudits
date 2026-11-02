@@ -425,6 +425,6 @@ class MotorContextualV4Test {
                 .containsOnly(MetodoControl.PALABRAS_CLAVE);
         assertThat(mapper.readTree(mapper.writeValueAsString(leido)).path("desglosePuntuacion"))
                 .isEqualTo(mapper.readTree(v3).path("desglosePuntuacion"));
-        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "5"));
+        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "6"));
     }
 }

@@ -12,7 +12,7 @@ const NormativaLSSI = () => {
       desc: 'Todo prestador de servicios de la sociedad de la información debe disponer de los medios que permitan a los destinatarios y a los órganos competentes acceder por medios electrónicos de forma permanente, fácil, directa y gratuita a la información del prestador.',
       campos: ['Nombre o denominación social y NIF/CIF', 'Domicilio social o dirección habitual del establecimiento', 'Datos de contacto: email, teléfono o fax', 'Datos de inscripción en el Registro Mercantil u otros registros públicos', 'En caso de actividades sujetas a autorización: datos de la autorización y organismo competente', 'En profesiones reguladas: colegio profesional, título académico y Estado de expedición', 'Número de identificación fiscal si aplica IVA', 'Información sobre precio de los servicios (impuestos, gastos de envío)', 'Códigos de conducta a los que esté adherida la empresa (si aplica)'],
       donde: 'En el Aviso Legal / Información Legal de la web, accesible desde cualquier página.',
-      sancion: 'Infracción grave: hasta 150.000€',
+      sancion: 'Leve; grave solo si falla de forma significativa la identidad o el contacto (Art. 38.3.b y 38.4.b)',
       reglas: ['R16'],
     },
     {
@@ -26,17 +26,17 @@ const NormativaLSSI = () => {
     {
       art: 'Art. 21', titulo: 'Prohibición de comunicaciones comerciales no solicitadas',
       desc: 'Queda prohibido el envío de comunicaciones publicitarias o promocionales por correo electrónico u otro medio de comunicación electrónica equivalente que no hubieran sido previamente solicitadas o expresamente autorizadas por los destinatarios.',
-      campos: ['Consentimiento previo y expreso del destinatario', 'Excepción: clientes existentes para productos/servicios similares a los contratados y con posibilidad de oposición fácil', 'Excepción: comunicaciones de organismos sin fin de lucro a sus miembros', 'Obligación de mantener registro de consentimientos otorgados'],
-      donde: 'Aplicable a todos los canales: email, SMS, WhatsApp, push notifications.',
-      sancion: 'Infracción grave: hasta 150.000€',
+      campos: ['Consentimiento previo y expreso del destinatario', 'Excepción (Art. 21.2): relación contractual previa, datos obtenidos de forma lícita y productos o servicios de la propia empresa similares a los contratados', 'Oposición sencilla y gratuita al recoger los datos y en cada comunicación, con una dirección electrónica válida', 'El interés legítimo del RGPD no sustituye este consentimiento previo'],
+      donde: 'Correo electrónico y medios de comunicación electrónica equivalentes (por ejemplo, SMS o mensajería).',
+      sancion: 'Grave si el envío es masivo, insistente o sistemático (Art. 38.3.c); en otro caso, leve',
       reglas: ['R19'],
     },
     {
       art: 'Art. 22', titulo: 'Derechos de los destinatarios — Cookies',
       desc: 'Los prestadores de servicios podrán utilizar dispositivos de almacenamiento y recuperación de datos en equipos terminales de los destinatarios siempre que hayan obtenido su consentimiento. Se exceptúan las cookies técnicas estrictamente necesarias.',
-      campos: ['Información clara sobre el uso de cookies (finalidad, duración, terceros)', 'Consentimiento previo e inequívoco para cookies no técnicas', 'Opción de rechazar tan accesible como la de aceptar (AEPD 2025)', 'Panel de configuración granular por categorías', 'Conservación del registro del consentimiento otorgado', 'Posibilidad de retirar el consentimiento en cualquier momento'],
+      campos: ['Información clara sobre el uso de cookies (finalidad, duración, terceros)', 'Consentimiento previo e inequívoco para cookies no técnicas', 'Opción de rechazar tan accesible como la de aceptar (Guía sobre el uso de las cookies de la AEPD)', 'Panel de configuración granular por categorías', 'Conservación del registro del consentimiento otorgado', 'Posibilidad de retirar el consentimiento en cualquier momento'],
       donde: 'Banner de cookies y política de cookies enlazada desde el banner.',
-      sancion: 'Infracción grave: hasta 150.000€',
+      sancion: 'Leve (Art. 38.4.g): hasta 30.000€',
       reglas: ['R10'],
     },
     {
@@ -56,9 +56,9 @@ const NormativaLSSI = () => {
   ]
 
   const infracciones = [
-    { nivel: 'Muy graves (Art. 38.1)', plazo: '5 años', sancion: 'Hasta 600.000€', ejemplos: ['Incumplimiento de órdenes de la autoridad', 'Reincidencia en infracciones graves', 'Incumplimiento que afecte gravemente la seguridad o integridad de redes'] },
-    { nivel: 'Graves (Art. 38.2)', plazo: '3 años', sancion: 'Hasta 150.000€', ejemplos: ['No disponer de Aviso Legal (Art. 10)', 'Envío de comunicaciones comerciales no solicitadas (spam)', 'Instalar cookies sin consentimiento previo (Art. 22.2)', 'No facilitar información precontractual (Art. 27)', 'Incumplir obligaciones de conservación de datos de tráfico'] },
-    { nivel: 'Leves (Art. 38.3)', plazo: '1 año', sancion: 'Hasta 30.000€', ejemplos: ['Aviso Legal incompleto o con información incorrecta', 'No comunicar cambios relevantes en la política de cookies', 'Incumplimientos formales sin daño a los usuarios'] },
+    { nivel: 'Muy graves (Art. 38.2)', plazo: '3 años', sancion: 'De 150.001 a 600.000€', ejemplos: ['No suspender la transmisión, el alojamiento o el acceso a la red cuando lo ordene un órgano competente (Art. 11)'] },
+    { nivel: 'Graves (Art. 38.3)', plazo: '2 años', sancion: 'De 30.001 a 150.000€', ejemplos: ['Incumplir de forma significativa la información de identidad y contacto del Art. 10.1 a) y f)', 'Envío masivo, insistente o sistemático de comunicaciones comerciales electrónicas sin cumplir el Art. 21'] },
+    { nivel: 'Leves (Art. 38.4)', plazo: '6 meses', sancion: 'Hasta 30.000€', ejemplos: ['No informar de otros datos del Art. 10.1, como la inscripción registral', 'Usar cookies sin informar o sin el consentimiento del Art. 22.2', 'Otros incumplimientos de los Arts. 20 y 21 sobre comunicaciones comerciales'] },
   ]
 
   const diferenciasRGPD = [

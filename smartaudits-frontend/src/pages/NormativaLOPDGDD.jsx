@@ -17,10 +17,10 @@ const NormativaLOPDGDD = () => {
 
   const articulosClave = [
     { num: 'Art. 6', titulo: 'Tratamiento basado en consentimiento', desc: 'Concreta los requisitos del consentimiento en España. El responsable debe poder demostrar que el consentimiento fue válidamente prestado. No se considera consentimiento válido la mera inactividad del interesado.', reglas: ['R05', 'R12'] },
-    { num: 'Art. 7', titulo: 'Consentimiento de menores de edad', desc: 'En España el umbral es de 14 años. Los menores de 14 requieren el consentimiento de los titulares de la patria potestad o tutela. El responsable debe verificar razonablemente la edad y la autenticidad del consentimiento parental.', reglas: ['R13'] },
+    { num: 'Art. 7', titulo: 'Consentimiento de menores de edad', desc: 'Cuando el tratamiento se basa en el consentimiento, el menor puede consentir por sí mismo si es mayor de 14 años; por debajo, solo es lícito con el consentimiento del titular de la patria potestad o tutela. Otras bases jurídicas no dependen de esta edad. En servicios de la sociedad de la información, el Art. 8.2 RGPD exige esfuerzos razonables para verificar ese consentimiento.', reglas: ['R13'] },
     { num: 'Art. 11', titulo: 'Transparencia e información al interesado', desc: 'Regula el sistema de información en dos capas: una capa básica (identidad del responsable, finalidades, derechos y DPO) y una capa adicional con toda la información del Art. 13 RGPD. La capa básica puede ir en el propio formulario de recogida.', reglas: ['R01', 'R04'] },
     { num: 'Art. 20', titulo: 'Sistemas de información crediticia', desc: 'Condiciones para el tratamiento de datos en listas de morosos: deuda cierta, vencida y exigible; no impugnada o con fallo judicial; información previa al deudor; plazo máximo 5 años; datos exactos y actualizados.', reglas: [] },
-    { num: 'Art. 23', titulo: 'Sistemas de exclusión publicitaria', desc: 'Las comunicaciones comerciales requieren consentimiento previo. El destinatario puede oponerse en cualquier momento de forma gratuita y sencilla. Se reconoce la Lista de Exclusión Publicitaria (Lista Robinson) y otros sistemas de exclusión.', reglas: ['R19'] },
+    { num: 'Art. 23', titulo: 'Sistemas de exclusión publicitaria', desc: 'Es lícito tratar datos para evitar el envío de comunicaciones comerciales a quienes se hayan opuesto (sistemas de exclusión publicitaria, como la Lista Robinson), y quien pretenda realizar mercadotecnia directa debe consultarlos previamente. El apartado 1 fue modificado por la Ley 10/2025. El consentimiento para las comunicaciones comerciales electrónicas lo regula el Art. 21 LSSI-CE.', reglas: ['R19'] },
     { num: 'Art. 24', titulo: 'Sistemas de información de denuncias internas', desc: 'Regula los canales de denuncia internos (whistleblowing). Los datos tratados tienen protecciones específicas: confidencialidad del denunciante, prohibición de represalias, conservación máxima 3 meses si no hay investigación.', reglas: [] },
     { num: 'Art. 34', titulo: 'Supuestos de designación obligatoria de DPO', desc: 'Amplía los supuestos del Art. 37 RGPD en España. Obligatorio para: colegios profesionales, centros docentes, entidades que traten datos de afiliados, centros sanitarios, entidades financieras y de seguros, empresas de publicidad, operadores de telecomunicaciones y otros.', reglas: ['R03'] },
     { num: 'Art. 37', titulo: 'Registro de actividades de tratamiento', desc: 'El responsable debe mantener un registro actualizado de todas las actividades de tratamiento bajo su responsabilidad. Debe incluir: nombre del responsable, finalidades, descripción de categorías de interesados y datos, destinatarios, transferencias y medidas de seguridad.', reglas: [] },
@@ -42,9 +42,9 @@ const NormativaLOPDGDD = () => {
   ]
 
   const infracciones = [
-    { nivel: 'Muy graves (Art. 72)', plazo: '3 años', ejemplos: ['Uso fraudulento o desleal de datos personales', 'Vulnerar el deber de confidencialidad', 'Transferencias internacionales sin garantías', 'Incumplimiento del deber de bloqueo durante el período de conservación', 'No atender reiteradamente el ejercicio de derechos'], importe: '20M€ o 4%' },
-    { nivel: 'Graves (Art. 73)', plazo: '2 años', ejemplos: ['No registrar las actividades de tratamiento', 'No informar al interesado conforme al Art. 13 RGPD', 'No designar representante cuando sea obligatorio', 'Incumplir medidas de seguridad (Art. 32 RGPD)', 'No comunicar brechas de seguridad a los interesados'], importe: '10M€ o 2%' },
-    { nivel: 'Leves (Art. 74)', plazo: '1 año', ejemplos: ['No publicar los datos de contacto del DPO', 'No atender en plazo una solicitud de ejercicio de derechos', 'No facilitar el acceso del interesado a sus datos', 'Incumplimientos formales en el registro de actividades'], importe: 'Apercibimiento o hasta 40.000€' },
+    { nivel: 'Muy graves (Art. 72)', plazo: '3 años', ejemplos: ['Omitir el deber de informar al interesado (Arts. 13 y 14 RGPD)', 'Uso fraudulento o desleal de datos personales', 'Vulnerar el deber de confidencialidad', 'Transferencias internacionales sin garantías', 'Incumplimiento del deber de bloqueo durante el período de conservación', 'No atender reiteradamente el ejercicio de derechos'], importe: 'Hasta 20M€ o 4 % (máximo, Art. 83.5 RGPD)' },
+    { nivel: 'Graves (Art. 73)', plazo: '2 años', ejemplos: ['No registrar las actividades de tratamiento', 'No designar un delegado de protección de datos cuando sea exigible', 'No designar representante cuando sea obligatorio', 'Incumplir medidas de seguridad (Art. 32 RGPD)', 'No comunicar brechas de seguridad a los interesados'], importe: 'Hasta 10M€ o 2 % (máximo, Art. 83.4 RGPD)' },
+    { nivel: 'Leves (Art. 74)', plazo: '1 año', ejemplos: ['Informar al interesado de forma incompleta (Arts. 13 y 14 RGPD)', 'No publicar los datos de contacto del DPO', 'No atender en plazo una solicitud de ejercicio de derechos', 'No facilitar el acceso del interesado a sus datos', 'Incumplimientos formales en el registro de actividades'], importe: 'Cuantía según el Art. 83 RGPD' },
   ]
 
   const tabs = [
@@ -94,7 +94,7 @@ const NormativaLOPDGDD = () => {
           <div>
             <p className="text-slate-600 text-sm leading-relaxed mb-3">La LOPDGDD es la ley española que <strong>adapta y complementa el RGPD</strong> en el ordenamiento jurídico nacional. El RGPD deja ciertos aspectos a la discreción de los Estados miembros — la LOPDGDD los concreta para España.</p>
             <p className="text-slate-600 text-sm leading-relaxed mb-3">Su principal novedad fue la incorporación del <strong>Título X</strong>, que recoge un catálogo de 19 derechos digitales sin precedente en Europa: desde el derecho a la desconexión digital hasta el testamento digital, pasando por la protección frente a la videovigilancia laboral.</p>
-            <p className="text-slate-600 text-sm leading-relaxed">La versión <strong>consolidada de diciembre 2025</strong> incorpora las modificaciones introducidas por la Ley 10/2025 en materia de privacidad y telecomunicaciones.</p>
+            <p className="text-slate-600 text-sm leading-relaxed">La última actualización del texto consolidado (27/12/2025) recoge la modificación del <strong>artículo 23.1</strong> (sistemas de exclusión publicitaria) por la Ley 10/2025, de servicios de atención a la clientela.</p>
           </div>
           <div className="space-y-2">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Estructura de la ley</p>
@@ -221,7 +221,7 @@ const NormativaLOPDGDD = () => {
 
           {tabActiva === 'infracciones' && (
             <div className="space-y-4">
-              <p className="text-sm text-slate-500 mb-4">La LOPDGDD clasifica las infracciones en tres niveles con diferentes plazos de prescripción. Las cuantías máximas son las del RGPD, pero la AEPD puede imponer apercibimientos en lugar de multas cuando sea proporcionado.</p>
+              <p className="text-sm text-slate-500 mb-4">La LOPDGDD clasifica las infracciones en tres niveles con diferentes plazos de prescripción. Las cuantías máximas son las del Art. 83 RGPD según el artículo infringido; la clasificación de la LOPDGDD sirve sobre todo para la prescripción. La AEPD puede imponer apercibimientos en lugar de multas cuando sea proporcionado.</p>
               {infracciones.map((s, i) => (
                 <div key={i} className={`p-5 rounded-xl border ${i === 0 ? 'bg-red-50 border-red-200' : i === 1 ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
                   <div className="flex items-start justify-between mb-3">
