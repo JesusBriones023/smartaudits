@@ -37,6 +37,24 @@ public class AuditQuotaService {
         verificarPuedeCrear(usuario, 1);
     }
 
+    /**
+     * Advisory URL-acquisition rejection only: no lock and no reservation. The ingestion caller
+     * must have no transaction, synchronization or bound JPA/JDBC context. The declared countBy
+     * query has no @Transactional metadata in the inspected Spring Data JPA 3.2.1 configuration;
+     * unlike inherited CRUD count(), it does not start a short read-only Spring transaction.
+     * With no outer context, the shared EntityManager uses a temporary EntityManager and closes
+     * it after the scalar query. The caller checks the boundary again before capture. This does
+     * not certify physical connection release in every deployment: the isolated H2/Hikari tests
+     * also check zero borrowed connections. OSIV holders are rejected, not reused or closed here.
+     * The locked check in the final persistence transaction remains authoritative.
+     */
+    public void precomprobarPuedeCrear(Usuario usuario) {
+        if (usuario.getRole() == Role.ADMIN) {
+            return;
+        }
+        comprobarDisponibilidad(usuario, 1);
+    }
+
     /** Comprueba que caben {@code cantidad} auditorías más hoy (una por documento de un lote). */
     public void verificarPuedeCrear(Usuario usuario, int cantidad) {
 
@@ -55,6 +73,11 @@ public class AuditQuotaService {
                         new IllegalStateException(
                                 "Usuario no encontrado"
                         ));
+
+        comprobarDisponibilidad(usuario, cantidad);
+    }
+
+    private void comprobarDisponibilidad(Usuario usuario, int cantidad) {
 
         LocalDateTime ahora =
                 LocalDateTime.now();

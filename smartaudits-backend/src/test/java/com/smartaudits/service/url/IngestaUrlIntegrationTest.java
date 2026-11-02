@@ -7,6 +7,9 @@ import com.smartaudits.model.dto.AuditoriaConjuntaRequest;
 import com.smartaudits.model.dto.AuditoriaHtmlRequest;
 import com.smartaudits.repository.AuditoriaRepository;
 import com.smartaudits.repository.UsuarioRepository;
+import com.smartaudits.repository.AuditoriaConjuntaRepository;
+import com.smartaudits.repository.IncidenciaRepository;
+import com.smartaudits.repository.HistorialAuditoriaRepository;
 import com.smartaudits.service.AuditQuotaService;
 import com.smartaudits.service.AuditoriaConjuntaService;
 import com.smartaudits.service.AuditoriaService;
@@ -24,6 +27,7 @@ import com.smartaudits.v2.acquisition.capture.ProcedenciaCaptura;
 import com.smartaudits.v2.acquisition.capture.TransporteHttpNoDisponible;
 import com.smartaudits.v2.acquisition.capture.TransporteLocalDePrueba;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
@@ -31,6 +35,8 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -51,6 +57,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.ANY)
 @Import({AuditoriaService.class, HistorialService.class, AuditQuotaService.class, MotorAnalisisLegal.class,
         ObjectMapper.class, AuditoriaConjuntaService.class, IngestaUrlService.class, IngestaUrlIntegrationTest.Local.class})
+@Transactional(propagation = Propagation.NOT_SUPPORTED)
 class IngestaUrlIntegrationTest {
     static final String URL = "https://www.ejemplo.es/legal/privacidad";
     static final String HTML = """
@@ -77,6 +84,20 @@ class IngestaUrlIntegrationTest {
     @Autowired AnalizadorLegal analizador;
     @Autowired AuditoriaRepository audits;
     @Autowired UsuarioRepository users;
+    @Autowired AuditQuotaService cuota;
+    @Autowired AuditoriaConjuntaRepository jointAudits;
+    @Autowired IncidenciaRepository incidents;
+    @Autowired HistorialAuditoriaRepository history;
+
+    @AfterEach
+    void cleanup() {
+        // This isolated H2 context has no enclosing rollback: delete only its fixture rows, in FK order.
+        history.deleteAllInBatch();
+        incidents.deleteAllInBatch();
+        jointAudits.deleteAllInBatch();
+        audits.deleteAllInBatch();
+        users.deleteAllInBatch();
+    }
 
     @BeforeEach
     void pages() {
@@ -198,7 +219,7 @@ class IngestaUrlIntegrationTest {
     @Test
     void theDefaultRealAdapterProducesNoCaptureAndNoAudit() {
         Usuario owner = user("bloqueado@example.invalid");
-        var bloqueado = new IngestaUrlService(new TransporteHttpNoDisponible(), auditorias, analizador);
+        var bloqueado = new IngestaUrlService(new TransporteHttpNoDisponible(), auditorias, analizador, cuota);
         for (var accion : List.<Runnable>of(() -> bloqueado.capturar(URL), () -> bloqueado.analizar(URL, "Aviso Legal"),
                 () -> bloqueado.auditar(URL, "t", "Aviso Legal", owner, "192.0.2.62"))) {
             assertThatThrownBy(accion::run).isInstanceOf(CapturaException.class)

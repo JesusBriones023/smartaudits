@@ -150,6 +150,8 @@ class TransporteBootstrapTest {
             runner.withPropertyValues(DNS + "server-ip=192.0.2.53", CapturaUrlConfig.PROPIEDAD + "=" + activar)
                     .withBean(AuditoriaService.class, () -> mock(AuditoriaService.class))
                     .withBean(AnalizadorLegal.class, () -> mock(AnalizadorLegal.class))
+                    .withBean(com.smartaudits.service.AuditQuotaService.class,
+                            () -> mock(com.smartaudits.service.AuditQuotaService.class))
                     .withBean(IngestaUrlService.class)
                     .run(context -> {
                         if (activar) {

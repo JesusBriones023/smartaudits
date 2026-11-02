@@ -146,7 +146,11 @@ public class AuditoriaService {
         auditoria = auditoriaRepository.save(auditoria);
 
         // 7. Registrar CREACION en historial
-        historialService.registrarCreacion(auditoria, usuario, ipAcceso);
+        if (fuente == TipoFuente.CRAWLER) {
+            historialService.registrarCreacionObligatoria(auditoria, usuario, ipAcceso);
+        } else {
+            historialService.registrarCreacion(auditoria, usuario, ipAcceso);
+        }
 
         return toResponseComplete(auditoria, resultadoDto);
     }

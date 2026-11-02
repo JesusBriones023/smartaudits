@@ -23,19 +23,28 @@ public class HistorialService {
      */
     public void registrar(Auditoria auditoria, Usuario usuario, String accion, String ipAcceso) {
         try {
-            HistorialAuditoria entrada = new HistorialAuditoria();
-            entrada.setAuditoria(auditoria);
-            entrada.setUsuario(usuario);
-            entrada.setAccion(accion);
-            entrada.setIpAcceso(ipAcceso != null ? ipAcceso : "desconocida");
-            entrada.setFechaAcceso(LocalDateTime.now());
-            historialRepository.save(entrada);
-            log.info("Historial registrado: {} — auditoría {} — usuario {}",
-                accion, auditoria.getId(), usuario.getEmail());
+            guardar(auditoria, usuario, accion, ipAcceso);
         } catch (Exception e) {
             // El historial nunca debe interrumpir el flujo principal
             log.warn("No se pudo registrar en historial: {}", e.getMessage());
         }
+    }
+
+    /** URL audits require creation history in the same transaction; failures must propagate. */
+    public void registrarCreacionObligatoria(Auditoria auditoria, Usuario usuario, String ip) {
+        guardar(auditoria, usuario, "CREACION", ip);
+    }
+
+    private void guardar(Auditoria auditoria, Usuario usuario, String accion, String ipAcceso) {
+        HistorialAuditoria entrada = new HistorialAuditoria();
+        entrada.setAuditoria(auditoria);
+        entrada.setUsuario(usuario);
+        entrada.setAccion(accion);
+        entrada.setIpAcceso(ipAcceso != null ? ipAcceso : "desconocida");
+        entrada.setFechaAcceso(LocalDateTime.now());
+        historialRepository.save(entrada);
+        log.info("Historial registrado: {} — auditoría {} — usuario {}",
+                accion, auditoria.getId(), usuario.getEmail());
     }
 
     public void registrarCreacion(Auditoria auditoria, Usuario usuario, String ip) {

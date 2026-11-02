@@ -122,4 +122,30 @@ class AuditQuotaServiceTest {
                 auditorias
         );
     }
+
+    @Test
+    void preliminaryCheckRejectsExhaustedQuotaWithoutLockingOrReserving() {
+        var service = new AuditQuotaService(usuarios, auditorias, 100);
+        when(auditorias.countByUsuarioIdAndFechaCreacionGreaterThanEqual(eq(10L), any())).thenReturn(100L);
+        assertThatThrownBy(() -> service.precomprobarPuedeCrear(cliente)).isInstanceOf(AuditQuotaExceededException.class);
+        verifyNoInteractions(usuarios);
+        verify(auditorias).countByUsuarioIdAndFechaCreacionGreaterThanEqual(eq(10L), any());
+        verifyNoMoreInteractions(auditorias);
+    }
+
+    @Test
+    void preliminaryCheckDoesNotExemptTheFinalLockedCheck() {
+        var service = new AuditQuotaService(usuarios, auditorias, 100);
+        when(auditorias.countByUsuarioIdAndFechaCreacionGreaterThanEqual(eq(10L), any())).thenReturn(99L, 100L);
+        service.precomprobarPuedeCrear(cliente);
+        verifyNoInteractions(usuarios);
+        assertThatThrownBy(() -> service.verificarPuedeCrear(cliente)).isInstanceOf(AuditQuotaExceededException.class);
+        verify(usuarios).bloquearPorId(10L);
+    }
+
+    @Test
+    void preliminaryCheckKeepsAdminExemptionWithoutDatabaseAccess() {
+        new AuditQuotaService(usuarios, auditorias, 1).precomprobarPuedeCrear(admin);
+        verifyNoInteractions(usuarios, auditorias);
+    }
 }

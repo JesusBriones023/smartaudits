@@ -6,6 +6,7 @@ import com.smartaudits.model.dto.AuditoriaResponse;
 import com.smartaudits.model.dto.DeteccionEnlacesResponse;
 import com.smartaudits.model.dto.ResultadoAuditoria;
 import com.smartaudits.service.AuditoriaService;
+import com.smartaudits.service.AuditQuotaService;
 import com.smartaudits.service.html.DetectorEnlacesLegales;
 import com.smartaudits.service.motor.AnalizadorLegal;
 import com.smartaudits.service.motor.EntradaAnalisis;
@@ -17,7 +18,9 @@ import com.smartaudits.v2.acquisition.destination.DestinationUrl;
 import com.smartaudits.v2.acquisition.destination.UrlParseResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.jdbc.datasource.ConnectionHolder;
+import org.springframework.orm.jpa.EntityManagerHolder;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.Locale;
 import java.util.Set;
@@ -41,6 +44,7 @@ public class IngestaUrlService {
     private final TransporteHtml transporte;
     private final AuditoriaService auditoriaService;
     private final AnalizadorLegal analizador;
+    private final AuditQuotaService cuota;
     private final DetectorEnlacesLegales detector = new DetectorEnlacesLegales();
 
     /** Result of a capture analysed without persisting anything. */
@@ -49,6 +53,11 @@ public class IngestaUrlService {
 
     /** Validated capture of the URL; CapturaException otherwise. */
     public CapturaHtml capturar(String url) {
+        exigirContextoSinRecursos();
+        return capturar(destinoValido(url));
+    }
+
+    private static DestinationUrl destinoValido(String url) {
         if (url == null) {
             throw new CapturaException(Motivo.URL_RECHAZADA, "La URL es obligatoria");
         }
@@ -57,7 +66,11 @@ public class IngestaUrlService {
             throw new CapturaException(Motivo.URL_RECHAZADA,
                     "La URL no es válida para la adquisición (" + rejected.code() + ")");
         }
-        DestinationUrl destino = ((UrlParseResult.Parsed) analizada).url();
+        return ((UrlParseResult.Parsed) analizada).url();
+    }
+
+    private CapturaHtml capturar(DestinationUrl destino) {
+        exigirContextoSinRecursos();
         CapturaHtml captura;
         try {
             captura = transporte.capturar(destino);
@@ -75,6 +88,7 @@ public class IngestaUrlService {
 
     /** Captures the URL and analyses it with the existing extractor, engine and link discovery. */
     public AnalisisCaptura analizar(String url, String tipoDocumento) {
+        exigirContextoSinRecursos();
         tipoValido(tipoDocumento);
         CapturaHtml captura = capturar(url);
         String texto = auditoriaService.textoAuditableDeHtml(captura.html());
@@ -85,17 +99,39 @@ public class IngestaUrlService {
     }
 
     /** Captures the URL and stores it as an audit (CRAWLER) through the existing flow; real captures only. */
-    @Transactional
     public AuditoriaResponse auditar(String url, String titulo, String tipoDocumento, Usuario usuario, String ipAcceso) {
+        exigirContextoSinRecursos();
         tipoValido(tipoDocumento);
-        CapturaHtml captura = capturar(url);
+        DestinationUrl destino = destinoValido(url);
+        cuota.precomprobarPuedeCrear(usuario);
+        // The advisory query must have released its resources before any transport call.
+        CapturaHtml captura = capturar(destino);
         if (!captura.procedencia().esReal()) {
             throw new CapturaException(Motivo.CAPTURA_SIMULADA,
                     "Una captura simulada no se guarda como auditoría: no procede de una página real");
         }
         String texto = auditoriaService.textoAuditableDeHtml(captura.html());
+        // Cross-bean call: the existing service proxy starts the persistence transaction here,
+        // repeats the authoritative locked quota check and rolls back the complete write on failure.
         return auditoriaService.crearAuditoriaAnalizada(titulo, tipoDocumento, texto,
                 captura.urlFinal().canonicalForm(), TipoFuente.CRAWLER, usuario, ipAcceso);
+    }
+
+    /**
+     * Acquisition cannot join/suspend an outer transaction or borrow an OSIV persistence context.
+     * An inactive transaction alone does not prove a JDBC connection has been released. Reject
+     * bound JPA/JDBC holders too, even an OSIV holder that has not obtained a connection yet.
+     * Explicit checks also protect self-invocation and instances used without a Spring proxy.
+     */
+    private static void exigirContextoSinRecursos() {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            throw new IllegalStateException("La adquisición debe invocarse fuera de una transacción");
+        }
+        if (TransactionSynchronizationManager.isSynchronizationActive()
+                || TransactionSynchronizationManager.getResourceMap().values().stream()
+                        .anyMatch(holder -> holder instanceof EntityManagerHolder || holder instanceof ConnectionHolder)) {
+            throw new IllegalStateException("La adquisición requiere un contexto sin recursos JPA/JDBC vinculados (incluido OSIV)");
+        }
     }
 
     private static void validar(DestinationUrl destino, CapturaHtml captura) {
