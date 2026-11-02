@@ -33,9 +33,11 @@ import java.util.stream.Collectors;
  *   - No cumplirla no suma nada.
  *   - Resultado final = suma de puntos obtenidos (0-100). Nunca negativo.
  *
- * Reglas versión 3: R02, R03, R05, R06, R07, R08, R10, R12 y R15 (y los riesgos G01, G02 y G03) se
- * evalúan por cláusulas, con palabras completas y negaciones ({@link ReglasContextuales}); la versión 2
- * cubría R03, R05, R06, R07, R08, G01 y G02. Cada una termina en un estado
+ * Reglas versión 4: R01, R02, R03, R04, R05, R06, R07, R08, R09, R10, R11, R12, R15 y R16 (y los riesgos
+ * G01, G02 y G03) se evalúan por cláusulas, con palabras completas y negaciones ({@link ReglasContextuales});
+ * la versión 3 cubría R02, R03, R05, R06, R07, R08, R10, R12, R15, G01, G02 y G03, y la versión 2 solo
+ * R03, R05, R06, R07, R08, G01 y G02. R13, R14, R17, R18 y R19 (16 puntos) siguen siendo palabras clave
+ * por subcadena. Cada una termina en un estado
  * de evidencia y suma: su peso si es SUFICIENTE; la mitad si es INSUFICIENTE o si la cláusula
  * suficiente tiene redacción problemática; nada en otro caso. NO_APLICABLE y NO_VERIFICABLE no
  * suman ni generan incidencia: la puntuación sigue siendo la suma de pesos acreditados sobre 100,
@@ -56,7 +58,7 @@ import java.util.stream.Collectors;
 public class MotorAnalisisLegal implements AnalizadorLegal {
 
     private static final String MOTOR = "LEGAL_TEXT";
-    private static final VersionAnalizador VERSION = new VersionAnalizador("3", "3");
+    private static final VersionAnalizador VERSION = new VersionAnalizador("3", "4");
 
     @Override
     public VersionAnalizador version() {
@@ -942,7 +944,8 @@ public class MotorAnalisisLegal implements AnalizadorLegal {
         Map<EstadoEvidencia, Long> cuenta = evaluaciones.stream()
                 .collect(Collectors.groupingBy(EvaluacionRegla::estado, () -> new EnumMap<>(EstadoEvidencia.class),
                         Collectors.counting()));
-        return String.format(" Información evaluada por contexto (R02, R03, R05, R06, R07, R08, R10, R12 y R15): "
+        return String.format(" Información evaluada por contexto (R01, R02, R03, R04, R05, R06, R07, R08, R09, R10, R11, R12, "
+                        + "R15 y R16): "
                         + "%d con evidencia suficiente, %d con evidencia insuficiente, %d con posible incidencia, "
                         + "%d no verificables con el texto y %d no aplicables a este tipo de documento.",
                 cuenta.getOrDefault(EstadoEvidencia.SUFICIENTE, 0L), cuenta.getOrDefault(EstadoEvidencia.INSUFICIENTE, 0L),

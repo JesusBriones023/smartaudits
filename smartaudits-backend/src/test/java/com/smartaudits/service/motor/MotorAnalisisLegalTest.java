@@ -9,8 +9,9 @@ class MotorAnalisisLegalTest {
     private final AnalizadorLegal motor = new MotorAnalisisLegal();
 
     // Basic structural examples only; the regression corpus belongs to Phase 1.2.
+    // Unlike corpus case M01 («NIF de prueba»), it carries a NIF-shaped value: rules v4 require one for R16.
     static final String COMPLETE_TEXT = """
-            Aviso legal. Responsable del tratamiento: Ejemplo S.L., NIF de prueba,
+            Aviso legal. Responsable del tratamiento: Ejemplo S.L., NIF B12345678,
             domicilio social en Madrid e inscrita en el Registro Mercantil de Madrid.
             Contacto: privacidad@example.invalid. Delegado de protección de datos:
             dpo@example.invalid.

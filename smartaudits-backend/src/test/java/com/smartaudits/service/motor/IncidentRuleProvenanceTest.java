@@ -23,12 +23,13 @@ class IncidentRuleProvenanceTest {
                     .forEachRemaining(rule -> expected.put(rule.getKey(), rule.getValue().path("titulo").asText()));
         }
         // Rules v2/v3: missing DPO, cookie, consent and security texts are not verifiable (no finding),
-        // and a legal notice is not asked for privacy information; a complete document shows the other
-        // 15 with their v1 titles.
-        List.of("R03", "R10", "R12", "R15").forEach(expected::remove);
+        // and a legal notice is not asked for privacy information. Rules v4 add transfers (never assumed)
+        // and the legal notice (LSSI-CE applicability unknown) to them; a complete document shows the other
+        // 13 with their v1 titles.
+        List.of("R03", "R09", "R10", "R12", "R15", "R16").forEach(expected::remove);
         var result = motor.analyze(new EntradaAnalisis("zzz", "Documento Completo"));
         Map<String, String> actual = new LinkedHashMap<>();
-        assertThat(result.getErrores()).hasSize(15).allSatisfy(error -> {
+        assertThat(result.getErrores()).hasSize(13).allSatisfy(error -> {
             assertThat(actual.put(error.getRuleId(), error.getTitulo())).isNull();
             assertThat(error.getMotor()).isEqualTo("LEGAL_TEXT");
             assertThat(error.getVersion()).isEqualTo(motor.version().versionReglas());
@@ -64,10 +65,10 @@ class IncidentRuleProvenanceTest {
     }
 
     @Test
-    void rulesVersionThreeWithOutputContractThreeForTheScoreBreakdown() {
-        // Output 3 adds the score breakdown and a summary that does not present the score as compliance;
-        // the rules (and the numbers they produce) are still version 3. Stored audits keep their own versions.
-        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "3"));
+    void rulesVersionFourKeepsOutputContractThree() {
+        // Output 3 added the score breakdown; rules 4 add R01, R04, R09, R11 and R16 to the contextual
+        // evaluation without changing the output shape. Stored audits keep their own versions.
+        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "4"));
     }
 
     @ParameterizedTest

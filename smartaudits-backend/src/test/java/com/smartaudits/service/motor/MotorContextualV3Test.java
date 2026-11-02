@@ -245,7 +245,7 @@ class MotorContextualV3Test {
             assertThat(x.getEstado()).isEqualTo(INSUFICIENTE);
             assertThat(x.getSeveridad()).isEqualTo("BAJA");
         });
-        // R15 weighs 4: generic 2, concrete 4. (No «cifrado» here: legacy R16 still matches «cif» inside it.)
+        // R15 weighs 4: generic 2, concrete 4. (No «cifrado» here: under rules v3, R16 matched «cif» inside it.)
         assertThat(puntos("Aplicamos medidas de seguridad como copias de seguridad diarias y control de acceso a los datos.")
                 - puntos("Aplicamos las medidas de seguridad adecuadas.")).isEqualTo(2);
     }
@@ -306,6 +306,6 @@ class MotorContextualV3Test {
         for (String campo : List.of("puntuacionRiesgo", "errores", "evaluaciones")) {
             assertThat(escrito.path(campo)).as(campo).isEqualTo(mapper.readTree(v2).path(campo));
         }
-        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "3"));
+        assertThat(motor.version()).isEqualTo(new VersionAnalizador("3", "4"));
     }
 }

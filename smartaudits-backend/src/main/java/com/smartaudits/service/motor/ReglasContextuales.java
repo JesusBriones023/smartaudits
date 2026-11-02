@@ -15,8 +15,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Context-aware evaluation of rules R02, R03, R05, R06, R07, R08, R10, R12 and R15 and of the global
- * risks G01, G02 and G03, part of {@link MotorAnalisisLegal}. It reads the clean text as clauses
+ * Context-aware evaluation of rules R01, R02, R03, R04, R05, R06, R07, R08, R09, R10, R11, R12, R15 and
+ * R16 and of the global risks G01, G02 and G03, part of {@link MotorAnalisisLegal}. It reads the clean text as clauses
  * (sentences, paragraphs and list items) and matches whole words with their negation, so that:
  *
  * - a single keyword is never enough: mentioning an obligation is told apart from giving its content;
@@ -30,7 +30,8 @@ final class ReglasContextuales {
 
     private ReglasContextuales() {}
 
-    static final Set<String> IDS = Set.of("R02", "R03", "R05", "R06", "R07", "R08", "R10", "R12", "R15");
+    static final Set<String> IDS = Set.of("R01", "R02", "R03", "R04", "R05", "R06", "R07", "R08", "R09", "R10", "R11",
+            "R12", "R15", "R16");
     static final int MAX_EVIDENCIA = 300;
 
     private static final char LF = 10;
@@ -51,27 +52,40 @@ final class ReglasContextuales {
 
     record Textos(String tituloInsuficiente, String descripcionInsuficiente) {}
 
-    static final Map<String, Textos> TEXTOS = Map.of(
-            "R02", new Textos("Medios de contacto del responsable mencionados sin concretarlos",
+    static final Map<String, Textos> TEXTOS = Map.ofEntries(
+            Map.entry("R01", new Textos("Responsable del tratamiento mencionado sin identificarlo",
+                    "Se alude al responsable del tratamiento sin indicar su nombre o razón social, o se nombra una entidad sin "
+                            + "presentarla como responsable del tratamiento (Art. 13.1.a RGPD).")),
+            Map.entry("R02", new Textos("Medios de contacto del responsable mencionados sin concretarlos",
                     "Se alude al contacto sin un medio concreto (correo, teléfono, dirección o formulario), o aparece un dato "
-                            + "de contacto que no se presenta como tal (Art. 13.1.a RGPD)."),
-            "R10", new Textos("Información sobre cookies parcial o meramente mencionada",
+                            + "de contacto que no se presenta como tal (Art. 13.1.a RGPD).")),
+            Map.entry("R04", new Textos("Finalidades del tratamiento mencionadas sin concretarlas",
+                    "Se alude a la finalidad del tratamiento sin describir para qué se utilizan los datos (Art. 13.1.c RGPD).")),
+            Map.entry("R09", new Textos("Transferencias internacionales mencionadas sin garantías concretas",
+                    "Se alude a transferencias de datos fuera del Espacio Económico Europeo sin indicar el mecanismo de garantía "
+                            + "aplicable, o solo se indica dónde se alojan los datos (Art. 13.1.f RGPD).")),
+            Map.entry("R10", new Textos("Información sobre cookies parcial o meramente mencionada",
                     "Se mencionan cookies sin explicar lo suficiente sus tipos, finalidades, duración y cómo gestionarlas o "
-                            + "rechazarlas (Art. 22.2 LSSI-CE)."),
-            "R12", new Textos("Consentimiento mencionado sin describir cómo se presta y se retira",
-                    "Se menciona el consentimiento sin explicar cómo se presta y cómo puede retirarse (Art. 7 RGPD)."),
-            "R15", new Textos("Medidas de seguridad mencionadas de forma genérica",
-                    "El documento declara aplicar medidas de seguridad sin concretar ninguna."),
-            "R03", new Textos("Delegado de Protección de Datos mencionado sin datos de contacto",
-                    "Se menciona un Delegado de Protección de Datos, pero no un medio para contactar con él (Art. 13.1.b RGPD)."),
-            "R05", new Textos("Base legal del tratamiento mencionada sin identificarla",
-                    "Se alude a la legitimación del tratamiento sin indicar cuál de las bases del Art. 6.1 RGPD se aplica."),
-            "R06", new Textos("Derechos del interesado informados de forma incompleta",
-                    "Se informa de algunos derechos del interesado, pero no de los suficientes (Art. 13.2.b RGPD)."),
-            "R07", new Textos("Conservación de los datos mencionada sin plazo ni criterio",
-                    "Se alude a la conservación de los datos sin un plazo concreto ni los criterios para determinarlo (Art. 13.2.a RGPD)."),
-            "R08", new Textos("Destinatarios de los datos mencionados sin identificarlos",
-                    "Se indica que los datos pueden comunicarse a terceros sin identificar a los destinatarios ni sus categorías (Art. 13.1.e RGPD)."));
+                            + "rechazarlas (Art. 22.2 LSSI-CE).")),
+            Map.entry("R11", new Textos("Derecho a reclamar ante la autoridad de control informado de forma incompleta",
+                    "Se menciona la autoridad de control sin informar del derecho a presentar una reclamación ante ella, o se "
+                            + "informa de una reclamación sin identificar la autoridad (Art. 13.2.d RGPD).")),
+            Map.entry("R12", new Textos("Consentimiento mencionado sin describir cómo se presta y se retira",
+                    "Se menciona el consentimiento sin explicar cómo se presta y cómo puede retirarse (Art. 7 RGPD).")),
+            Map.entry("R15", new Textos("Medidas de seguridad mencionadas de forma genérica",
+                    "El documento declara aplicar medidas de seguridad sin concretar ninguna.")),
+            Map.entry("R16", new Textos("Información del prestador (Art. 10 LSSI-CE) incompleta",
+                    "El aviso legal contiene parte de la información general del Art. 10 LSSI-CE, pero faltan datos del prestador.")),
+            Map.entry("R03", new Textos("Delegado de Protección de Datos mencionado sin datos de contacto",
+                    "Se menciona un Delegado de Protección de Datos, pero no un medio para contactar con él (Art. 13.1.b RGPD).")),
+            Map.entry("R05", new Textos("Base legal del tratamiento mencionada sin identificarla",
+                    "Se alude a la legitimación del tratamiento sin indicar cuál de las bases del Art. 6.1 RGPD se aplica.")),
+            Map.entry("R06", new Textos("Derechos del interesado informados de forma incompleta",
+                    "Se informa de algunos derechos del interesado, pero no de los suficientes (Art. 13.2.b RGPD).")),
+            Map.entry("R07", new Textos("Conservación de los datos mencionada sin plazo ni criterio",
+                    "Se alude a la conservación de los datos sin un plazo concreto ni los criterios para determinarlo (Art. 13.2.a RGPD).")),
+            Map.entry("R08", new Textos("Destinatarios de los datos mencionados sin identificarlos",
+                    "Se indica que los datos pueden comunicarse a terceros sin identificar a los destinatarios ni sus categorías (Art. 13.1.e RGPD).")));
 
     // ---------------------------------------------------------------------------------------
     // Clauses and matching
@@ -246,6 +260,11 @@ final class ReglasContextuales {
 
     static Evaluacion evaluar(String ruleId, List<Clausula> clausulas, String tipo) {
         return switch (ruleId) {
+            case "R01" -> responsable(clausulas, tipo);
+            case "R04" -> finalidades(clausulas, tipo);
+            case "R09" -> transferencias(clausulas, tipo);
+            case "R11" -> reclamacion(clausulas, tipo);
+            case "R16" -> avisoLegal(clausulas, tipo);
             case "R02" -> contacto(clausulas, tipo);
             case "R03" -> delegado(clausulas, tipo);
             case "R05" -> baseJuridica(clausulas, tipo);
@@ -868,5 +887,417 @@ final class ReglasContextuales {
                 "Se declara aplicar medidas de seguridad sin concretar ninguna.",
                 "El documento no describe medidas de seguridad. Describirlas no es una obligación de información; su "
                         + "aplicación (Art. 32 RGPD) no puede comprobarse con el texto.", true);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Shared by R01 and R16: who is named (legal form, tax identifier or a proper name after a label)
+    // ---------------------------------------------------------------------------------------
+
+    /** Spanish NIF/CIF/NIE layout only; the control character is not validated. */
+    private static final Pattern NIF = Pattern.compile("(?<![A-Za-z0-9])(?:[A-HJ-NP-SUVW][- ]?\\d{7}[- ]?[0-9A-J]"
+            + "|\\d{8}[- ]?[A-HJ-NP-TV-Z]|[XYZ][- ]?\\d{7}[- ]?[A-HJ-NP-TV-Z])(?![A-Za-z0-9])", Pattern.CASE_INSENSITIVE);
+    private static final List<List<String>> FORMAS_JURIDICAS = frases("s l", "sl", "s l u", "slu", "s a", "s a u", "sau",
+            "s l l", "sll", "s l p", "slp", "s coop", "sociedad limitada", "sociedad anonima", "sociedad cooperativa",
+            "sociedad civil", "comunidad de bienes", "c b");
+    /** Companies that must be entered in the Registro Mercantil, so Art. 10.1.b LSSI-CE applies to them. */
+    private static final List<List<String>> FORMAS_MERCANTILES = frases("s l", "sl", "s l u", "slu", "s a", "s a u", "sau",
+            "s l l", "sll", "s l p", "slp", "sociedad limitada", "sociedad anonima");
+    /** Capitalised words that follow a label without naming anyone. */
+    private static final Set<String> NO_NOMBRES = Set.of("El", "La", "Los", "Las", "Lo", "Un", "Una", "Nuestra", "Nuestro",
+            "Nuestras", "Nuestros", "Esta", "Este", "Estos", "Estas", "Dicha", "Dicho", "Su", "Sus", "Usted", "Nosotros", "Es",
+            "Sera", "Se", "No", "Ver", "Consulte", "Datos", "Contacto", "Domicilio", "Direccion", "Correo", "Email", "Telefono",
+            "NIF", "CIF", "Responsable", "Titular", "Indicado", "Indicada");
+
+    /** A capitalised name right after one of the labels: «Responsable del tratamiento: Ejemplo», «Titular: Ana Pérez». */
+    private static Pattern nombreTras(String etiquetas) {
+        return Pattern.compile("(?<!\\p{L})(?i:" + etiquetas + ")(?!\\p{L})\\s*[:,-]?\\s*(?:(?i:es|sera|corresponde a)\\s+)?"
+                + "(\\p{Lu}[\\p{L}\\p{N}&'.-]*)");
+    }
+
+    private static boolean nombra(Clausula c, Pattern etiqueta) {
+        Matcher m = etiqueta.matcher(Normalizer.normalize(c.original(), Normalizer.Form.NFD).replaceAll("\\p{M}+", ""));
+        while (m.find()) {
+            if (!NO_NOMBRES.contains(m.group(1).replaceAll("[.,'-]+$", ""))) return true;
+        }
+        return false;
+    }
+
+    private static boolean nif(Clausula c) {
+        return NIF.matcher(c.original()).find();
+    }
+
+    private static boolean identifica(Clausula c, Pattern etiqueta) {
+        return alguna(c, FORMAS_JURIDICAS) || nif(c) || nombra(c, etiqueta);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // R01 — Identidad del responsable del tratamiento
+    // ---------------------------------------------------------------------------------------
+
+    private static final List<List<String>> ROL_RESPONSABLE = frases("responsable del tratamiento",
+            "responsable de tratamiento", "responsables del tratamiento", "corresponsable del tratamiento",
+            "corresponsables del tratamiento", "identidad del responsable", "responsable de sus datos",
+            "responsable de los datos", "responsable de tus datos");
+    /** «Ejemplo S.L. trata sus datos»: the named entity is presented as the one processing them. */
+    private static final List<List<String>> TRATA_DATOS = frases("trata sus datos", "tratara sus datos", "tratamos sus datos",
+            "trataremos sus datos", "trata los datos", "tratara los datos", "trata tus datos", "tratamos tus datos");
+    private static final Pattern NOMBRE_RESPONSABLE = nombreTras("responsables? de(?:l)? tratamiento"
+            + "|corresponsables? del tratamiento|identidad del responsable|responsable de (?:sus|los|tus) datos|responsable");
+
+    /** The controller's role is stated: its wording affirmed, or a «Responsable:» label opening the clause. */
+    private static boolean rolResponsable(Clausula c) {
+        List<String> t = c.tokens();
+        int dosPuntos = c.original().indexOf(':');
+        boolean etiqueta = !t.isEmpty() && t.get(0).equals("responsable") && (t.size() <= 3 || (dosPuntos >= 0 && dosPuntos < 30));
+        return etiqueta || algunaAfirmada(c, ROL_RESPONSABLE) || algunaAfirmada(c, TRATA_DATOS);
+    }
+
+    private static Evaluacion responsable(List<Clausula> cs, String tipo) {
+        Clausula suficiente = null;
+        Clausula sinIdentidad = null;
+        Clausula sinRol = null;
+        for (int i = 0; i < cs.size(); i++) {
+            Clausula c = cs.get(i);
+            boolean rol = rolResponsable(c);
+            if (rol && identifica(c, NOMBRE_RESPONSABLE)) {
+                if (suficiente == null) suficiente = c;
+            } else if (rol) {
+                // A heading («Responsable del tratamiento») followed by the entity's own clause.
+                Clausula siguiente = i + 1 < cs.size() ? cs.get(i + 1) : null;
+                boolean cabecera = c.tokens().size() <= 6 || c.original().endsWith(":");
+                if (cabecera && siguiente != null && (alguna(siguiente, FORMAS_JURIDICAS) || nif(siguiente))) {
+                    if (suficiente == null) suficiente = unir(c, siguiente);
+                } else if (sinIdentidad == null) {
+                    sinIdentidad = c;
+                }
+            } else if (sinRol == null && (alguna(c, FORMAS_JURIDICAS) || nif(c))) {
+                sinRol = c;
+            }
+        }
+        Clausula mencion = sinIdentidad != null ? sinIdentidad : sinRol;
+        return cerrar(tipo, suficiente, "Se identifica al responsable del tratamiento por su nombre, razón social o NIF. "
+                        + "El texto no permite comprobar que esos datos sean correctos.", null, null, mencion,
+                sinIdentidad != null ? "Se alude al responsable del tratamiento sin indicar su nombre o razón social."
+                        : "Se nombra una entidad, pero no se indica que sea la responsable del tratamiento.",
+                "No se identifica al responsable del tratamiento.", false);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // R04 — Finalidades del tratamiento
+    // ---------------------------------------------------------------------------------------
+
+    private static final List<List<String>> MARCA_FINALIDAD = frases("finalidad", "finalidades", "fines", "proposito",
+            "propositos", "para que tratamos", "para que usamos", "para que utilizamos", "objetivo del tratamiento");
+    private static final List<List<String>> USO_DATOS = frases("tratamos", "trataremos", "utilizamos", "utilizaremos",
+            "usamos", "usaremos", "recogemos", "recabamos", "se utilizaran", "seran tratados", "seran utilizados",
+            "se trataran", "sus datos", "tus datos", "datos personales");
+    private static final List<List<String>> PARA = frases("para", "con el fin de", "con el objeto de", "con objeto de");
+    private static final Map<String, List<List<String>>> FINES = new LinkedHashMap<>();
+
+    static {
+        FINES.put("prestación del servicio", frases("prestacion del servicio", "prestacion de los servicios",
+                "prestar el servicio", "prestar los servicios", "prestarle el servicio", "prestarle los servicios",
+                "servicio contratado", "servicios contratados"));
+        FINES.put("gestión de clientes o del contrato", frases("gestion de clientes", "gestionar la relacion",
+                "gestion de la relacion", "relacion contractual", "gestionar el contrato", "ejecutar el contrato",
+                "ejecucion del contrato"));
+        FINES.put("pedidos, pagos y facturación", frases("pedido", "pedidos", "compra", "compras", "facturacion", "facturar",
+                "factura", "facturas", "pagos", "cobro", "envio de los productos", "entrega de los productos", "devoluciones"));
+        FINES.put("atención de consultas y solicitudes", frases("consulta", "consultas", "solicitud", "solicitudes",
+                "peticiones", "atencion al cliente", "atender", "responder"));
+        FINES.put("comunicaciones comerciales", frases("comunicaciones comerciales", "newsletter", "boletin", "publicidad",
+                "marketing", "promociones", "ofertas", "informacion comercial"));
+        FINES.put("cuentas de usuario", frases("registro de usuarios", "registro como usuario", "registrarse",
+                "cuenta de usuario", "su cuenta", "tu cuenta", "gestion de usuarios", "area privada"));
+        FINES.put("análisis y mejora", frases("analitica", "analisis estadistico", "estadisticas", "estadisticos", "mejorar",
+                "mejora", "medir", "medicion", "calidad del servicio"));
+        FINES.put("obligaciones legales", frases("obligaciones legales", "obligacion legal", "cumplimiento legal", "cumplir con"));
+        FINES.put("selección de personal", frases("seleccion de personal", "procesos de seleccion", "curriculum", "candidatos",
+                "candidatura"));
+        FINES.put("seguridad y prevención del fraude", frases("prevencion del fraude", "prevenir el fraude", "fraude",
+                "seguridad de la plataforma", "seguridad del sitio"));
+        FINES.put("perfiles y personalización", frases("elaborar perfiles", "perfiles", "perfilado", "personalizar",
+                "personalizacion"));
+    }
+
+    /** Purposes left open, contrary to purpose limitation (Art. 5.1.b RGPD). */
+    private static final List<List<String>> FINES_ABIERTOS = frases("cualquier finalidad", "cualquier fin",
+            "cualquier otra finalidad", "cualquier otro fin", "cualquier proposito", "cualquier otro proposito",
+            "cualquier uso", "fines que estimemos", "finalidades que estimemos", "fines que consideremos",
+            "finalidades que consideremos");
+
+    private static Evaluacion finalidades(List<Clausula> cs, String tipo) {
+        Clausula suficiente = null;
+        Clausula problema = null;
+        Clausula mencion = null;
+        Set<String> fines = new LinkedHashSet<>();
+        int ventana = 0;
+        for (Clausula c : cs) {
+            boolean trasEncabezado = ventana > 0;
+            if (ventana > 0) ventana--;
+            // A short «Finalidades» heading lets the following list items state them.
+            if (encabezado(c, "finalidad") || encabezado(c, "finalidades") || encabezado(c, "fines")) ventana = 6;
+            // The purposes of cookies are R10's subject.
+            if (alguna(c, COOKIES)) continue;
+            boolean deFinalidad = trasEncabezado || algunaAfirmada(c, MARCA_FINALIDAD)
+                    || (algunaAfirmada(c, USO_DATOS) && alguna(c, PARA));
+            if (problema == null && algunaAfirmada(c, FINES_ABIERTOS) && (deFinalidad || alguna(c, DATOS))) problema = c;
+            if (!deFinalidad) continue;
+            Set<String> aqui = etiquetasAfirmadas(c, FINES);
+            if (!aqui.isEmpty()) {
+                fines.addAll(aqui);
+                if (suficiente == null) suficiente = c;
+            } else if (mencion == null && (algunaAfirmada(c, MARCA_FINALIDAD) || algunaAfirmada(c, USO_DATOS))) {
+                mencion = c;
+            }
+        }
+        return cerrar(tipo, suficiente, "Finalidades indicadas: " + String.join(", ", fines) + ".", problema,
+                "Se reserva el uso de los datos para cualquier finalidad, contrario al principio de limitación de la "
+                        + "finalidad (Art. 5.1.b RGPD).", mencion,
+                "Se alude a la finalidad del tratamiento sin describir para qué se utilizan los datos.",
+                "No se indican las finalidades del tratamiento.", false);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // R09 — Transferencias internacionales (never assumed: silence is not verifiable)
+    // ---------------------------------------------------------------------------------------
+
+    private static final List<List<String>> TRANSFERENCIA_INTERNACIONAL = frases("transferencia internacional",
+            "transferencias internacionales");
+    private static final List<List<String>> TRANSFERIR = frases("transferir", "transferirse", "transferimos",
+            "transferiremos", "transferira", "transferiran", "transferidos", "transferidas", "transfiere", "transfieren",
+            "transferencia", "transferencias", "alojados", "alojadas",
+            "alojamos", "almacenados", "almacenadas", "almacenamos", "ubicados", "ubicadas", "se almacenan", "se alojan",
+            "tratados", "tratadas");
+    private static final List<List<String>> FUERA_EEE = frases("fuera del eee", "fuera del espacio economico europeo",
+            "fuera de la union europea", "fuera de la ue", "fuera de europa", "terceros paises", "tercer pais",
+            "paises terceros", "otros paises", "cualquier pais", "estados unidos", "ee uu", "eeuu", "reino unido", "suiza",
+            "canada", "japon", "india", "china", "australia", "brasil", "mexico", "argentina");
+    private static final List<List<String>> DENTRO_EEE = frases("espacio economico europeo", "eee", "union europea", "ue",
+            "dentro de europa");
+    private static final List<List<String>> ALOJAMIENTO = frases("servidores", "alojados", "alojadas", "alojamos",
+            "almacenados", "almacenadas", "almacenamos", "ubicados", "ubicadas", "se almacenan", "se alojan");
+    private static final List<List<String>> SALIDA = frases("salen", "saldran", "salir", "sale");
+    private static final List<List<String>> PERMANENCIA = frases("permanecen en", "permaneceran en", "permanecen dentro",
+            "se mantienen en", "se mantienen dentro");
+    private static final List<List<String>> EXCEPCION = frases("salvo", "excepto", "a excepcion", "con excepcion");
+    private static final Map<String, List<List<String>>> GARANTIAS = new LinkedHashMap<>();
+
+    static {
+        GARANTIAS.put("cláusulas contractuales tipo", frases("clausulas contractuales tipo", "clausulas tipo",
+                "clausulas contractuales estandar", "standard contractual clauses"));
+        GARANTIAS.put("decisión de adecuación", frases("decision de adecuacion", "decisiones de adecuacion"));
+        GARANTIAS.put("Marco de Privacidad de Datos UE-EE. UU.", frases("marco de privacidad de datos",
+                "data privacy framework"));
+        GARANTIAS.put("normas corporativas vinculantes", frases("normas corporativas vinculantes", "binding corporate rules",
+                "bcr"));
+        GARANTIAS.put("excepciones del Art. 49 RGPD", frases("consentimiento explicito", "articulo 49", "art 49"));
+    }
+
+    private static final List<List<String>> GARANTIAS_GENERICAS = frases("garantias adecuadas", "garantias apropiadas",
+            "garantias suficientes", "garantias necesarias");
+    private static final List<List<String>> PRIVACY_SHIELD = frases("privacy shield", "escudo de privacidad");
+    private static final List<List<String>> TRANSFERENCIA_SIN_GARANTIAS = frases("sin garantias", "sin ninguna garantia", "cualquier pais",
+            "sin restricciones", "sin restriccion");
+
+    private static Evaluacion transferencias(List<Clausula> cs, String tipo) {
+        Clausula conGarantias = null;
+        Clausula sinGarantias = null;
+        Clausula noTransfiere = null;
+        Clausula soloAlojamiento = null;
+        Clausula problema = null;
+        Set<String> garantias = new LinkedHashSet<>();
+        boolean generica = false;
+        boolean privacyShield = false;
+        int ventana = 0;
+        for (Clausula c : cs) {
+            boolean trasEncabezado = ventana > 0;
+            if (ventana > 0) ventana--;
+            if (encabezado(c, "transferencias")) ventana = 3;
+            Set<String> aqui = etiquetasAfirmadas(c, GARANTIAS);
+            boolean transfiere = alguna(c, TRANSFERENCIA_INTERNACIONAL) || (alguna(c, TRANSFERIR) && alguna(c, FUERA_EEE))
+                    || (trasEncabezado && (alguna(c, FUERA_EEE) || !aqui.isEmpty()));
+            if (!transfiere) {
+                // Where the data stay, not where they go.
+                if (alguna(c, DENTRO_EEE) && (alguna(c, ALOJAMIENTO) || alguna(c, SALIDA) || alguna(c, PERMANENCIA))) {
+                    if (algunaNegada(c, SALIDA) || algunaNegada(c, TRANSFERIR) || algunaAfirmada(c, PERMANENCIA)) {
+                        if (noTransfiere == null) noTransfiere = c;
+                    } else if (soloAlojamiento == null) {
+                        soloAlojamiento = c;
+                    }
+                }
+                continue;
+            }
+            boolean afirmada = algunaAfirmada(c, TRANSFERENCIA_INTERNACIONAL)
+                    || (algunaAfirmada(c, TRANSFERIR) && alguna(c, FUERA_EEE)) || trasEncabezado
+                    // «No realizamos transferencias, salvo a Estados Unidos con cláusulas tipo» discloses one.
+                    || (alguna(c, EXCEPCION) && (alguna(c, FUERA_EEE) || !aqui.isEmpty()));
+            if (!afirmada) {
+                if (noTransfiere == null) noTransfiere = c;
+                continue;
+            }
+            if (problema == null && alguna(c, TRANSFERENCIA_SIN_GARANTIAS)) problema = c;
+            if (!aqui.isEmpty()) {
+                garantias.addAll(aqui);
+                if (conGarantias == null) conGarantias = c;
+            } else if (sinGarantias == null) {
+                sinGarantias = c;
+                generica = alguna(c, GARANTIAS_GENERICAS);
+                privacyShield = alguna(c, PRIVACY_SHIELD);
+            }
+        }
+        // A disclosed transfer without safeguards outweighs a general denial.
+        Clausula suficiente = conGarantias != null ? conGarantias : sinGarantias == null ? noTransfiere : null;
+        String detalleSuficiente = conGarantias != null
+                ? "Se informa de transferencias internacionales con estas garantías: " + String.join(", ", garantias)
+                        + ". El texto no permite comprobar que se apliquen."
+                : "El documento declara que no realiza transferencias internacionales; el texto no permite comprobarlo.";
+        Clausula mencion = sinGarantias != null ? sinGarantias : soloAlojamiento;
+        String detalleMencion = sinGarantias != null
+                ? "Se mencionan transferencias internacionales sin indicar el mecanismo de garantía (Arts. 45 a 49 RGPD)."
+                        + (generica ? " Se alude a garantías adecuadas sin concretarlas." : "")
+                        + (privacyShield ? " El Escudo de Privacidad UE-EE. UU. fue anulado por el TJUE en 2020 (asunto C-311/18)." : "")
+                : "Se indica dónde se alojan los datos, pero no si se transfieren fuera del Espacio Económico Europeo.";
+        return cerrar(tipo, suficiente, detalleSuficiente, problema,
+                "Se declaran transferencias internacionales sin garantías o hacia cualquier país.", mencion, detalleMencion,
+                "El documento no menciona transferencias internacionales; el texto no permite saber si se realizan.", true);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // R11 — Derecho a reclamar ante la autoridad de control
+    // ---------------------------------------------------------------------------------------
+
+    private static final List<List<String>> AUTORIDAD = frases("aepd", "agencia espanola de proteccion de datos",
+            "autoridad de control", "autoridades de control", "autoridad de proteccion de datos", "autoridad supervisora",
+            "autoridad de supervision", "autoridad competente en materia de proteccion de datos",
+            "autoridad catalana de proteccion de datos", "apdcat", "agencia vasca de proteccion de datos",
+            "consejo de transparencia y proteccion de datos");
+    private static final List<List<String>> RECLAMAR = frases("reclamacion", "reclamaciones", "reclamar", "reclame",
+            "denuncia", "denunciar", "tutela");
+    private static final List<List<String>> SOBRE_DATOS_RECLAMACION = frases("datos", "tratamiento", "proteccion de datos",
+            "privacidad", "derechos");
+    /** Explicit denials or waivers: generic negation would misread «Si no obtiene respuesta, puede reclamar». */
+    private static final List<List<String>> NIEGA_RECLAMAR = frases("no puede reclamar", "no podra reclamar",
+            "no podran reclamar", "no puede presentar", "no podra presentar", "no podran presentar",
+            "no tiene derecho a reclamar", "no cabe reclamacion", "no se admitiran reclamaciones", "no se admiten reclamaciones",
+            "renuncia a reclamar", "renuncia a presentar", "renuncia a cualquier reclamacion", "renuncia a interponer");
+
+    private static Evaluacion reclamacion(List<Clausula> cs, String tipo) {
+        Clausula suficiente = null;
+        Clausula problema = null;
+        Clausula soloAutoridad = null;
+        Clausula soloReclamacion = null;
+        for (int i = 0; i < cs.size(); i++) {
+            Clausula c = cs.get(i);
+            boolean autoridad = alguna(c, AUTORIDAD);
+            boolean reclama = alguna(c, RECLAMAR);
+            if (alguna(c, NIEGA_RECLAMAR) && (autoridad || alguna(c, SOBRE_DATOS_RECLAMACION))) {
+                if (problema == null) problema = c;
+                continue;
+            }
+            Clausula anterior = i > 0 ? cs.get(i - 1) : null;
+            Clausula siguiente = i + 1 < cs.size() ? cs.get(i + 1) : null;
+            if (autoridad && reclama) {
+                if (suficiente == null) suficiente = c;
+            } else if (autoridad) {
+                // «Puede presentar una reclamación. La autoridad de control es la AEPD.»
+                if (anterior != null && alguna(anterior, RECLAMAR) && !alguna(anterior, NIEGA_RECLAMAR)) {
+                    if (suficiente == null) suficiente = unir(anterior, c);
+                } else if (soloAutoridad == null) {
+                    soloAutoridad = c;
+                }
+            } else if (reclama && alguna(c, SOBRE_DATOS_RECLAMACION)) {
+                if (siguiente != null && alguna(siguiente, AUTORIDAD) && !alguna(siguiente, NIEGA_RECLAMAR)) {
+                    if (suficiente == null) suficiente = unir(c, siguiente);
+                } else if (soloReclamacion == null) {
+                    soloReclamacion = c;
+                }
+            }
+        }
+        Clausula mencion = soloAutoridad != null ? soloAutoridad : soloReclamacion;
+        return cerrar(tipo, suficiente, "Se informa del derecho a presentar una reclamación ante la autoridad de control.",
+                problema, "El texto niega o condiciona el derecho a reclamar ante la autoridad de control (Art. 77 RGPD).",
+                mencion, soloAutoridad != null
+                        ? "Se menciona la autoridad de control sin informar del derecho a presentar una reclamación ante ella."
+                        : "Se menciona una reclamación sin identificar la autoridad de control ante la que presentarla.",
+                "No se informa del derecho a presentar una reclamación ante la autoridad de control.", false);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // R16 — Información general del prestador (Art. 10 LSSI-CE)
+    // ---------------------------------------------------------------------------------------
+
+    private static final String TIPO_AVISO = "Aviso Legal";
+    /** Documents whose subject is not the provider's general information: it belongs to the legal notice. */
+    private static final Set<String> TIPOS_SIN_AVISO = Set.of("Política de Privacidad", "Política de Cookies",
+            "Términos y Condiciones", "Condiciones de Uso", "Condiciones de Compra", "Accesibilidad");
+    private static final List<List<String>> MARCAS_LSSI = frases("aviso legal", "nota legal", "informacion legal", "lssi",
+            "ley 34 2002", "sociedad de la informacion", "datos identificativos", "prestador de servicios",
+            "informacion general");
+    private static final Pattern NOMBRE_PRESTADOR = nombreTras("titular(?: del (?:sitio(?: web)?|portal|dominio)"
+            + "| de (?:la web|la pagina|este sitio(?: web)?))?|razon social|denominacion(?: social)?|prestador(?: del servicio)?"
+            + "|nombre comercial|empresa|responsable");
+    private static final List<List<String>> DOMICILIO = frases("domicilio", "domicilio social", "sede social", "con sede en",
+            "sede en", "direccion postal", "domiciliada", "domiciliado", "establecimiento");
+    private static final List<List<String>> REGISTRO = frases("registro mercantil", "inscrita en el", "inscrito en el",
+            "registro de asociaciones", "registro de cooperativas", "registro de fundaciones", "datos registrales",
+            "datos de inscripcion");
+    private static final List<String> DATOS_PRESTADOR = List.of("identidad", "NIF", "domicilio", "datos registrales",
+            "correo electrónico");
+
+    /** The Art. 10.1 LSSI-CE items the clause gives, in {@link #DATOS_PRESTADOR} order. */
+    private static Set<String> datosPrestador(Clausula c) {
+        Set<String> datos = new LinkedHashSet<>();
+        if (alguna(c, FORMAS_JURIDICAS) || nombra(c, NOMBRE_PRESTADOR)) datos.add("identidad");
+        if (nif(c)) datos.add("NIF");
+        boolean codigoPostal = c.tokens().stream().anyMatch(t -> t.length() == 5 && t.chars().allMatch(Character::isDigit));
+        if (algunaAfirmada(c, DOMICILIO) || (alguna(c, DIRECCION) && codigoPostal)) datos.add("domicilio");
+        if (alguna(c, REGISTRO) || (alguna(c, frases("tomo")) && alguna(c, frases("folio")))) datos.add("datos registrales");
+        if (EMAIL.matcher(c.original()).find() && !alguna(c, EJEMPLO)) datos.add("correo electrónico");
+        return datos;
+    }
+
+    private static Evaluacion avisoLegal(List<Clausula> cs, String tipo) {
+        String t = tipo == null ? null : tipo.trim();
+        boolean contexto = TIPO_AVISO.equals(t);
+        boolean mercantil = false;
+        Set<String> datos = new LinkedHashSet<>();
+        Clausula mejor = null;
+        int mejorCuenta = 0;
+        for (Clausula c : cs) {
+            contexto |= alguna(c, MARCAS_LSSI);
+            mercantil |= alguna(c, FORMAS_MERCANTILES);
+            Set<String> aqui = datosPrestador(c);
+            datos.addAll(aqui);
+            if (aqui.size() > mejorCuenta) {
+                mejor = c;
+                mejorCuenta = aqui.size();
+            }
+        }
+        // A company in the Registro Mercantil must give its registry data (Art. 10.1.b); otherwise only if registered.
+        boolean registroExigido = mercantil;
+        List<String> exigidos = DATOS_PRESTADOR.stream().filter(d -> registroExigido || !d.equals("datos registrales")).toList();
+        List<String> faltan = exigidos.stream().filter(d -> !datos.contains(d)).toList();
+        String indicados = "Datos del prestador indicados: " + (datos.isEmpty() ? "ninguno" : String.join(", ", datos));
+        if (faltan.isEmpty()) {
+            return new Evaluacion(EstadoEvidencia.SUFICIENTE, true, false, cita(mejor), indicados + ". El texto no permite "
+                    + "comprobar que sean correctos ni si el titular presta servicios de la sociedad de la información.");
+        }
+        if (t != null && TIPOS_SIN_AVISO.contains(t)) {
+            return new Evaluacion(EstadoEvidencia.NO_APLICABLE, false, false, null, "No se exige en un documento de tipo «"
+                    + t + "»: esta información corresponde al aviso legal.");
+        }
+        if (contexto && mejor != null) {
+            return new Evaluacion(EstadoEvidencia.INSUFICIENTE, false, false, cita(mejor), indicados + "; falta: "
+                    + String.join(", ", faltan) + ".");
+        }
+        if (TIPO_AVISO.equals(t)) {
+            return new Evaluacion(EstadoEvidencia.POSIBLE_INCIDENCIA, false, false, null, "El aviso legal no identifica al "
+                    + "prestador; el Art. 10 LSSI-CE lo exige si el titular presta servicios de la sociedad de la información.");
+        }
+        return new Evaluacion(EstadoEvidencia.NO_VERIFICABLE, false, false, null, (mejor != null
+                ? "Aparecen datos del titular, pero el documento no se presenta como aviso legal. " : "")
+                + "El texto no permite saber si el titular presta servicios de la sociedad de la información (Art. 10 "
+                + "LSSI-CE) ni si esa información figura en otra página.");
     }
 }

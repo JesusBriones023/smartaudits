@@ -46,3 +46,21 @@ corpus automáticamente. Para Motor 2.0, revisar texto, expectativas y justifica
 de cada limitación; retirar su etiqueta solo cuando se haya corregido y validado.
 Los casos de negación, ambigüedad, cookies, HTTPS, sinónimo de contacto y denegación
 de derechos registran limitaciones actuales, no resultados jurídicamente correctos.
+
+## Versiones posteriores
+
+`current-engine-v2.json`, `-v3.json` y `-v4.json` repiten los textos de v1 con las
+expectativas de cada versión de reglas; no se regeneran y cada salto tiene su test
+de diferencias escrito a mano (`ReglasV2DeltaTest`, `ReglasV3DeltaTest`,
+`ReglasV4DeltaTest`). `MotorAnalisisLegalRegressionTest` fija el motor a la última.
+
+- v2: R03, R05, R06, R07, R08, G01 y G02 por contexto, con estados de evidencia.
+- v3: además R02, R10, R12, R15 y G03.
+- v4: además R01, R04, R09, R11 y R16 (84 de los 100 puntos por contexto). Añade
+  M15–M20, cuya nota recoge el score observado con reglas v3 para el mismo texto.
+  M01, M08, M13 y M14 bajan 4 puntos: «NIF de prueba» no es un NIF, así que su aviso
+  legal es INSUFICIENTE. La ausencia de transferencias o de datos del aviso legal en
+  un documento completo pasa a ser NO_VERIFICABLE, sin incidencia.
+
+`risk-boundaries.json` fija la clasificación en cada umbral; sus textos se reescriben
+para que el motor vigente alcance exactamente esos scores, que no cambian.
