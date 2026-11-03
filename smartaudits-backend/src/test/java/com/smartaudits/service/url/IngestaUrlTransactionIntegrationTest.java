@@ -18,6 +18,8 @@ import com.smartaudits.service.html.ContenidoHtmlInvalidoException;
 import com.smartaudits.service.motor.MotorAnalisisLegal;
 import com.smartaudits.v2.acquisition.capture.CapturaException;
 import com.smartaudits.v2.acquisition.capture.CapturaHtml;
+import com.smartaudits.v2.acquisition.capture.ControlConcurrenciaCaptura;
+import com.smartaudits.v2.acquisition.capture.TrabajadoresCapturaDePrueba;
 import com.smartaudits.v2.acquisition.capture.TransporteHtml;
 import com.smartaudits.v2.acquisition.capture.TransporteLocalDePrueba;
 import com.smartaudits.v2.acquisition.destination.DestinationUrl;
@@ -35,6 +37,8 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Bean;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.jdbc.datasource.ConnectionHolder;
 import org.springframework.orm.jpa.EntityManagerHolder;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -46,6 +50,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.time.LocalDateTime;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static com.smartaudits.v2.acquisition.capture.CapturaRealDePrueba.crear;
 import static org.assertj.core.api.Assertions.*;
@@ -64,13 +70,18 @@ import static org.mockito.Mockito.*;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @Import({AuditoriaService.class, HistorialService.class, AuditQuotaService.class, MotorAnalisisLegal.class,
-        ObjectMapper.class, IngestaUrlService.class})
+        ObjectMapper.class, IngestaUrlService.class, IngestaUrlTransactionIntegrationTest.Admission.class})
 class IngestaUrlTransactionIntegrationTest {
+    @TestConfiguration
+    static class Admission {
+        @Bean ControlConcurrenciaCaptura concurrencia() { return new ControlConcurrenciaCaptura(1); }
+    }
     static final String URL = "https://www.ejemplo.es/legal";
     static final String FINAL_URL = "https://legal.ejemplo.es/v2/privacidad";
     static final String HTML = "<h1>Política de privacidad</h1><p>Responsable del tratamiento: Ejemplo S.L.</p>";
 
     @Autowired IngestaUrlService ingesta;
+    @SpyBean ControlConcurrenciaCaptura concurrencia;
     @Autowired PlatformTransactionManager transactionManager;
     @Autowired EntityManagerFactory factory;
     @Autowired DataSource dataSource;
@@ -88,7 +99,7 @@ class IngestaUrlTransactionIntegrationTest {
         // Each method commits its own fixture setup; no implicit test rollback hides service boundaries.
         cleanupRows();
         owner = user(Role.CLIENTE);
-        clearInvocations(transport, quota, persistence, audits, users, incidents, history);
+        clearInvocations(transport, quota, persistence, audits, users, incidents, history, concurrencia);
         when(transport.capturar(any())).thenAnswer(invocation -> {
             assertReleasedAtCapture();
             return realFixture(invocation.getArgument(0), HTML);
@@ -142,7 +153,7 @@ class IngestaUrlTransactionIntegrationTest {
     }
 
     private void assertNoWork() {
-        verifyNoInteractions(transport, quota, persistence, audits, users, incidents, history);
+        verifyNoInteractions(transport, quota, persistence, audits, users, incidents, history, concurrencia);
     }
 
     private void assertNoAuditRows() {
@@ -167,7 +178,7 @@ class IngestaUrlTransactionIntegrationTest {
 
     @Test
     void guardPrecedesEvenInvalidArgumentsAndDirectCallsNeedNoProxy() {
-        var direct = new IngestaUrlService(transport, persistence, mock(MotorAnalisisLegal.class), quota);
+        var direct = new IngestaUrlService(transport, persistence, mock(MotorAnalisisLegal.class), quota, concurrencia);
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
             assertThatThrownBy(() -> direct.capturar(null)).isInstanceOf(IllegalStateException.class);
             assertThatThrownBy(() -> direct.analizar(null, null)).isInstanceOf(IllegalStateException.class);
@@ -183,7 +194,7 @@ class IngestaUrlTransactionIntegrationTest {
         TransactionSynchronizationManager.bindResource(factory, new EntityManagerHolder(manager));
         try {
             if (obtainConnection) manager.createNativeQuery("select 1").getSingleResult();
-            clearInvocations(transport, quota, persistence, audits, users, incidents, history);
+            clearInvocations(transport, quota, persistence, audits, users, incidents, history, concurrencia);
             assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
             assertThatThrownBy(() -> invoke(entry)).isInstanceOf(IllegalStateException.class).hasMessageContaining("OSIV");
             assertNoWork();
@@ -256,6 +267,8 @@ class IngestaUrlTransactionIntegrationTest {
         doAnswer(invocation -> {
             assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
             verify(transport).capturar(any());
+            // Capacity must already be free while the persistence transaction is active.
+            concurrencia.ejecutar(() -> realFixture(TransporteLocalDePrueba.destino(URL), HTML));
             return invocation.callRealMethod();
         }).when(quota).verificarPuedeCrear(owner);
         invoke("auditar");
@@ -348,7 +361,7 @@ class IngestaUrlTransactionIntegrationTest {
             assertThat(TransactionSynchronizationManager.getResource(factory)).isSameAs(holder);
             verify(quota).precomprobarPuedeCrear(owner);
             verify(quota, never()).verificarPuedeCrear(any());
-            verifyNoInteractions(transport, persistence, history, incidents);
+            verifyNoInteractions(transport, persistence, history, incidents, concurrencia);
             verify(audits, never()).save(any());
         } finally {
             TransactionSynchronizationManager.unbindResourceIfPossible(factory);
@@ -368,9 +381,9 @@ class IngestaUrlTransactionIntegrationTest {
     @Test
     void exhaustedClientIsRejectedWithoutTransportOrLock() {
         consumeQuota();
-        clearInvocations(transport, quota, persistence, audits, users, incidents, history);
+        clearInvocations(transport, quota, persistence, audits, users, incidents, history, concurrencia);
         assertThatThrownBy(() -> invoke("auditar")).isInstanceOf(AuditQuotaExceededException.class);
-        verifyNoInteractions(transport, persistence, users, incidents, history);
+        verifyNoInteractions(transport, persistence, users, incidents, history, concurrencia);
         verify(quota, never()).verificarPuedeCrear(any());
         assertThat(audits.count()).isOne();
     }
@@ -398,5 +411,33 @@ class IngestaUrlTransactionIntegrationTest {
         verify(users, never()).bloquearPorId(any());
         verify(audits, never()).countByUsuarioIdAndFechaCreacionGreaterThanEqual(any(), any());
         assertThat(audits.count()).isEqualTo(2);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"CLIENTE", "ADMIN"})
+    void saturationWritesNothingAndDoesNotBypassCapacityForAdmin(String role) throws Exception {
+        if (role.equals("ADMIN")) owner = user(Role.ADMIN);
+        var entrada = new CountDownLatch(1);
+        var salida = new CountDownLatch(1);
+        try (var workers = new TrabajadoresCapturaDePrueba(1)) {
+            var ocupado = workers.enviar(() -> concurrencia.ejecutar(() -> {
+                entrada.countDown();
+                try { TrabajadoresCapturaDePrueba.esperar(salida); }
+                catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new AssertionError(e); }
+                return realFixture(TransporteLocalDePrueba.destino(URL), HTML);
+            }));
+            try {
+                TrabajadoresCapturaDePrueba.esperar(entrada);
+                assertThatThrownBy(() -> invoke("auditar")).isInstanceOfSatisfying(CapturaException.class,
+                        e -> assertThat(e.motivo()).isEqualTo(CapturaException.Motivo.CAPACIDAD_AGOTADA));
+                verify(quota).precomprobarPuedeCrear(owner);
+                verifyNoInteractions(transport, persistence, history, incidents);
+                verify(users, never()).bloquearPorId(any());
+                assertNoAuditRows();
+            } finally { salida.countDown(); }
+            ocupado.get(5, TimeUnit.SECONDS);
+        }
+        invoke("auditar"); // Reuse capacity and persist normally after the owner exits.
+        assertThat(audits.count()).isOne();
     }
 }

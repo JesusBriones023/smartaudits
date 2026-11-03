@@ -70,7 +70,8 @@ class IngestaConTransporteRealTest {
         HistorialService historial = mock(HistorialService.class);
         var auditoriaService = new AuditoriaService(auditorias, new MotorAnalisisLegal(), historial, new ObjectMapper(),
                 mock(AuditQuotaService.class));
-        var ingesta = new IngestaUrlService(transporte, auditoriaService, new MotorAnalisisLegal(), mock(AuditQuotaService.class));
+        var ingesta = new IngestaUrlService(transporte, auditoriaService, new MotorAnalisisLegal(), mock(AuditQuotaService.class),
+                new com.smartaudits.v2.acquisition.capture.ControlConcurrenciaCaptura(1));
 
         var analisis = ingesta.analizar("https://www.ejemplo.es/legal", "Política de Privacidad");
 

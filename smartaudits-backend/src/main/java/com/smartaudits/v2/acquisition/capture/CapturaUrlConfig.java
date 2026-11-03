@@ -1,6 +1,7 @@
 package com.smartaudits.v2.acquisition.capture;
 
 import com.smartaudits.v2.acquisition.capture.bootstrap.ConfiguracionDnsTransporte;
+import com.smartaudits.v2.acquisition.capture.bootstrap.ConfiguracionEjecucionCaptura;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -12,10 +13,15 @@ import org.springframework.context.annotation.Configuration;
  * at startup instead of silently keeping the refusal: there is no validated transport to enable.
  */
 @Configuration
-@EnableConfigurationProperties(ConfiguracionDnsTransporte.class)
+@EnableConfigurationProperties({ConfiguracionDnsTransporte.class, ConfiguracionEjecucionCaptura.class})
 public class CapturaUrlConfig {
 
     public static final String PROPIEDAD = "app.acquisition.url.real-enabled";
+
+    @Bean
+    public ControlConcurrenciaCaptura controlConcurrenciaCaptura(ConfiguracionEjecucionCaptura configuracion) {
+        return new ControlConcurrenciaCaptura(configuracion.maxConcurrent());
+    }
 
     @Bean
     public TransporteHtml transporteHtml(@Value("${" + PROPIEDAD + ":false}") boolean realEnabled) {

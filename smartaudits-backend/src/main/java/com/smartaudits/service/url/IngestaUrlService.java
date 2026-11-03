@@ -13,6 +13,7 @@ import com.smartaudits.service.motor.EntradaAnalisis;
 import com.smartaudits.v2.acquisition.capture.CapturaException;
 import com.smartaudits.v2.acquisition.capture.CapturaException.Motivo;
 import com.smartaudits.v2.acquisition.capture.CapturaHtml;
+import com.smartaudits.v2.acquisition.capture.ControlConcurrenciaCaptura;
 import com.smartaudits.v2.acquisition.capture.TransporteHtml;
 import com.smartaudits.v2.acquisition.destination.DestinationUrl;
 import com.smartaudits.v2.acquisition.destination.UrlParseResult;
@@ -45,6 +46,7 @@ public class IngestaUrlService {
     private final AuditoriaService auditoriaService;
     private final AnalizadorLegal analizador;
     private final AuditQuotaService cuota;
+    private final ControlConcurrenciaCaptura concurrencia;
     private final DetectorEnlacesLegales detector = new DetectorEnlacesLegales();
 
     /** Result of a capture analysed without persisting anything. */
@@ -71,19 +73,21 @@ public class IngestaUrlService {
 
     private CapturaHtml capturar(DestinationUrl destino) {
         exigirContextoSinRecursos();
-        CapturaHtml captura;
-        try {
-            captura = transporte.capturar(destino);
-        } catch (CapturaException e) {
-            throw e;
-        } catch (RuntimeException e) {
-            throw new CapturaException(Motivo.TRANSPORTE, "El transporte no pudo obtener la página", e);
-        }
-        if (captura == null) {
-            throw new CapturaException(Motivo.TRANSPORTE, "El transporte no devolvió ninguna captura");
-        }
-        validar(destino, captura);
-        return captura;
+        return concurrencia.ejecutar(() -> {
+            CapturaHtml captura;
+            try {
+                captura = transporte.capturar(destino);
+            } catch (CapturaException e) {
+                throw e;
+            } catch (RuntimeException e) {
+                throw new CapturaException(Motivo.TRANSPORTE, "El transporte no pudo obtener la página", e);
+            }
+            if (captura == null) {
+                throw new CapturaException(Motivo.TRANSPORTE, "El transporte no devolvió ninguna captura");
+            }
+            validar(destino, captura);
+            return captura;
+        });
     }
 
     /** Captures the URL and analyses it with the existing extractor, engine and link discovery. */

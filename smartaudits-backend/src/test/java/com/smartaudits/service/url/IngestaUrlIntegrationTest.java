@@ -22,6 +22,7 @@ import com.smartaudits.service.motor.AnalizadorLegal;
 import com.smartaudits.service.motor.EntradaAnalisis;
 import com.smartaudits.service.motor.MotorAnalisisLegal;
 import com.smartaudits.v2.acquisition.capture.CapturaException;
+import com.smartaudits.v2.acquisition.capture.ControlConcurrenciaCaptura;
 import com.smartaudits.v2.acquisition.capture.CapturaException.Motivo;
 import com.smartaudits.v2.acquisition.capture.ProcedenciaCaptura;
 import com.smartaudits.v2.acquisition.capture.TransporteHttpNoDisponible;
@@ -71,6 +72,9 @@ class IngestaUrlIntegrationTest {
 
     @TestConfiguration
     static class Local {
+        @Bean
+        ControlConcurrenciaCaptura concurrencia() { return new ControlConcurrenciaCaptura(1); }
+
         @Bean
         TransporteLocalDePrueba transporte() {
             return new TransporteLocalDePrueba();
@@ -219,7 +223,8 @@ class IngestaUrlIntegrationTest {
     @Test
     void theDefaultRealAdapterProducesNoCaptureAndNoAudit() {
         Usuario owner = user("bloqueado@example.invalid");
-        var bloqueado = new IngestaUrlService(new TransporteHttpNoDisponible(), auditorias, analizador, cuota);
+        var bloqueado = new IngestaUrlService(new TransporteHttpNoDisponible(), auditorias, analizador, cuota,
+                new ControlConcurrenciaCaptura(1));
         for (var accion : List.<Runnable>of(() -> bloqueado.capturar(URL), () -> bloqueado.analizar(URL, "Aviso Legal"),
                 () -> bloqueado.auditar(URL, "t", "Aviso Legal", owner, "192.0.2.62"))) {
             assertThatThrownBy(accion::run).isInstanceOf(CapturaException.class)

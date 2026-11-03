@@ -86,6 +86,34 @@ declara completa.
 
 Diseño y validación: [PV-13](PV_13_ACQUISITION_TRANSACTION_BOUNDARY.md).
 
+## PV-14: admisión síncrona de capturas
+
+`CapturaUrlConfig` registra un único `ControlConcurrenciaCaptura` por instancia de
+aplicación, separado del transporte. El helper común de `IngestaUrlService` lo usa
+para `capturar`, `analizar` y `auditar`, sin doble admisión. La propiedad estricta
+`app.acquisition.url.execution.max-concurrent` vale `4` por defecto y acepta de `1`
+a `32`; valores inválidos y opciones desconocidas del namespace impiden arrancar.
+No hay valor ilimitado, cola de espera, nuevo worker ni flag de bypass.
+
+La saturación devuelve `CAPACIDAD_AGOTADA` antes de invocar el transporte. El mismo
+hilo llamante ejecuta captura y validación de respuesta y libera su permiso en
+`finally` solo cuando termina esa operación, también ante fallos. Una interrupción
+observada produce `CANCELADA` sin limpiar el flag ni ocultar un fallo primario.
+Cancelar un Future no devuelve capacidad si su delegado sigue ejecutándose.
+
+La capacidad se libera antes de extracción, análisis y persistencia. Se conservan
+las guardas PV-13, la cuota autoritativa y el rollback obligatorio del historial
+CRAWLER; ADMIN tampoco elude la admisión. No se cambia el ciclo de Scan.
+
+El límite no cubre todo el ciclo de auditoría ni múltiples instancias desplegadas.
+No añade plazo total DNS/redirects, cancelación forzada o de sockets, límite por
+host, equidad por tenant, integración de workers/Scan ni activación real. D1/D2/D9
+siguen OPEN y R-EGR BLOCKED, junto con los requisitos previos ya documentados.
+El único transporte productivo sigue siendo `TransporteHttpNoDisponible` y activar
+`real-enabled=true` sigue impidiendo el arranque.
+
+Contrato, pruebas y validación: [PV-14](PV_14_CAPTURE_ADMISSION.md).
+
 **Copia E2E anterior:** `smartaudits-frontend/.e2e-runtime/pv13-source-validation/`
 contiene una junction `node_modules` hacia las dependencias originales. No ejecutar
 borrado recursivo sobre esa copia ni borrar el `node_modules` original. Su limpieza

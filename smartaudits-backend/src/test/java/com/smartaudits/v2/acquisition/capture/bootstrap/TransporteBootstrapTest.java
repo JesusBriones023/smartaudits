@@ -5,6 +5,7 @@ import com.smartaudits.service.motor.AnalizadorLegal;
 import com.smartaudits.service.url.IngestaUrlService;
 import com.smartaudits.v2.acquisition.capture.CapturaException;
 import com.smartaudits.v2.acquisition.capture.CapturaUrlConfig;
+import com.smartaudits.v2.acquisition.capture.ControlConcurrenciaCaptura;
 import com.smartaudits.v2.acquisition.capture.TransporteHtml;
 import com.smartaudits.v2.acquisition.capture.TransporteHttpNoDisponible;
 import com.smartaudits.v2.acquisition.capture.TransporteHttpReal;
@@ -39,11 +40,50 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 
 class TransporteBootstrapTest {
+    private static final String EXECUTION = "app.acquisition.url.execution.";
     private static final String DNS = "app.acquisition.url.dns.";
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
             .withUserConfiguration(CapturaUrlConfig.class)
             .withInitializer(context -> new ClassPathBeanDefinitionScanner((BeanDefinitionRegistry) context.getBeanFactory())
                     .scan(ConfiguracionDnsTransporte.class.getPackageName()));
+
+    @Test
+    void admissionDefaultsToFourWithExactlyOneSharedController() {
+        runner.run(context -> {
+            assertThat(context).hasNotFailed().hasSingleBean(ControlConcurrenciaCaptura.class);
+            assertThat(context.getBean(ConfiguracionEjecucionCaptura.class).maxConcurrent()).isEqualTo(4);
+            comprobarCapacidad(context.getBean(ControlConcurrenciaCaptura.class), 4);
+            assertThat(context.getBean(TransporteHtml.class)).isExactlyInstanceOf(TransporteHttpNoDisponible.class);
+        });
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 32})
+    void admissionRangeBoundariesBind(int max) {
+        runner.withPropertyValues(EXECUTION + "max-concurrent=" + max).run(context -> {
+            assertThat(context).hasNotFailed().hasSingleBean(ControlConcurrenciaCaptura.class);
+            assertThat(context.getBean(ConfiguracionEjecucionCaptura.class).maxConcurrent()).isEqualTo(max);
+            comprobarCapacidad(context.getBean(ControlConcurrenciaCaptura.class), max);
+        });
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"max-concurrent=0", "max-concurrent=-1", "max-concurrent=33",
+            "max-concurrent=2147483648", "max-concurrent=abc", "max-concurrent=1.5",
+            "max-concurrent=", "unlimited=true", "enabled=false", "queue-size=10", "max-concurent=4"})
+    void invalidOrUnsupportedAdmissionSettingsFailStartup(String setting) {
+        runner.withPropertyValues(EXECUTION + setting).run(context -> assertThat(context).hasFailed());
+    }
+
+    /** Hold exactly N slots synchronously, without transport work or timing assertions. */
+    private static void comprobarCapacidad(ControlConcurrenciaCaptura control, int restantes) {
+        if (restantes == 0) {
+            assertThatThrownBy(() -> control.ejecutar(() -> null)).isInstanceOfSatisfying(CapturaException.class,
+                    e -> assertThat(e.motivo()).isEqualTo(CapturaException.Motivo.CAPACIDAD_AGOTADA));
+            return;
+        }
+        control.ejecutar(() -> { comprobarCapacidad(control, restantes - 1); return null; });
+    }
 
     @Test
     void missingDnsHasNoImplicitServerAndCannotBePrepared() {
@@ -161,6 +201,8 @@ class TransporteBootstrapTest {
                         }
                         assertThat(context).hasNotFailed().hasSingleBean(TransporteHtml.class);
                         assertThat(context.getBean(TransporteHtml.class)).isExactlyInstanceOf(TransporteHttpNoDisponible.class);
+                        assertThat(ReflectionTestUtils.getField(context.getBean(IngestaUrlService.class), "concurrencia"))
+                                .isSameAs(context.getBean(ControlConcurrenciaCaptura.class));
                         for (Class<?> tipo : new Class<?>[]{TransporteHttpReal.class, HostResolver.class, DestinationPolicy.class,
                                 ClienteHttpFijado.class, ConectorDirecto.class, PreparacionTransporte.class}) {
                             assertThat(context.getBeansOfType(tipo)).isEmpty();

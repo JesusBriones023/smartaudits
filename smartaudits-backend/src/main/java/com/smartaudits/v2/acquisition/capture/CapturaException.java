@@ -15,7 +15,11 @@ public class CapturaException extends RuntimeException {
         /** The capture is not a usable HTML page (status, content type, requested URL). */
         RESPUESTA_NO_VALIDA,
         /** A simulated capture cannot become a persisted audit. */
-        CAPTURA_SIMULADA
+        CAPTURA_SIMULADA,
+        /** No execution slot was available; no waiting or transport invocation. */
+        CAPACIDAD_AGOTADA,
+        /** Interruption observed by the synchronous capture owner. */
+        CANCELADA
     }
 
     private final Motivo motivo;
