@@ -55,6 +55,19 @@ async function logout(page) {
   await expectSessionCleared(page)
 }
 
+async function reloadAndReadPersisted(page, path) {
+  await page.reload()
+  // A response selected before reload can belong to the previous document and
+  // lose its Chromium body. Verify persistence through a fresh authenticated GET.
+  const token = await page.evaluate(() => localStorage.getItem('token'))
+  const response = await page.request.get(path, {
+    headers: { Authorization: `Bearer ${token}` },
+    maxRedirects: 0,
+  })
+  expect(response.status()).toBe(200)
+  return response.json()
+}
+
 test('registro, login explícito, creación y resultado persistido', async ({ page }) => {
   const email = await register(page, 'audit')
   await logout(page)
@@ -153,9 +166,7 @@ test('HTML pegado: texto extraído, auditoría persistida e informe sin ejecutar
   expect(audit.resultado.resumen).toBeTruthy()
   await expect(page).toHaveURL(new RegExp(`/auditoria/${audit.id}$`))
 
-  const loaded = page.waitForResponse(r => r.url().endsWith(`/api/auditorias/${audit.id}`) && r.request().method() === 'GET')
-  await page.reload()
-  const persisted = await (await loaded).json()
+  const persisted = await reloadAndReadPersisted(page, `/api/auditorias/${audit.id}`)
   expect(persisted.textoOriginal).toBe(extracted)
   expect(persisted.resultado).toEqual(audit.resultado)
   await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible()
@@ -210,9 +221,7 @@ test('auditoría conjunta de tres HTML: informe persistente y recuperable desde 
   expect(report.cobertura.categorias[6].enlaces.map(e => e.url)).toEqual(['https://evil.example.invalid/accesibilidad'])
   await expect(page).toHaveURL(new RegExp(`/auditoria-conjunta/${report.id}$`))
 
-  const loaded = page.waitForResponse(r => r.url().endsWith(`/api/auditorias-conjuntas/${report.id}`) && r.request().method() === 'GET')
-  await page.reload()
-  expect(await (await loaded).json()).toEqual(report)
+  expect(await reloadAndReadPersisted(page, `/api/auditorias-conjuntas/${report.id}`)).toEqual(report)
   await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible()
   for (const documento of report.documentos) {
     const card = page.getByRole('article', { name: documento.titulo, exact: true })
