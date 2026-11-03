@@ -25,9 +25,11 @@ let stopping = false
 let successful = false
 
 // Do not inherit DB/JWT/SPRING/VITE/JAVA_TOOL_OPTIONS or load any .env.
-// Only OS/tool discovery variables are passed to child processes.
+// Only OS/tool discovery and locale variables are passed to child processes.
+// Linux Chromium needs the host's UTF-8 locale to preserve Unicode download names.
 const allowed = new Set(['path', 'systemroot', 'windir', 'comspec', 'pathext',
   'temp', 'tmp', 'tmpdir', 'home', 'userprofile', 'localappdata', 'appdata',
+  'lang', 'lc_all', 'lc_ctype',
   'programdata', 'programfiles', 'programfiles(x86)', 'java_home', 'maven_home', 'm2_home'])
 const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => allowed.has(key.toLowerCase())))
 const password = randomBytes(24).toString('hex')

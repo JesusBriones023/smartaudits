@@ -1183,6 +1183,10 @@ function ConvertTo-Base64Url {
 function Assert-NewAuditViaApi {
     param([string]$ContainerId, [int]$ApiPort, [string]$JwtSecret)
 
+    # Current MotorAnalisisLegal contract; historical rows retain their own versions.
+    $expectedMotor = '4'
+    $expectedRules = '6'
+
     # Capture every legacy row, including its independent timestamp and divergent data.
     # Derive the baseline instead of assuming the fixture contains one result.
     $legacyResultsSql = @'
@@ -1214,7 +1218,7 @@ SELECT CONCAT(id,'|',SHA2(JSON_ARRAY(id,fecha_resultado,puntuacion_cumplimiento,
         -Body ([Text.Encoding]::UTF8.GetBytes($body))
     $audit = $response.Content | ConvertFrom-Json
     Assert-Condition -Condition ($response.StatusCode -eq 201 -and $audit.id -gt 900002 -and
-        $audit.versionMotor -ceq '2' -and $audit.versionReglas -ceq '1' -and
+        $audit.versionMotor -ceq $expectedMotor -and $audit.versionReglas -ceq $expectedRules -and
         $audit.tipoFuente -ceq 'MANUAL' -and $audit.fechaAnalisis) `
         -Message 'New API audit did not return the current analysis provenance.'
     $id = [long]$audit.id
@@ -1230,7 +1234,7 @@ SELECT CONCAT(id,'|',SHA2(JSON_ARRAY(id,fecha_resultado,puntuacion_cumplimiento,
         -Message 'New audit score must agree across the snapshot, canonical column and API.'
     Write-Host 'LEGACY RESULTADOS PRESERVED (COUNT + ROW HASHES); NEW AUDIT RESULTADOS=0; SCORE CONSISTENT'
     $stored = @(Invoke-DockerSql -ContainerId $ContainerId -Sql "SELECT CONCAT(version_motor,'|',version_reglas,'|',tipo_fuente,'|',usuario_id,'|',url_opcional,'|',IF(fecha_analisis <= fecha_creacion AND fecha_analisis >= fecha_creacion - INTERVAL 1 MINUTE,1,0),'|',IF(JSON_VALID(resultado_json),1,0)) FROM auditorias WHERE id=$id;")
-    Assert-Condition -Condition ($stored.Count -eq 1 -and $stored[0] -ceq '2|1|MANUAL|900001|https://example.invalid/reference-only|1|1') `
+    Assert-Condition -Condition ($stored.Count -eq 1 -and $stored[0] -ceq "${expectedMotor}|${expectedRules}|MANUAL|900001|https://example.invalid/reference-only|1|1") `
         -Message 'New API audit provenance or result was not persisted correctly.'
     $expectedFindings = @($audit.resultado.errores | ForEach-Object {
         Assert-Condition -Condition ($_.ruleId -cmatch '^(R(0[1-9]|1[0-9])|G0[1-5])$' -and
