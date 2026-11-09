@@ -22,7 +22,7 @@
         <java.version>17</java.version>
         <jjwt.version>0.12.3</jjwt.version>
         <flyway.version>11.8.0</flyway.version>
-        <jsoup.version>1.18.3</jsoup.version>
+        <jsoup.version>1.24.1</jsoup.version>
         <bouncycastle.version>1.78.1</bouncycastle.version>
     </properties>
     
