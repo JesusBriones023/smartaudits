@@ -26,8 +26,10 @@ arranca, pero preparar la composición falla. Un valor presente pero vacío es i
 `PreparacionTransporte` es una factoría interna de paquete, sin anotaciones Spring,
 sin bean y sin llamantes de producción. Compone `ResolvedorDnsDirecto`,
 `ConectorDirecto`, `ClienteHttpFijado` con TLS estándar y `LimitesHttp.porDefecto()`,
-y `TransporteHttpReal` con reloj UTC. El constructor existente del transporte crea
-la única `DestinationPolicy`; no se añade otra. Preparar no consulta DNS ni abre conexiones.
+y `TransporteHttpReal` con reloj UTC, plazo de adquisición de 20 s y `System::nanoTime`.
+Desde PV-15 el transporte no guarda una `DestinationPolicy`: cada captura construye la suya
+sobre ese resolvedor (misma política y catálogo, reevaluación en cada salto). Preparar no
+consulta DNS ni abre conexiones.
 Una activación futura exige un cambio de ensamblaje expresamente autorizado.
 
 Antes de autorizar ese cambio siguen pendientes:
@@ -113,6 +115,62 @@ El único transporte productivo sigue siendo `TransporteHttpNoDisponible` y acti
 `real-enabled=true` sigue impidiendo el arranque.
 
 Contrato, pruebas y validación: [PV-14](PV_14_CAPTURE_ADMISSION.md).
+
+## PV-15: plazo total de la adquisición preparada
+
+`TransporteHttpReal.capturar` crea al empezar un único plazo monotónico
+(`PlazoCaptura`, sobre `System::nanoTime`) de `LimitesAdquisicion.total()`: 20 s por
+defecto en código, máximo 60 s, sin propiedad nueva. Lo comparten las familias A y
+AAAA, el fallback TCP, cada conexión, el handshake TLS, la escritura y las lecturas
+de todos los saltos de redirección; nunca se reinicia ni se amplía. Cada espera
+bloqueante usa el menor entre su límite propio y el tiempo restante; un tiempo de
+socket nunca vale 0. La lectura del prefijo de longitud DNS sobre TCP recalcula ahora
+el tiempo antes de cada byte.
+
+Cada captura construye su propia `DestinationPolicy` sobre un `ResolvedorConPlazo`;
+el paquete `destination`, la política, el catálogo y la reevaluación por salto no
+cambian. Tras aprobar, tras un `DNS_FAILURE` y antes de devolver la captura se
+comprueba primero la interrupción (`CANCELADA`, sin limpiar el flag) y luego el plazo
+(`PLAZO_AGOTADO`, motivo añadido al final). Los rechazos de seguridad (direcciones,
+`DNS_LIMIT`/`DNS_INVALID`, redirección no válida, peer o identidad TLS) no se
+sustituyen por un resultado de tiempo.
+
+El vigilante HTTP sigue siendo un único hilo daemon, ahora con eliminación inmediata
+de alarmas canceladas; la conexión queda protegida por `finally` antes de armarlo y
+la alarma se cancela solo tras intentar cerrar TLS y el socket crudo (el cierre crudo se
+intenta aunque falle el de TLS), de modo que un `close_notify` bloqueado también termina en el
+plazo de la conexión. Un `IOException` del cierre TLS (`close_notify`) se ignora, como antes.
+Uno del cierre del socket crudo no se ignora: puede producirse antes de liberar nada. Cuenta el
+cierre del propietario y también el del vigilante si llegó antes de la entrega del cierre crudo
+del propietario. Ese es el corte del aviso; no es el final de toda la limpieza, que no es un paso
+atómico. Con un fallo principal queda suprimido en él. Si el intercambio había terminado bien, la
+llamada falla como `TRANSPORTE` («No se pudo cerrar la conexión con el servidor») y no devuelve
+respuesta, aunque el socket ya estuviera liberado. Un fallo no comprobado al cerrar tampoco se
+pierde (suprimido, o lanzado tal cual tras un intercambio correcto). Un fallo ordinario de
+limpieza nunca sustituye al fallo principal. La única excepción es un `Error` de limpieza sobre
+un fallo principal ordinario: se lanza el `Error`, que nunca se convierte, aunque ya forme parte
+del principal (por ejemplo, como su causa), y el principal se conserva como suprimido salvo que
+eso cerrase un ciclo. Los fallos se recogen antes de enlazarse, cada instancia una sola vez (por
+identidad). Primero se decide qué se propaga; después cada uno de los demás fallos se adjunta por
+separado, y solo se omite el que ya es alcanzable o el que cerraría un ciclo. Así, un fallo que no
+puede adjuntarse no arrastra a los demás, y ningún enlace de supresión cierra un ciclo. No se
+reintenta ningún cierre. En HTTPS, JSSE cierra el socket crudo dentro del
+cierre TLS e ignora un `IOException` de ese cierre interno: ese caso no es observable, y no se
+afirma que el sistema operativo haya liberado la conexión. Un `SSLPeerUnverifiedException` o una
+causa `CertificateException` siguen siendo fallo de identidad TLS aunque el plazo haya vencido.
+Cualquier otro `SSLException` se informa como fallo de comunicación o de protocolo TLS, sin
+afirmar un problema de identidad. Su ciclo de vida Spring queda para la futura activación
+autorizada.
+
+No es tiempo real estricto: el redondeo a 1 ms no acota el retraso real (planificación,
+granularidad del temporizador, pausas de la JVM). No detiene resolutores sin plazo (solo
+comprobación posterior), la pequeña escritura TCP de la consulta DNS, CPU acotada por tamaño ni
+sockets ante una interrupción. No cubre extracción, análisis, persistencia ni la petición completa, ni
+implementa cancelación de Scan. `CapturaUrlConfig`, `IngestaUrlService`, PV-13 y PV-14
+no cambian. D1/D2/D9 siguen OPEN y R-EGR BLOCKED; un plazo no sustituye el aislamiento
+de salida.
+
+Contrato, pruebas y validación: [PV-15](PV_15_ACQUISITION_DEADLINE.md).
 
 **Copia E2E anterior:** `smartaudits-frontend/.e2e-runtime/pv13-source-validation/`
 contiene una junction `node_modules` hacia las dependencias originales. No ejecutar

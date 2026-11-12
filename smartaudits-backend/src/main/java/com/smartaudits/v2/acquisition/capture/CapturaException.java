@@ -19,7 +19,9 @@ public class CapturaException extends RuntimeException {
         /** No execution slot was available; no waiting or transport invocation. */
         CAPACIDAD_AGOTADA,
         /** Interruption observed by the synchronous capture owner. */
-        CANCELADA
+        CANCELADA,
+        /** The acquisition-wide deadline of the real transport expired (PV-15); not a per-operation timeout. */
+        PLAZO_AGOTADO
     }
 
     private final Motivo motivo;

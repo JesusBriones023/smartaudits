@@ -6,6 +6,7 @@ import com.smartaudits.service.url.IngestaUrlService;
 import com.smartaudits.v2.acquisition.capture.CapturaException;
 import com.smartaudits.v2.acquisition.capture.CapturaUrlConfig;
 import com.smartaudits.v2.acquisition.capture.ControlConcurrenciaCaptura;
+import com.smartaudits.v2.acquisition.capture.LimitesAdquisicion;
 import com.smartaudits.v2.acquisition.capture.TransporteHtml;
 import com.smartaudits.v2.acquisition.capture.TransporteHttpNoDisponible;
 import com.smartaudits.v2.acquisition.capture.TransporteHttpReal;
@@ -158,10 +159,13 @@ class TransporteBootstrapTest {
     @Test
     void compositionUsesOnlyTheExistingPolicyResolverAndClient() {
         var transporte = PreparacionTransporte.preparar(new ConfiguracionDnsTransporte("192.0.2.53", 5353, Duration.ofMillis(750)));
-        Object politica = ReflectionTestUtils.getField(transporte, "politica");
-        assertThat(politica).isExactlyInstanceOf(DestinationPolicy.class);
-        Object resolver = ReflectionTestUtils.getField(politica, "resolver");
+        // PV-15: one DestinationPolicy per capture over this resolver; none is kept between captures.
+        assertThat(java.util.Arrays.stream(TransporteHttpReal.class.getDeclaredFields()).map(f -> f.getType().getName()))
+                .doesNotContain(DestinationPolicy.class.getName());
+        Object resolver = ReflectionTestUtils.getField(transporte, "resolvedor");
         assertThat(resolver).isExactlyInstanceOf(ResolvedorDnsDirecto.class);
+        assertThat(ReflectionTestUtils.getField(transporte, "limites")).isEqualTo(LimitesAdquisicion.porDefecto());
+        assertThat(LimitesAdquisicion.porDefecto().total()).isEqualTo(Duration.ofSeconds(20));
         var servidor = (InetSocketAddress) ReflectionTestUtils.getField(resolver, "servidor");
         assertThat(servidor.getAddress().getAddress()).containsExactly((byte) 192, (byte) 0, (byte) 2, (byte) 53);
         assertThat(servidor.getPort()).isEqualTo(5353);

@@ -1,36 +1,34 @@
 package com.smartaudits.v2.acquisition.capture.http;
 
+import com.smartaudits.v2.acquisition.capture.PlazoCaptura;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.Socket;
-import java.net.SocketTimeoutException;
 import java.time.Duration;
+import java.util.Objects;
 
 /**
  * Socket input under an absolute deadline: before every read the socket timeout becomes the
  * smaller of the per-read limit and the time left, so a server dripping bytes cannot extend the
- * capture beyond the deadline.
+ * capture beyond the deadline. An expired deadline fails before reading (never a 0 = infinite timeout).
  */
 final class EntradaConPlazo extends InputStream {
 
     private final Socket socket;
     private final InputStream in;
-    private final long limiteNanos;
-    private final long lecturaMs;
+    private final PlazoCaptura plazo;
+    private final Duration lectura;
 
-    EntradaConPlazo(Socket socket, long limiteNanos, Duration lectura) throws IOException {
+    EntradaConPlazo(Socket socket, PlazoCaptura plazo, Duration lectura) throws IOException {
         this.socket = socket;
+        this.plazo = Objects.requireNonNull(plazo, "plazo");
+        this.lectura = Objects.requireNonNull(lectura, "lectura");
         this.in = socket.getInputStream();
-        this.limiteNanos = limiteNanos;
-        this.lecturaMs = lectura.toMillis();
     }
 
     private void prepararLectura() throws IOException {
-        long restanteMs = (limiteNanos - System.nanoTime()) / 1_000_000;
-        if (restanteMs <= 0) {
-            throw new SocketTimeoutException("plazo total agotado");
-        }
-        socket.setSoTimeout((int) Math.max(1, Math.min(Math.min(restanteMs, lecturaMs), Integer.MAX_VALUE)));
+        socket.setSoTimeout(plazo.milisDeEspera(lectura));
     }
 
     @Override
