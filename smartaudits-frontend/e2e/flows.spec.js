@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
-import { inflateSync } from 'node:zlib'
 import { test, expect } from '@playwright/test'
+import { extractPdfText } from './pdfText.mjs'
 
 const runId = process.env.E2E_RUN_ID
 const password = process.env.E2E_PASSWORD
@@ -250,13 +250,7 @@ test('auditoría conjunta de tres HTML: informe persistente y recuperable desde 
   expect(bytes.subarray(0, 5).toString()).toBe('%PDF-')
   expect(bytes.toString('latin1').trimEnd().endsWith('%%EOF')).toBe(true)
   expect(bytes.toString('latin1')).toMatch(/\/MediaBox \[0 0 595\.2\d* 841\.8\d*\]/)
-  const decoder = new TextDecoder('windows-1252')
-  const pdfText = [...bytes.toString('latin1').matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)].flatMap(m => {
-    try {
-      return [...inflateSync(Buffer.from(m[1], 'latin1')).toString('latin1').matchAll(/\[([^\]]*)\]\s*TJ/g)]
-        .map(op => [...op[1].matchAll(/<([0-9a-fA-F]*)>/g)].map(x => decoder.decode(Buffer.from(x[1], 'hex'))).join(''))
-    } catch { return [] }
-  }).join('\n')
+  const pdfText = extractPdfText(bytes)
   for (const fragment of [title, 'Puntuación del análisis automático', 'Privacidad E2E', 'Aviso E2E', 'Cookies E2E',
     'Documentos no aportados', 'Limitaciones del análisis', String(report.documentos[0].puntuacionRiesgo) + '/100',
     'Cobertura documental', 'Documento analizado', 'Cómo se compone la puntuación', 'Puntos acreditados por el texto']) {
