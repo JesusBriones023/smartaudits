@@ -50,9 +50,11 @@ class CapturaContractTest {
         var real = ProcedenciaCaptura.class.getDeclaredMethod("real", String.class, String.class);
         assertThat(Modifier.isPublic(real.getModifiers())).isFalse();
         assertThat(ProcedenciaCaptura.simulada(TransporteLocalDePrueba.ID).esReal()).isFalse();
-        // The canonical constructor is public (records), but a real origin must document an approval.
-        assertThatThrownBy(() -> new ProcedenciaCaptura(ProcedenciaCaptura.Origen.HTTP_REAL, "x", null))
-                .isInstanceOf(IllegalArgumentException.class);
+        // ACQ-PROVENANCE-01: no longer a record, so there is no public canonical constructor at all.
+        assertThat(ProcedenciaCaptura.class.isRecord()).isFalse();
+        assertThat(ProcedenciaCaptura.class.getConstructors()).isEmpty();
+        // A real origin must still document an approval, even through the package-private factory.
+        assertThatThrownBy(() -> ProcedenciaCaptura.real("x", null)).isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

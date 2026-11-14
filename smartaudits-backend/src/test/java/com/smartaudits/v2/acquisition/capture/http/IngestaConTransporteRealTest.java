@@ -80,6 +80,7 @@ class IngestaConTransporteRealTest {
         assertThat(analisis.enlaces().detectados()).extracting(d -> d.categoria(), d -> d.url())
                 .containsExactly(org.assertj.core.groups.Tuple.tuple(CategoriaDocumentoLegal.POLITICA_COOKIES, "https://www.ejemplo.es/cookies"));
         assertThat(analisis.captura().procedencia().esReal()).isFalse();
+        assertThat(analisis.captura().esRealVerificada()).isFalse();
 
         assertThatThrownBy(() -> ingesta.auditar("https://www.ejemplo.es/legal", "t", "Política de Privacidad", new Usuario(), "192.0.2.70"))
                 .isInstanceOf(CapturaException.class)

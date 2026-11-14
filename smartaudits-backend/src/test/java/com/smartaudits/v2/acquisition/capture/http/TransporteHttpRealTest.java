@@ -168,6 +168,7 @@ class TransporteHttpRealTest {
         assertThat(captura.fechaCaptura()).isEqualTo(RELOJ.instant());
         // The peer was declared by the test connector, not observed on the socket: never REAL.
         assertThat(captura.procedencia().esReal()).isFalse();
+        assertThat(captura.esRealVerificada()).isFalse();
         assertThat(captura.procedencia().origen()).isEqualTo(ProcedenciaCaptura.Origen.SIMULADA_LOCAL);
     }
 
