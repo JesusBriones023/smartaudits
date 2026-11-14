@@ -1,5 +1,7 @@
 package com.smartaudits.v2.acquisition.capture.dns;
 
+import com.smartaudits.v2.acquisition.capture.PlazoCaptura;
+import com.smartaudits.v2.acquisition.capture.ResolvedorConPlazo;
 import com.smartaudits.v2.acquisition.destination.DnsAnswer;
 import com.smartaudits.v2.acquisition.destination.DnsAnswer.FamilyAnswer;
 import com.smartaudits.v2.acquisition.destination.DnsAnswer.Status;
@@ -7,7 +9,6 @@ import com.smartaudits.v2.acquisition.destination.HostResolver;
 import com.smartaudits.v2.acquisition.destination.ValidatedHost;
 
 import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -17,7 +18,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.Socket;
-import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Duration;
@@ -35,8 +35,14 @@ import java.util.Objects;
  * chains are followed inside the answer section only. Anything incomplete, inconsistent or late is
  * a FAILURE for that family; the destination policy then validates and classifies every address.
  * DNSSEC is not validated.
+ *
+ * <p>Time: each family's exchange (UDP and, if needed, TCP) has its own {@code timeout}. Through
+ * {@link ResolvedorConPlazo} (PV-15) both families also share the capture's deadline: each exchange
+ * ends by the earlier of the two, and no family is started once the deadline has expired or the
+ * thread has been interrupted. Every read recomputes its timeout. The tiny TCP query write (at most a
+ * few hundred bytes into a new socket) has no timeout of its own.
  */
-public final class ResolvedorDnsDirecto implements HostResolver {
+public final class ResolvedorDnsDirecto implements HostResolver, ResolvedorConPlazo {
 
     public static final int EDNS_PAYLOAD = 1232;
     static final int MAX_UDP = 4096;
@@ -78,15 +84,44 @@ public final class ResolvedorDnsDirecto implements HostResolver {
         }
     }
 
+    /** Ordinary policy callers: each family bounded by its own {@code timeout} only (unchanged contract). */
     @Override
     public DnsAnswer resolve(ValidatedHost host) {
         String nombre = host.name();
-        return DnsAnswer.of(familia(nombre, TYPE_A), familia(nombre, TYPE_AAAA));
+        return DnsAnswer.of(familia(nombre, TYPE_A, null), familia(nombre, TYPE_AAAA, null));
     }
 
-    private FamilyAnswer familia(String nombre, int tipo) {
+    /**
+     * Both families under the capture's deadline. An expired deadline yields FAILURE without opening a
+     * socket; an interruption observed between the families is reported as InterruptedException with
+     * the flag left set (the policy then answers DNS_FAILURE and restores it; the transport tells the
+     * three cases apart from the flag and the deadline, never from the DNS answer).
+     */
+    @Override
+    public DnsAnswer resolver(ValidatedHost host, PlazoCaptura plazo) throws InterruptedException {
+        Objects.requireNonNull(plazo, "plazo");
+        String nombre = host.name();
+        exigirSinInterrupcion();
+        FamilyAnswer a = familia(nombre, TYPE_A, plazo);
+        exigirSinInterrupcion();
+        FamilyAnswer aaaa = familia(nombre, TYPE_AAAA, plazo);
+        return DnsAnswer.of(a, aaaa);
+    }
+
+    private static void exigirSinInterrupcion() throws InterruptedException {
+        if (Thread.currentThread().isInterrupted()) { // isInterrupted: the flag is not cleared
+            throw new InterruptedException("resolución DNS interrumpida");
+        }
+    }
+
+    private FamilyAnswer familia(String nombre, int tipo, PlazoCaptura global) {
+        if (global != null && global.vencido()) {
+            return FamilyAnswer.of(Status.FAILURE, List.of(), List.of()); // never started after expiry
+        }
         try {
-            return interpretar(nombre, tipo, consultar(nombre, tipo));
+            // The family's own exchange deadline, never later than the capture's (UDP and TCP share it).
+            PlazoCaptura limite = global == null ? PlazoCaptura.iniciar(timeout, System::nanoTime) : global.acotado(timeout);
+            return interpretar(nombre, tipo, consultar(nombre, tipo, limite));
         } catch (IOException | RespuestaInvalida e) {
             return FamilyAnswer.of(Status.FAILURE, List.of(), List.of());
         }
@@ -94,10 +129,9 @@ public final class ResolvedorDnsDirecto implements HostResolver {
 
     // ---------------------------------------------------------------- exchange
 
-    private byte[] consultar(String nombre, int tipo) throws IOException, RespuestaInvalida {
+    private byte[] consultar(String nombre, int tipo, PlazoCaptura limite) throws IOException, RespuestaInvalida {
         int id = random.nextInt(0x10000);
         byte[] consulta = consulta(id, nombre, tipo);
-        long limite = System.nanoTime() + timeout.toNanos();
         byte[] respuesta = porUdp(consulta, id, nombre, tipo, limite);
         if ((respuesta[2] & 0x02) != 0) { // TC=1: the complete answer only over TCP
             respuesta = porTcp(consulta, id, nombre, tipo, limite);
@@ -108,13 +142,13 @@ public final class ResolvedorDnsDirecto implements HostResolver {
         return respuesta;
     }
 
-    private byte[] porUdp(byte[] consulta, int id, String nombre, int tipo, long limite) throws IOException, RespuestaInvalida {
+    private byte[] porUdp(byte[] consulta, int id, String nombre, int tipo, PlazoCaptura limite) throws IOException, RespuestaInvalida {
         try (DatagramSocket socket = new DatagramSocket()) { // ephemeral source port chosen by the OS
             socket.connect(servidor); // only datagrams from the configured server are delivered
             socket.send(new DatagramPacket(consulta, consulta.length));
             byte[] buffer = new byte[MAX_UDP];
             for (int ajenos = 0; ajenos <= MAX_DATAGRAMAS_AJENOS; ajenos++) {
-                socket.setSoTimeout(restante(limite));
+                socket.setSoTimeout(limite.milisDeEspera());
                 DatagramPacket paquete = new DatagramPacket(buffer, buffer.length);
                 socket.receive(paquete);
                 byte[] mensaje = java.util.Arrays.copyOf(paquete.getData(), paquete.getLength());
@@ -126,16 +160,20 @@ public final class ResolvedorDnsDirecto implements HostResolver {
         }
     }
 
-    private byte[] porTcp(byte[] consulta, int id, String nombre, int tipo, long limite) throws IOException, RespuestaInvalida {
+    private byte[] porTcp(byte[] consulta, int id, String nombre, int tipo, PlazoCaptura limite) throws IOException, RespuestaInvalida {
         try (Socket socket = new Socket(Proxy.NO_PROXY)) {
-            socket.connect(servidor, restante(limite));
-            socket.setSoTimeout(restante(limite));
+            socket.connect(servidor, limite.milisDeEspera());
+            socket.setSoTimeout(limite.milisDeEspera());
             OutputStream out = socket.getOutputStream();
             out.write(new byte[]{(byte) (consulta.length >> 8), (byte) consulta.length});
             out.write(consulta);
             out.flush();
-            DataInputStream in = new DataInputStream(socket.getInputStream());
-            int longitud = in.readUnsignedShort();
+            InputStream in = socket.getInputStream();
+            // Both bytes of the length prefix are read like the message: each read gets only the time
+            // left, so a server sending one byte late cannot make the second wait a full timeout again.
+            byte[] prefijo = new byte[2];
+            leerCompleto(in, prefijo, socket, limite);
+            int longitud = ((prefijo[0] & 0xFF) << 8) | (prefijo[1] & 0xFF);
             if (longitud > MAX_TCP || longitud < 12) {
                 throw new RespuestaInvalida("longitud TCP");
             }
@@ -148,24 +186,17 @@ public final class ResolvedorDnsDirecto implements HostResolver {
         }
     }
 
-    private static void leerCompleto(InputStream in, byte[] destino, Socket socket, long limite) throws IOException {
+    /** Fills {@code destino}; the socket timeout is recomputed from {@code limite} before every read. */
+    static void leerCompleto(InputStream in, byte[] destino, Socket socket, PlazoCaptura limite) throws IOException {
         int leidos = 0;
         while (leidos < destino.length) {
-            socket.setSoTimeout(restante(limite));
+            socket.setSoTimeout(limite.milisDeEspera());
             int n = in.read(destino, leidos, destino.length - leidos);
             if (n < 0) {
                 throw new IOException("respuesta TCP truncada");
             }
             leidos += n;
         }
-    }
-
-    private static int restante(long limite) throws SocketTimeoutException {
-        long ms = (limite - System.nanoTime()) / 1_000_000;
-        if (ms <= 0) {
-            throw new SocketTimeoutException("plazo DNS agotado");
-        }
-        return (int) Math.min(Integer.MAX_VALUE, ms);
     }
 
     // ---------------------------------------------------------------- wire format

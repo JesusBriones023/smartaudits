@@ -1,5 +1,6 @@
 package com.smartaudits.v2.acquisition.capture.bootstrap;
 
+import com.smartaudits.v2.acquisition.capture.LimitesAdquisicion;
 import com.smartaudits.v2.acquisition.capture.TransporteHttpReal;
 import com.smartaudits.v2.acquisition.capture.dns.ResolvedorDnsDirecto;
 import com.smartaudits.v2.acquisition.capture.http.ClienteHttpFijado;
@@ -23,8 +24,10 @@ final class PreparacionTransporte {
         try {
             var cliente = new ClienteHttpFijado(new ConectorDirecto(), SSLContext.getDefault().getSocketFactory(),
                     LimitesHttp.porDefecto());
-            // TransporteHttpReal owns the single DestinationPolicy, including revalidation per hop.
-            return new TransporteHttpReal(resolver, cliente, Clock.systemUTC());
+            // TransporteHttpReal builds one DestinationPolicy per capture over this deadline-aware
+            // resolver, re-evaluating every hop; the 20 s acquisition deadline is a code default (PV-15).
+            return new TransporteHttpReal(resolver, cliente, Clock.systemUTC(), LimitesAdquisicion.porDefecto(),
+                    System::nanoTime);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("No se pudo preparar el contexto TLS estándar", e);
         }

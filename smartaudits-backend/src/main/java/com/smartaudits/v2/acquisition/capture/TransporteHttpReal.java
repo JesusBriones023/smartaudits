@@ -9,6 +9,7 @@ import com.smartaudits.v2.acquisition.destination.DestinationPolicy;
 import com.smartaudits.v2.acquisition.destination.DestinationUrl;
 import com.smartaudits.v2.acquisition.destination.HostResolver;
 import com.smartaudits.v2.acquisition.destination.IpAddress;
+import com.smartaudits.v2.acquisition.destination.RejectionCode;
 import com.smartaudits.v2.acquisition.destination.UrlParseResult;
 
 import java.net.URI;
@@ -24,6 +25,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.LongSupplier;
 
 /**
  * Real HTTP/HTTPS transport (ADR-0002 section 17). NOT wired into the application: CapturaUrlConfig
@@ -36,6 +38,14 @@ import java.util.Set;
  * at most {@code maxRedirecciones}, no repeated URL, no https to http. A capture is REAL only when
  * every connection's peer was observed on the socket and matched the approval; through a test
  * connector that declares its peer the capture is SIMULATED.
+ *
+ * <p>Deadline (PV-15): each {@link #capturar} call creates one monotonic deadline of
+ * {@link LimitesAdquisicion#total()} on entry and passes it to every DNS family and connection of every
+ * hop; nothing restarts or extends it. For that, each call builds its own {@link DestinationPolicy}
+ * whose resolver delegates to the {@link ResolvedorConPlazo} with this deadline; the policy itself,
+ * the catalog and the re-evaluation of every hop are unchanged. Checkpoints (interruption first, then
+ * the deadline) run before each hop's evaluation, after its approval and before returning a capture.
+ * A rejection with a security meaning is never replaced by a timing outcome.
  */
 public final class TransporteHttpReal implements TransporteHtml {
 
@@ -45,18 +55,34 @@ public final class TransporteHttpReal implements TransporteHtml {
             "utf-8", StandardCharsets.UTF_8, "iso-8859-1", StandardCharsets.ISO_8859_1,
             "us-ascii", StandardCharsets.US_ASCII, "windows-1252", Charset.forName("windows-1252"));
 
-    private final DestinationPolicy politica;
+    private final ResolvedorConPlazo resolvedor;
     private final ClienteHttpFijado cliente;
     private final Clock reloj;
+    private final LimitesAdquisicion limites;
+    private final LongSupplier monotonico;
 
+    /** Default acquisition deadline and System::nanoTime; a resolver that ignores deadlines is only post-checked. */
     public TransporteHttpReal(HostResolver resolver, ClienteHttpFijado cliente, Clock reloj) {
-        this.politica = DestinationPolicy.using(Objects.requireNonNull(resolver, "resolver"));
+        this(ResolvedorConPlazo.de(resolver), cliente, reloj, LimitesAdquisicion.porDefecto(), System::nanoTime);
+    }
+
+    /**
+     * @param reloj      wall clock of the capture timestamp only, never of a timeout
+     * @param monotonico monotonic nanosecond source of the deadline (System::nanoTime in production)
+     */
+    public TransporteHttpReal(ResolvedorConPlazo resolvedor, ClienteHttpFijado cliente, Clock reloj,
+                              LimitesAdquisicion limites, LongSupplier monotonico) {
+        this.resolvedor = Objects.requireNonNull(resolvedor, "resolvedor");
         this.cliente = Objects.requireNonNull(cliente, "cliente");
         this.reloj = Objects.requireNonNull(reloj, "reloj");
+        this.limites = Objects.requireNonNull(limites, "limites");
+        this.monotonico = Objects.requireNonNull(monotonico, "monotonico");
     }
 
     @Override
     public CapturaHtml capturar(DestinationUrl solicitada) {
+        PlazoCaptura plazo = PlazoCaptura.iniciar(limites.total(), monotonico); // once per capture
+        DestinationPolicy politica = DestinationPolicy.using(host -> resolvedor.resolver(host, plazo));
         Set<String> visitadas = new HashSet<>();
         boolean todoObservado = true;
         String revision = null;
@@ -65,13 +91,19 @@ public final class TransporteHttpReal implements TransporteHtml {
             if (!visitadas.add(actual.canonicalForm())) {
                 throw new CapturaException(Motivo.RESPUESTA_NO_VALIDA, "Bucle de redirecciones");
             }
+            comprobarPlazo(plazo);
             DestinationDecision decision = politica.evaluate(actual); // never an earlier approval
             if (decision instanceof DestinationDecision.Rejected rechazo) {
+                if (rechazo.code() == RejectionCode.DNS_FAILURE) {
+                    // DNS_FAILURE carries no cause: an interruption or an expired deadline explains it.
+                    comprobarPlazo(plazo);
+                }
                 throw new CapturaException(Motivo.URL_RECHAZADA, "Destino rechazado por la política (" + rechazo.code() + ")");
             }
             DestinationDecision.Approved aprobada = (DestinationDecision.Approved) decision;
+            comprobarPlazo(plazo); // also the only bound of a resolver that ignores the deadline
             IpAddress ip = aprobada.addresses().get(0);
-            RespuestaHttp respuesta = cliente.obtener(actual, ip);
+            RespuestaHttp respuesta = cliente.obtener(actual, ip, plazo);
             comprobar(aprobada, actual, ip, respuesta.observacion());
             todoObservado &= respuesta.observacion().peerObservado();
             revision = aprobada.catalogRevision();
@@ -97,7 +129,19 @@ public final class TransporteHttpReal implements TransporteHtml {
             String html = decodificar(respuesta.cuerpo(), tipo);
             ProcedenciaCaptura procedencia = todoObservado ? ProcedenciaCaptura.real(ID, revision)
                     : ProcedenciaCaptura.simulada(ID + " con conector de prueba (peer declarado, no observado)");
-            return new CapturaHtml(solicitada, actual, 200, tipo, html, reloj.instant(), procedencia);
+            CapturaHtml captura = new CapturaHtml(solicitada, actual, 200, tipo, html, reloj.instant(), procedencia);
+            comprobarPlazo(plazo); // no capture is returned once expiry has been observed
+            return captura;
+        }
+    }
+
+    /** Checkpoint: an interruption first (the flag stays set), then the acquisition deadline. */
+    static void comprobarPlazo(PlazoCaptura plazo) {
+        if (Thread.currentThread().isInterrupted()) {
+            throw new CapturaException(Motivo.CANCELADA, "La captura fue interrumpida");
+        }
+        if (plazo.vencido()) {
+            throw new CapturaException(Motivo.PLAZO_AGOTADO, "Plazo total de adquisición agotado");
         }
     }
 
