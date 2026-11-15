@@ -328,12 +328,19 @@ class IngestaUrlTransactionIntegrationTest {
         doAnswer(i -> {
             DestinationUrl requested = i.getArgument(0);
             if (failure.equals("empty")) return realFixture(requested, "<script>hidden()</script>");
-            return new CapturaHtml(failure.equals("url") ? TransporteLocalDePrueba.destino(FINAL_URL) : requested,
+            // Real provenance can no longer be copied onto a rebuilt capture (ACQ-PROVENANCE-01): the
+            // trusted fixture builds each invalid response, so ingestion's own validation is what rejects it.
+            return crear(failure.equals("url") ? TransporteLocalDePrueba.destino(FINAL_URL) : requested,
                     requested, failure.equals("status") ? 404 : 200,
-                    failure.equals("type") ? "application/pdf" : "text/html", HTML, java.time.Instant.now(),
-                    realFixture(requested, HTML).procedencia());
+                    failure.equals("type") ? "application/pdf" : "text/html", HTML);
         }).when(transport).capturar(any());
-        assertThatThrownBy(() -> invoke("auditar")).isInstanceOfAny(CapturaException.class, ContenidoHtmlInvalidoException.class);
+        if (failure.equals("empty")) {
+            assertThatThrownBy(() -> invoke("auditar")).isInstanceOf(ContenidoHtmlInvalidoException.class);
+        } else {
+            assertThatThrownBy(() -> invoke("auditar")).isInstanceOfSatisfying(CapturaException.class,
+                    e -> assertThat(e.motivo()).isEqualTo(CapturaException.Motivo.RESPUESTA_NO_VALIDA));
+        }
+        verify(quota, never()).verificarPuedeCrear(any());
         assertNoAuditRows();
     }
 

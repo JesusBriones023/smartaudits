@@ -127,9 +127,12 @@ public final class TransporteHttpReal implements TransporteHtml {
                 throw new CapturaException(Motivo.RESPUESTA_NO_VALIDA, "El contenido capturado no es HTML");
             }
             String html = decodificar(respuesta.cuerpo(), tipo);
-            ProcedenciaCaptura procedencia = todoObservado ? ProcedenciaCaptura.real(ID, revision)
-                    : ProcedenciaCaptura.simulada(ID + " con conector de prueba (peer declarado, no observado)");
-            CapturaHtml captura = new CapturaHtml(solicitada, actual, 200, tipo, html, reloj.instant(), procedencia);
+            // ACQ-PROVENANCE-01: the only production caller of CapturaHtml.real, which mints the real
+            // provenance bound to this content. A declared (test) peer yields a SIMULATED capture.
+            CapturaHtml captura = todoObservado
+                    ? CapturaHtml.real(solicitada, actual, 200, tipo, html, reloj.instant(), ID, revision)
+                    : new CapturaHtml(solicitada, actual, 200, tipo, html, reloj.instant(),
+                            ProcedenciaCaptura.simulada(ID + " con conector de prueba (peer declarado, no observado)"));
             comprobarPlazo(plazo); // no capture is returned once expiry has been observed
             return captura;
         }

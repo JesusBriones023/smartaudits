@@ -31,8 +31,9 @@ import java.util.Set;
  * text comes from {@link AuditoriaService#textoAuditableDeHtml}, the analysis from {@link AnalizadorLegal},
  * links from {@link DetectorEnlacesLegales} and persistence from {@link AuditoriaService#crearAuditoriaAnalizada}.
  * The URL passes the destination rules before any transport is called, and the capture is validated
- * again here, independently of the transport. Only a real capture may become a persisted audit, as
- * {@link TipoFuente#CRAWLER}; with the current fail-closed transport no capture is ever obtained.
+ * again here, independently of the transport. Only a capture for which {@link CapturaHtml#esRealVerificada()}
+ * holds may become a persisted audit, as {@link TipoFuente#CRAWLER}; with the current fail-closed transport
+ * no capture is ever obtained.
  */
 @Service
 @RequiredArgsConstructor
@@ -110,7 +111,9 @@ public class IngestaUrlService {
         cuota.precomprobarPuedeCrear(usuario);
         // The advisory query must have released its resources before any transport call.
         CapturaHtml captura = capturar(destino);
-        if (!captura.procedencia().esReal()) {
+        // Eligibility is a property of the capture object (only the validated transport's factory
+        // creates a real one), never of a provenance label: ACQ-PROVENANCE-01.
+        if (!captura.esRealVerificada()) {
             throw new CapturaException(Motivo.CAPTURA_SIMULADA,
                     "Una captura simulada no se guarda como auditoría: no procede de una página real");
         }
