@@ -273,9 +273,52 @@ test('auditoría conjunta de tres HTML: informe persistente y recuperable desde 
   expect(external.filter(url => new URL(url).hostname.endsWith('example.invalid'))).toEqual([])
 })
 
-test('logout limpia la sesión y una ruta privada redirige al login', async ({ page }) => {
+async function recordPopstates(page) {
+  // Installed before the application's scripts, so it runs ahead of the router's own
+  // listener and records the entry each traversal really reached, before any redirect.
+  await page.addInitScript(() => {
+    window.__e2ePopstates = []
+    window.addEventListener('popstate', () => window.__e2ePopstates.push(location.pathname))
+  })
+  return () => page.evaluate(() => window.__e2ePopstates)
+}
+
+test('logout limpia la sesión y una ruta privada redirige al login', async ({ page, baseURL }) => {
+  const popstates = await recordPopstates(page)
   await login(page, adminEmail)
+  const crearHeading = page.getByRole('heading', { name: 'Nueva Auditoría Legal', exact: true })
+  const historialHeading = page.getByRole('heading', { name: /Todas las Auditorías/ })
+
+  // Real Chromium Back/Forward between client-side routes of one document.
+  await page.getByRole('link', { name: 'Nueva Auditoría', exact: true }).click()
+  await expect(crearHeading).toBeVisible()
+  await page.getByRole('link', { name: 'Historial', exact: true }).click()
+  await expect(historialHeading).toBeVisible()
+  await page.goBack()
+  await expect(page).toHaveURL(`${baseURL}/crear-auditoria`)
+  await expect(crearHeading).toBeVisible()
+  await page.goForward()
+  await expect(page).toHaveURL(`${baseURL}/historial`)
+  await expect(historialHeading).toBeVisible()
+  expect(await popstates()).toEqual(['/crear-auditoria', '/historial'])
+
+  // After logout, Back really reaches each protected entry and the guard replaces it.
+  const authorizedAfterLogout = []
   await logout(page)
+  page.on('request', request => {
+    if (request.headers().authorization) authorizedAfterLogout.push(request.url())
+  })
+  await page.goBack()
+  await expect.poll(popstates).toEqual(['/crear-auditoria', '/historial', '/historial'])
+  await expectSessionCleared(page)
+  await expect(historialHeading).toHaveCount(0)
+  await page.goBack()
+  await expect.poll(popstates).toEqual(['/crear-auditoria', '/historial', '/historial', '/crear-auditoria'])
+  await expectSessionCleared(page)
+  await expect(crearHeading).toHaveCount(0)
+  expect(new URL(page.url()).origin).toBe(baseURL)
+  expect(authorizedAfterLogout).toEqual([])
+
   await page.goto('/crear-auditoria')
   await expectSessionCleared(page)
   await expect(page.getByRole('button', { name: 'Analizar documento', exact: true })).toHaveCount(0)
@@ -291,7 +334,7 @@ test('token inválido recibe 401 real y limpia la sesión', async ({ page }) => 
   await expectSessionCleared(page)
 })
 
-test('ADMIN consulta usuarios; CLIENTE con rol UI manipulado recibe 403 real', async ({ page }) => {
+test('ADMIN consulta usuarios; CLIENTE con rol UI manipulado recibe 403 real', async ({ page, context, baseURL }) => {
   await login(page, adminEmail)
   const users = page.waitForResponse(r => r.url().endsWith('/api/usuarios') && r.request().method() === 'GET')
   await page.getByRole('link', { name: 'Gestión Usuarios', exact: true }).click()
@@ -313,4 +356,62 @@ test('ADMIN consulta usuarios; CLIENTE con rol UI manipulado recibe 403 real', a
   await expect(page.getByText('No se pudo cargar la lista de usuarios.', { exact: true })).toBeVisible()
   await expect(page.getByRole('row').filter({ hasText: adminEmail })).toHaveCount(0)
   expect(await page.evaluate(() => !!localStorage.getItem('token'))).toBe(true)
+
+  // Same CLIENTE (no extra registration), real role restored in the browser.
+  await page.evaluate(() => {
+    const user = JSON.parse(localStorage.getItem('user'))
+    localStorage.setItem('user', JSON.stringify({ ...user, role: 'CLIENTE' }))
+  })
+  // Every request Chromium attempts outside the test origin, popups included. The runner's
+  // blocker aborts them; it is a harness boundary, never counted as an application control.
+  const external = []
+  context.on('request', request => {
+    if (new URL(request.url()).origin !== baseURL) external.push(request.url())
+  })
+
+  // The detail route decodes its parameter into the API path and Chromium normalizes it:
+  // "..%2Fusuarios" becomes GET /api/usuarios. It stays same-origin, the backend denies it
+  // with the real CLIENTE token, and the page itself does not re-route.
+  const traversal = page.waitForResponse(r => new URL(r.url()).pathname === '/api/usuarios' && r.request().method() === 'GET')
+  await page.goto('/auditoria/..%2Fusuarios')
+  const usuarios = await traversal
+  expect(new URL(usuarios.url()).origin).toBe(baseURL)
+  expect(usuarios.status()).toBe(403)
+  await expect(page).toHaveURL(`${baseURL}/auditoria/..%2Fusuarios`)
+  await expect(page.getByText(adminEmail)).toHaveCount(0)
+  expect(await page.evaluate(() => !!localStorage.getItem('token'))).toBe(true)
+
+  // Protocol-relative and backslash paths typed in the address bar load the application
+  // itself; the router's catch-all keeps them on this origin.
+  for (const path of ['//evil.example/x', '/%2F%2Fevil.example', '/%5C%5Cevil.example', '/%5C/evil.example']) {
+    await page.goto(`${baseURL}${path}`)
+    await expect(page, path).toHaveURL(`${baseURL}/dashboard`)
+    await expect(page.getByRole('heading', { name: /^Hola, / })).toBeVisible()
+  }
+  expect(external.filter(url => new URL(url).hostname.endsWith('evil.example'))).toEqual([])
+
+  // A real external link is browser-native navigation in a new tab (noopener), not a router
+  // transition: the application page stays put and only the popup attempts the outside URL.
+  await page.goto('/normativa/rgpd')
+  const link = page.getByRole('link', { name: 'Texto oficial en EUR-Lex', exact: true })
+  await expect(link).toHaveAttribute('target', '_blank')
+  await expect(link).toHaveAttribute('rel', /noopener/)
+  const popupEvent = page.waitForEvent('popup')
+  await link.click()
+  const popup = await popupEvent
+  await expect.poll(() => external.some(url => new URL(url).hostname === 'eur-lex.europa.eu')).toBe(true)
+  await popup.close()
+  await expect(page).toHaveURL(`${baseURL}/normativa/rgpd`)
+
+  // Last, because it ends the session: a protocol-relative parameter becomes the same-origin
+  // GET /api/auditorias///evil.example. The backend rejects the non-numeric id and its error
+  // dispatch answers 401, so the existing 401 interceptor clears the session on this origin.
+  const protocolRelative = page.waitForResponse(r => new URL(r.url()).pathname.startsWith('/api/auditorias/') && r.request().method() === 'GET')
+  await page.goto('/auditoria/%2F%2Fevil.example')
+  const rejected = await protocolRelative
+  expect(new URL(rejected.url()).origin).toBe(baseURL)
+  expect(rejected.status()).toBe(401)
+  await expectSessionCleared(page)
+  expect(new URL(page.url()).origin).toBe(baseURL)
+  expect(external.filter(url => new URL(url).hostname.endsWith('evil.example'))).toEqual([])
 })
