@@ -44,10 +44,89 @@ async function login(page, email) {
   await expect(page).toHaveURL(/\/dashboard$/)
 }
 
+// The pushed URL and the cleared storage can change before the route render commits, so
+// the rendered login page without the private sidebar is what shows the app settled on
+// /login. Storage is compared as booleans: a failure never prints stored values.
 async function expectSessionCleared(page) {
   await expect(page).toHaveURL(/\/login$/)
-  await expect.poll(() => page.evaluate(() =>
-    [localStorage.getItem('token'), localStorage.getItem('user')])).toEqual([null, null])
+  await expect(page.getByRole('heading', { name: 'Bienvenido de vuelta', exact: true })).toBeVisible()
+  await expect(page.locator('aside')).toHaveCount(0)
+  await expect.poll(() => page.evaluate(() => ({
+    tokenAbsent: localStorage.getItem('token') === null,
+    userAbsent: localStorage.getItem('user') === null,
+  }))).toEqual({ tokenAbsent: true, userAbsent: true })
+}
+
+// Allowlisted templates only: anything unrecognized collapses to a fixed placeholder, so
+// diagnostics never echo arbitrary path segments, queries, hashes, ids or emails.
+const STATIC_ROUTES = new Set(['/', '/login', '/register', '/dashboard', '/crear-auditoria', '/historial',
+  '/crear-auditoria-conjunta', '/historial-conjuntas', '/perfil', '/admin/usuarios', '/admin/historial'])
+const routeTemplate = path => STATIC_ROUTES.has(path) ? path
+  : /^\/auditoria\/\d+$/.test(path) ? '/auditoria/:id'
+  : /^\/auditoria-conjunta\/\d+$/.test(path) ? '/auditoria-conjunta/:id'
+  : '<other-route>'
+const STATIC_API = new Set(['/api/auth/login', '/api/auth/register', '/api/auditorias', '/api/auditorias/mias',
+  '/api/auditorias/html', '/api/auditorias-conjuntas', '/api/usuarios'])
+const apiTemplate = path => STATIC_API.has(path) ? path
+  : /^\/api\/auditorias\/\d+$/.test(path) ? '/api/auditorias/:id'
+  : /^\/api\/auditorias-conjuntas\/\d+$/.test(path) ? '/api/auditorias-conjuntas/:id'
+  : '/api/<other>'
+const METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
+const apiCall = request => `${METHODS.has(request.method()) ? request.method() : 'OTHER'} ${apiTemplate(new URL(request.url()).pathname)}`
+const ERROR_CATEGORIES = new Set(['Error', 'TypeError', 'ReferenceError', 'RangeError', 'SyntaxError'])
+
+// Bounded, CI-safe evidence for routing failures: route/endpoint templates, numeric statuses,
+// booleans and page-error category counts. Never messages, stacks, headers, bodies or values.
+function monitorRouting(page, popstates, protectedHeadings) {
+  const errorCounts = {}
+  const api = []
+  const onError = error => {
+    const category = ERROR_CATEGORIES.has(error?.name) ? error.name : 'Other'
+    errorCounts[category] = Math.min((errorCounts[category] ?? 0) + 1, 99)
+  }
+  const onResponse = response => {
+    if (api.length < 30 && new URL(response.url()).pathname.startsWith('/api/')) {
+      api.push(`${apiCall(response.request())} ${Number(response.status())}`)
+    }
+  }
+  page.on('pageerror', onError)
+  page.on('response', onResponse)
+  return {
+    async report(label) {
+      const state = await page.evaluate(() => ({
+        path: location.pathname,
+        historyIdx: Number.isInteger(window.history.state?.idx) ? window.history.state.idx : null,
+        tokenPresent: localStorage.getItem('token') !== null,
+        userPresent: localStorage.getItem('user') !== null,
+      })).catch(() => ({}))
+      const visible = async locator => locator.first().isVisible().catch(() => false)
+      const protectedVisible = (await Promise.all(protectedHeadings.map(visible))).some(Boolean)
+      console.error(`[routing diagnostics] ${label} ${JSON.stringify({
+        route: typeof state.path === 'string' ? routeTemplate(state.path) : null,
+        historyIdx: state.historyIdx ?? null,
+        tokenPresent: state.tokenPresent === true, userPresent: state.userPresent === true,
+        popstates: (await popstates().catch(() => [])).slice(-10).map(routeTemplate),
+        loginHeading: await visible(page.getByRole('heading', { name: 'Bienvenido de vuelta', exact: true })),
+        privateSidebar: await visible(page.locator('aside')),
+        protectedContent: protectedVisible, pageErrors: errorCounts, api,
+      })}`)
+    },
+    stop() {
+      page.off('pageerror', onError)
+      page.off('response', onResponse)
+    },
+  }
+}
+
+// One window per logout cycle: counts requests carrying an Authorization header, keeping
+// only the endpoint template (bounded). Header values are never read into the buffer.
+function watchAuthorizedRequests(page) {
+  const calls = []
+  const onRequest = request => {
+    if (calls.length < 20 && 'authorization' in request.headers()) calls.push(apiCall(request))
+  }
+  page.on('request', onRequest)
+  return { calls: () => [...calls], stop: () => page.off('request', onRequest) }
 }
 
 async function logout(page) {
@@ -302,26 +381,63 @@ test('logout limpia la sesión y una ruta privada redirige al login', async ({ p
   await expect(historialHeading).toBeVisible()
   expect(await popstates()).toEqual(['/crear-auditoria', '/historial'])
 
-  // After logout, Back really reaches each protected entry and the guard replaces it.
-  const authorizedAfterLogout = []
-  await logout(page)
-  page.on('request', request => {
-    if (request.headers().authorization) authorizedAfterLogout.push(request.url())
-  })
-  await page.goBack()
-  await expect.poll(popstates).toEqual(['/crear-auditoria', '/historial', '/historial'])
-  await expectSessionCleared(page)
-  await expect(historialHeading).toHaveCount(0)
-  await page.goBack()
-  await expect.poll(popstates).toEqual(['/crear-auditoria', '/historial', '/historial', '/crear-auditoria'])
-  await expectSessionCleared(page)
-  await expect(crearHeading).toHaveCount(0)
-  expect(new URL(page.url()).origin).toBe(baseURL)
-  expect(authorizedAfterLogout).toEqual([])
+  const monitor = monitorRouting(page, popstates, [crearHeading, historialHeading])
+  let step = 'logout'
+  try {
+    // Normal cycle, watched from before logout through both Backs and the direct visit:
+    // after a settled logout, Back really reaches each protected entry and the guard replaces it.
+    const normalCycle = watchAuthorizedRequests(page)
+    try {
+      await logout(page)
+      step = 'first Back after logout'
+      await page.goBack()
+      await expect.poll(popstates).toEqual(['/crear-auditoria', '/historial', '/historial'])
+      await expectSessionCleared(page)
+      await expect(historialHeading).toHaveCount(0)
+      step = 'second Back after logout'
+      await page.goBack()
+      await expect.poll(popstates).toEqual(['/crear-auditoria', '/historial', '/historial', '/crear-auditoria'])
+      await expectSessionCleared(page)
+      await expect(crearHeading).toHaveCount(0)
+      expect(new URL(page.url()).origin).toBe(baseURL)
 
-  await page.goto('/crear-auditoria')
-  await expectSessionCleared(page)
-  await expect(page.getByRole('button', { name: 'Analizar documento', exact: true })).toHaveCount(0)
+      step = 'direct protected URL'
+      await page.goto('/crear-auditoria')
+      await expectSessionCleared(page)
+      await expect(page.getByRole('button', { name: 'Analizar documento', exact: true })).toHaveCount(0)
+      expect(normalCycle.calls()).toEqual([])
+    } finally {
+      normalCycle.stop()
+    }
+
+    // Rapid Back: logout and Back queued in the same browser task, so the traversal can
+    // arrive before the logout redirect has rendered. Not synchronized on purpose.
+    step = 'login before rapid Back'
+    await login(page, adminEmail)
+    await page.getByRole('link', { name: 'Historial', exact: true }).click()
+    await expect(historialHeading).toBeVisible()
+    const before = (await popstates()).length
+    step = 'rapid Back after logout'
+    const rapidCycle = watchAuthorizedRequests(page)
+    try {
+      await page.evaluate(() => {
+        [...document.querySelectorAll('aside button')].find(b => b.textContent.includes('Cerrar sesión')).click()
+        window.history.back()
+      })
+      await expect.poll(async () => (await popstates()).slice(before)).toEqual(['/historial'])
+      await expectSessionCleared(page)
+      await expect(historialHeading).toHaveCount(0)
+      expect(new URL(page.url()).origin).toBe(baseURL)
+      expect(rapidCycle.calls()).toEqual([])
+    } finally {
+      rapidCycle.stop()
+    }
+  } catch (error) {
+    await monitor.report(step)
+    throw error
+  } finally {
+    monitor.stop()
+  }
 })
 
 test('token inválido recibe 401 real y limpia la sesión', async ({ page }) => {
