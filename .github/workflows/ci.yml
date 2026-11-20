@@ -58,8 +58,40 @@ jobs:
           java-version: '17'
           cache: maven
           cache-dependency-path: smartaudits-backend/pom.xml
-      - run: mvn --batch-mode -DskipTests package
+      # TEMPORARY DIAGNOSTIC (PR #24): package with a fresh, runner-local Maven repository
+      # so restored-cache state cannot affect resolution. The restored cache is only listed
+      # (file names, never contents). Maven's exit code is always the step's exit code.
+      - name: Package backend with a fresh local repository (diagnostic)
+        shell: bash
         working-directory: smartaudits-backend
+        run: |
+          cached="$HOME/.m2/repository/org/apache/maven/plugins/maven-jar-plugin/3.3.0"
+          echo "Restored cache entries for maven-jar-plugin 3.3.0 (names only):"
+          if [ -d "$cached" ]; then
+            find "$cached" -mindepth 1 -maxdepth 1 -printf '  %f\n' | LC_ALL=C sort | head -n 50 || true
+          else
+            echo "  (directory absent)"
+          fi
+
+          fresh_repo="$(mktemp -d "$RUNNER_TEMP/maven-fresh-repo.XXXXXXXX")"
+          echo "Packaging with a fresh, empty local repository."
+          mvn_status=0
+          mvn --batch-mode --show-version --errors \
+            "-Dmaven.repo.local=$fresh_repo" \
+            -DskipTests package || mvn_status=$?
+          echo "Maven exit code: $mvn_status"
+
+          if [ "$mvn_status" -ne 0 ]; then
+            central="https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-jar-plugin/3.3.0"
+            for type in pom jar; do
+              curl_status=0
+              http_code="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+                --proto '=https' --connect-timeout 10 --max-time 30 \
+                "$central/maven-jar-plugin-3.3.0.$type")" || curl_status=$?
+              echo "Probe artifact=$type http_status=${http_code:-000} curl_exit=$curl_status"
+            done
+          fi
+          exit "$mvn_status"
       - run: docker pull mariadb:11.2
       - name: Validate empty and legacy schemas, sentinel and cleanup
         shell: pwsh

@@ -42,7 +42,13 @@ import ScrollToTop from './components/ScrollToTop'
 function App() {
   return (
     <AuthProvider>
-      <Router>
+      {/* Observed: after upgrading to React Router 7 (which wraps router updates in
+          startTransition by default; this app used v6 without that opt-in), an immediate
+          Back after logout could leave a blank page at a previously protected URL.
+          Disabling router transitions removed that failure in repeated Chromium E2E runs.
+          Inferred, not directly observed: a race between the logout state update, the
+          router location update and the <Navigate> redirect effect. */}
+      <Router useTransitions={false}>
         <ScrollToTop />
         <Routes>
 
