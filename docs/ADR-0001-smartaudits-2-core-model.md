@@ -321,6 +321,69 @@ semántica binaria), no podrá añadirla con ALTER sobre `sites` bajo este guard
 opciones serán una tabla nueva dependiente de Site o una decisión explícita que
 amplíe el guard con reglas ALTER revisadas; ninguna se adopta ahora.
 
+### Contrato estructural V10 — F4.1-C Incremento 1 (identidad persistida)
+
+Enmienda de 2026-11-24, implementada sin commit y pendiente de revisión
+independiente. F4.1-C fijó offline la identidad de un Site
+(`docs/F4_1C_SITE_URL_IDENTITY.md`): el origen `scheme://host` en minúsculas
+ASCII, como máximo 261 bytes. V10 la persiste con la primera opción del párrafo
+anterior: una tabla nueva dependiente de Site, creada con una única sentencia
+`CREATE TABLE`. `sites` no se altera y el guard de migraciones no se amplía.
+
+| Columna | Contrato SQL |
+| --- | --- |
+| `site_id` | BIGINT NOT NULL, PK: como máximo una identidad por Site |
+| `organization_id` | BIGINT NOT NULL |
+| `canonical_origin` | VARBINARY(261) NOT NULL: bytes ASCII, comparación byte a byte |
+
+- `uq_site_url_identities_org_origin (organization_id, canonical_origin)` es la
+  clave de identidad por organización: impone unicidad dentro de cada
+  organización, no autorización de consultas. Un llamante futuro debe autorizar
+  al actor (Membership ACTIVE, sección 6) y acotar explícitamente cada búsqueda y
+  escritura por `organization_id`.
+- `fk_site_url_identities_site (organization_id, site_id) → sites(organization_id,
+  id)` reutiliza `uq_sites_org_site`, con ON DELETE RESTRICT y ON UPDATE RESTRICT.
+  Una fila no puede pertenecer a otra organización que su Site, y su Site no puede
+  borrarse ni cambiar de organización mientras la fila exista. Es integridad
+  referencial entre tenants; no comprueba Membership ni sustituye la autorización.
+  `ix_site_url_identities_org_site` es el índice explícito de esa FK.
+- Cuatro CHECK deterministas, sin catálogo: alfabeto `[a-z0-9.:/-]`; esquema
+  `http://` (≤ 260 bytes) o `https://` (≤ 261); gramática del host (etiquetas LDH
+  de 1 a 63 caracteres y al menos dos etiquetas, sin puerto, ruta, barra final,
+  query ni fragmento); y etiquetas sin `--` en las posiciones 3 y 4 y sin una
+  última etiqueta numérica o `0x`. Reproducen las reglas estructurales 11 a 17
+  del perfil de destino. No reproducen la regla 18, el catálogo de nombres
+  prohibidos, porque depende de su revisión.
+- VARBINARY no tiene charset ni collation: no hay relleno, plegado de mayúsculas
+  ni equivalencia por espacios finales o NUL. La collation de la tabla
+  (`utf8mb4_unicode_520_ci`) no interviene en la identidad.
+
+**Enmienda a "URL literal, sin identidad canónica".** `base_url` sigue siendo el
+texto literal, y dos Sites de la misma o de distintas organizaciones pueden seguir
+almacenando la misma `base_url`. Lo que cambia es que dos Sites *identificados* de
+la misma organización ya no pueden compartir identidad canónica. Organizaciones
+distintas sí pueden. Un Site sin fila en V10 no participa en la unicidad.
+
+Decisiones del Incremento 1:
+
+- **SI-2:** un Site ARCHIVED conserva reservada su identidad. La clave no incluye
+  el estado.
+- **SI-3:** la identidad vive en `site_url_identities`.
+- **SI-4:** V10 no hace backfill. Un Site legacy obtiene identidad solo mediante
+  una operación explícita futura.
+
+`SiteUrlIdentityRecord` (en `com.smartaudits.v2.model`) es el único mapping:
+`@Immutable`, columnas `updatable=false`, PK asignada desde el Site persistido y
+`organization_id` tomado siempre del Site, sin asociaciones ni cascadas. Recibe
+una `SiteUrlIdentity` ya aceptada y nunca vuelve a parsear la forma almacenada. La
+base de datos no impide un `UPDATE` SQL directo de la fila; la inmutabilidad
+pertenece al mapping y al servicio futuro.
+
+El Incremento 1 no incluye `SiteCreationService`, la provisión de la Organization
+personal, repositorio, controller, endpoint ni cambios de JWT o autorización.
+Sigue sin exponerse un endpoint productivo para crear Sites. La adquisición real
+sigue desactivada, y una identidad no concede permiso para visitar nada.
+
 ## 8. Audit and Scan
 
 Audit representa una solicitud/intención lógica de evaluación. Scan representa
@@ -667,6 +730,11 @@ CREATE INDEX separado, DML ni cambios sobre tablas legacy. Si una necesidad
 no puede expresarse dentro de esa sentencia, no se añadirá una segunda operación
 DDL a la migración. V1/V2/V3 son inmutables.
 
+V10 (`site_url_identities`, F4.1-C Incremento 1, sección 7) sigue esta misma
+regla: es aditiva, contiene una sola `CREATE TABLE`, no tiene DML ni ALTER y no
+hace backfill. Su hash queda congelado junto a V1–V9 en los tres inventarios de
+migraciones.
+
 El objetivo es evitar que el fallo de una sentencia deje parcialmente aplicada
 una migración compuesta por varias operaciones DDL. Se mantiene la regla de
 una tabla por migración.
@@ -743,6 +811,32 @@ audits, scans e historial Flyway. Los centinelas Audit + Scan se crean con el se
 y cada snapshot exige cero Audits sin Scan. El catálogo cerrado conserva `ca75674` y
 `9bd3ccc`. Ningún OLD mapea Scan: la tabla `scans` es desconocida para ellos y se
 conserva intacta.
+
+**Matrices de rollback de V10, 2026-11-24.** El propietario aprobó el 2026-11-24
+esta decisión explícita de compatibilidad. La matriz habitual de V10 es NEW → OLD
+`3c6fb3d6addb7b35023660aa4caed1a7ffe405f1` → NEW. OLD es `main` con V1–V9, el
+merge del PR #23 y release inmediatamente anterior a V10.
+
+La matriz incluye:
+
+- OLD con Flyway ON y con Flyway OFF;
+- Hibernate validate;
+- el E2E legacy del propio release: seis escenarios, los cuatro históricos más el HTML
+  pegado y la auditoría conjunta;
+- cuatro ciclos de backend con cierre validado;
+- conservación de organizations, memberships, sites, audits, scans,
+  `site_url_identities` e historial Flyway. Las identidades cuentan por `site_id`,
+  con bytes en HEX, e incluyen la reserva ARCHIVED.
+
+El código backend legacy de 3c6fb3d ya no es idéntico al de los releases anteriores:
+añade la auditoría HTML, los enlaces legales y las auditorías conjuntas.
+
+La reescritura del historial (credit cleanup) dejó `d5dac95` y `ca75674` fuera de la
+ascendencia de HEAD. `a201582`, `9bd3ccc` y `bbd02ff` siguen siendo ascendientes, pero
+su frontend difiere del árbol actual. Como el harness exige el frontend exacto, sus
+matrices no son ejecutables desde este checkout, y esa comprobación no se relaja.
+Ningún OLD mapea `site_url_identities`: la tabla les es desconocida y se conserva
+intacta.
 
 Rollback de aplicación conserva el esquema y los datos nuevos. No significa
 DROP automático ni rollback transaccional de toda una secuencia DDL. Cuando
@@ -961,6 +1055,26 @@ GitHub CI sobre el commit de V8 queda pendiente al redactar esta nota.
 El harness pasa a `-IncludePendingScan` (siete archivos nuevos y diez
 modificados; trece en el overlay), exige V1–V8 con el hash congelado de V8 también en
 Phase08 y en `run.mjs`, y conserva el gate de cuatro ciclos de backend validados.
+
+En V10 el harness pasa a `-IncludePendingSiteIdentity`. `-IncludePendingScan` queda
+obsoleto, porque V8 ya está confirmada. El modo admite:
+
+- en el overlay, seis archivos nuevos y seis modificados: el guard estático y las cinco
+  sondas, cuyo inventario actual pasa de V1–V8 a V1–V10 sin tocar sus objetivos
+  históricos de upgrade;
+- fuera del overlay, cinco auxiliares modificados y uno nuevo.
+
+`SiteUrlIdentityHarnessProbe` siembra y verifica una identidad por cada centinela Site.
+Su verificación demuestra la reserva ARCHIVED dentro de una transacción que siempre
+termina en ROLLBACK.
+
+Las restricciones, el upgrade de V9 poblada y la concurrencia de V10 se prueban en
+MariaDB con `scripts/Validate-SiteUrlIdentityV10.ps1`, que mantiene sus propios recursos
+desechables. Allí, y solo allí, existe una cuenta observadora con el privilegio global
+PROCESS y nada más. Esa cuenta lee `INNODB_TRX`, `INNODB_LOCK_WAITS` e `INNODB_LOCKS`
+para probar cada espera real sobre la clave de identidad, y no puede leer ninguna tabla.
+La cuenta de la aplicación conserva USAGE global y ALL PRIVILEGES solo sobre sus tres
+bases propias, con los `_` escapados.
 
 No se anticipan pruebas funcionales de crawler, extracción, consentimiento,
 informes persistentes o scheduler antes de sus respectivas fases.

@@ -17,16 +17,23 @@ Protected UtcMicros/probe sources must equal HEAD and come from Git archive.
 .PARAMETER RollbackRelease
 Release from the reviewed catalogue below. Updating this catalogue requires an
 explicit compatibility decision; arbitrary commits/refs are not accepted.
-V8 runs three matrices: d5dac95 (V7 published), a201582 and the historical
+V8 ran three matrices: d5dac95 (V7 published), a201582 and the historical
 bbd02ff. ca75674 and 9bd3ccc stay catalogued from V7 and V6.
-.PARAMETER IncludePendingScan
+V10 adds 3c6fb3d (V9 published: main before V10) as its habitual matrix, by
+explicit compatibility decision (ADR-0001 section 15). Its legacy E2E is that
+release's own suite of six scenarios; the older releases keep their four. Their
+frontends differ from the current tree, so Assert-Frontend refuses them here:
+their matrices need their exact frontend and are not runnable from this checkout.
+.PARAMETER IncludePendingSiteIdentity
 Pre-commit validation only. Without it (normal mode) the Git working tree and
 index must be clean and NEW is git archive HEAD with no overlay. With it, Git must
-show exactly the seven new V8 files (??) and ten modified files ( M) listed below;
-only the thirteen overlay files are copied into NEW and their hashes are checked
+show exactly the six new V10 overlay files (??), six modified overlay files ( M),
+five modified auxiliary files ( M) and one new auxiliary file (??) listed below;
+only the twelve overlay files are copied into NEW and their hashes are checked
 before, after the copy and at the end. Auxiliary files are never copied.
-IncludePendingAudit, IncludePendingSite, IncludePendingMembership and
-IncludePendingOrganization are obsolete and are no longer accepted parameters.
+IncludePendingScan (V8, now committed), IncludePendingAudit, IncludePendingSite,
+IncludePendingMembership and IncludePendingOrganization are obsolete and are no
+longer accepted parameters.
 Future entities must prove they call UtcMicros before persisting timestamps;
 driver handling of an unnormalized Instant is not the domain contract.
 .PARAMETER TimestampOnly
@@ -39,8 +46,8 @@ Runs finite-output and SQL-guard self-tests without Docker or application startu
 # Does not invoke run.mjs, the legacy validator entrypoint, Compose or Flyway repair.
 [CmdletBinding()]
 param([switch]$TimestampOnly, [switch]$SelfTestOnly,
-    [ValidateSet('d5dac95','a201582','bbd02ff','ca75674','9bd3ccc')][string]$RollbackRelease = 'd5dac95',
-    [switch]$IncludePendingScan)
+    [ValidateSet('3c6fb3d','d5dac95','a201582','bbd02ff','ca75674','9bd3ccc')][string]$RollbackRelease = '3c6fb3d',
+    [switch]$IncludePendingSiteIdentity)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -91,38 +98,55 @@ $approvedReleases = @{
     a201582='a20158268666d4d43bc16844bfaedfa9f00e786d'
     '9bd3ccc'='9bd3ccc5c5b63fef0b299bf0175fe7ab8b18ea55'
     bbd02ff='bbd02ff0ae738fff71b6f27a8c6fd70845d1ad3b'
+    # V10 habitual matrix: main at V9 (PR #23 merge), the release immediately before V10.
+    # Its legacy backend differs from the five above (HTML, legal links, joint audits).
+    '3c6fb3d'='3c6fb3d6addb7b35023660aa4caed1a7ffe405f1'
 }
-# Closed literal V8 scope. New files must be untracked (??), all others tracked ( M).
+# Exact legacy E2E suite of each release, with the rows its scenarios create. Never inferred.
+$legacyE2E = @{
+    d5dac95=@{Scenarios=4; AdminAudits=0; JointAudits=0}; ca75674=@{Scenarios=4; AdminAudits=0; JointAudits=0}
+    a201582=@{Scenarios=4; AdminAudits=0; JointAudits=0}; '9bd3ccc'=@{Scenarios=4; AdminAudits=0; JointAudits=0}
+    bbd02ff=@{Scenarios=4; AdminAudits=0; JointAudits=0}
+    # One HTML audit plus a joint audit of three documents, both by the seeded ADMIN 900002.
+    '3c6fb3d'=@{Scenarios=6; AdminAudits=4; JointAudits=1}
+}
+# Closed literal V10 scope. New files must be untracked (??), all others tracked ( M).
 $newPaths = @(
-    'smartaudits-backend/src/main/resources/db/migration/V8__create_scans.sql',
-    'smartaudits-backend/src/main/java/com/smartaudits/v2/model/Scan.java',
-    'smartaudits-backend/src/main/java/com/smartaudits/v2/model/ScanStatus.java',
-    'smartaudits-backend/src/main/java/com/smartaudits/v2/model/AuditScanService.java',
-    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/ScanTest.java',
-    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/AuditScanServiceTest.java',
-    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/ScanMariaDbProbe.java'
+    'smartaudits-backend/src/main/resources/db/migration/V10__create_site_url_identities.sql',
+    'smartaudits-backend/src/main/java/com/smartaudits/v2/model/SiteUrlIdentityRecord.java',
+    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/SiteUrlIdentityRecordTest.java',
+    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/SiteUrlIdentityV10SchemaTest.java',
+    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/SiteUrlIdentityMariaDbProbe.java',
+    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/SiteUrlIdentityHarnessProbe.java'
 )
+# Tracked backend files of the V10 scope: the static guard and the five probes whose current
+# version inventory moves from V1-V8 to V1-V10 (their historical upgrade targets do not change).
 $overlayModifiedPaths = @(
-    'smartaudits-backend/src/main/java/com/smartaudits/v2/model/Audit.java',
-    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/AuditTest.java',
-    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/AuditMariaDbProbe.java',
-    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/SiteMariaDbProbe.java',
+    'smartaudits-backend/src/test/java/com/smartaudits/v2/site/SiteUrlIdentityStaticTest.java',
+    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/OrganizationTest.java',
     'smartaudits-backend/src/test/java/com/smartaudits/v2/model/OrganizationMembershipMariaDbProbe.java',
-    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/OrganizationTest.java'
+    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/SiteMariaDbProbe.java',
+    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/AuditMariaDbProbe.java',
+    'smartaudits-backend/src/test/java/com/smartaudits/v2/model/ScanMariaDbProbe.java'
 )
 # Reviewed validation/documentation files: allowed to differ, never copied into NEW.
 $auxPaths = @(
     'scripts/Validate-SmartAudits20Harness.ps1',
     'scripts/Validate-FlywayPhase08.ps1',
     'smartaudits-frontend/e2e/run.mjs',
-    'docs/ADR-0001-smartaudits-2-core-model.md'
+    'docs/ADR-0001-smartaudits-2-core-model.md',
+    'docs/F4_1C_SITE_URL_IDENTITY.md'
+)
+# New reviewed validation file: untracked (??), never copied into NEW.
+$newAuxPaths = @(
+    'scripts/Validate-SiteUrlIdentityV10.ps1'
 )
 $overlayPaths = $newPaths + $overlayModifiedPaths
-$scopePaths = $overlayPaths + $auxPaths
-$migrationCandidate = 'smartaudits-backend/src/main/resources/db/migration/V8__create_scans.sql'
+$scopePaths = $overlayPaths + $auxPaths + $newAuxPaths
+$migrationCandidate = 'smartaudits-backend/src/main/resources/db/migration/V10__create_site_url_identities.sql'
 $migrationNames = @('V1__initial_schema.sql','V2__audit_analysis_provenance.sql','V3__incident_rule_provenance.sql',
     'V4__create_organizations.sql','V5__create_organization_memberships.sql','V6__create_sites.sql','V7__create_audits.sql',
-    'V8__create_scans.sql','V9__create_joint_audits.sql')
+    'V8__create_scans.sql','V9__create_joint_audits.sql','V10__create_site_url_identities.sql')
 $candidateHashes = @{}
 
 function Assert-That([bool]$Condition, [string]$Message) {
@@ -219,9 +243,10 @@ function Assert-Migrations([string]$Jar, [string]$MigrationDir = (Join-Path $rep
         'V7__create_audits.sql'='93ECB485513247CEF614238A614F7AD76CD2793062B03183A83B2E70C8B7ACA5'
         'V8__create_scans.sql'='1E6EE50CAFC5D26DCBD0BD2E2E28B8904A1CED6AE5C0E5CE302D1CD5F27B774C'
         'V9__create_joint_audits.sql'='950424D3D667169E0F89563C2E2816025CCD99D65E30F7F8E32DA555EC60D462'
+        'V10__create_site_url_identities.sql'='48A282F17AE0B25D735B78F5C2480C5E233374F68AE5D3E1FC266CE4F2BA2405'
     }
     $sourceNames = @(Get-ChildItem -LiteralPath $MigrationDir -Force | ForEach-Object { $_.Name } | Sort-Object)
-    Assert-That (($sourceNames -join ',') -ceq (($expected.Keys | Sort-Object) -join ',')) 'Expected exactly V1-V9 source migrations'
+    Assert-That (($sourceNames -join ',') -ceq (($expected.Keys | Sort-Object) -join ',')) 'Expected exactly V1-V10 source migrations'
     $archive = $null
     if ($Jar) {
         Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -593,33 +618,40 @@ function Expect-Rejection([scriptblock]$Action, [string]$Message) {
     Assert-That $rejected $Message
 }
 function Scope-SelfTests {
-    Assert-That ($newPaths.Count -eq 7 -and $overlayModifiedPaths.Count -eq 6 -and $auxPaths.Count -eq 4) 'V8 scope lists changed size'
-    Assert-That (@($scopePaths | Sort-Object -Unique -CaseSensitive).Count -eq 17) 'V8 scope lists contain duplicates'
-    Assert-That ($newPaths -ccontains $migrationCandidate) 'Migration candidate is not a new V8 file'
-    $exact = [string[]]@($scopePaths | ForEach-Object { if ($newPaths -ccontains $_) { "?? $_" } else { " M $_" } })
+    Assert-That ($newPaths.Count -eq 6 -and $overlayModifiedPaths.Count -eq 6 -and $auxPaths.Count -eq 5 -and $newAuxPaths.Count -eq 1) 'V10 scope lists changed size'
+    Assert-That (@($scopePaths | Sort-Object -Unique -CaseSensitive).Count -eq 18) 'V10 scope lists contain duplicates'
+    Assert-That ($newPaths -ccontains $migrationCandidate) 'Migration candidate is not a new V10 file'
+    $untracked = $newPaths + $newAuxPaths
+    $exact = [string[]]@($scopePaths | ForEach-Object { if ($untracked -ccontains $_) { "?? $_" } else { " M $_" } })
     Assert-ScopeEntries $exact $true
     Assert-ScopeEntries @() $false
-    # Entry order: 0-6 new files, 7-12 modified overlay files, 13-16 auxiliary files.
+    # Entry order: new overlay files, modified overlay files, modified auxiliary files, new auxiliary file.
+    $modified = $newPaths.Count
+    $aux = $modified + $overlayModifiedPaths.Count
+    $last = $exact.Count - 1
     $variant = { param([int]$Index, [string]$Value) $copy = [string[]]$exact.Clone(); $copy[$Index] = $Value; ,$copy }
     $cases = New-Object 'System.Collections.Generic.List[object]'
     $cases.Add([string[]]($exact + @('?? notes.txt')))
-    $cases.Add([string[]]($exact + @('?? smartaudits-backend/src/main/resources/db/migration/V9__future.sql')))
-    $cases.Add([string[]]($exact + @('?? smartaudits-backend/src/main/java/com/smartaudits/v2/model/AuditStart.java')))
+    $cases.Add([string[]]($exact + @('?? smartaudits-backend/src/main/resources/db/migration/V11__future.sql')))
+    $cases.Add([string[]]($exact + @('?? smartaudits-backend/src/main/java/com/smartaudits/v2/model/SiteCreationService.java')))
+    $cases.Add([string[]]($exact + @(' M smartaudits-backend/src/main/java/com/smartaudits/v2/model/Site.java')))
     $cases.Add([string[]]@($exact | Select-Object -Skip 1))
-    $cases.Add((& $variant 16 $exact[0]))
+    $cases.Add((& $variant $last $exact[0]))
     $cases.Add((& $variant 0 ('A  ' + $newPaths[0])))
     $cases.Add((& $variant 0 (' M ' + $newPaths[0])))
     $cases.Add((& $variant 0 ('?? ' + $newPaths[0].ToUpperInvariant())))
     $cases.Add((& $variant 0 ('??' + $newPaths[0])))
-    $cases.Add((& $variant 7 ('?? ' + $overlayModifiedPaths[0])))
-    $cases.Add((& $variant 7 ('M  ' + $overlayModifiedPaths[0])))
-    $cases.Add((& $variant 7 ('MM ' + $overlayModifiedPaths[0])))
-    $cases.Add((& $variant 13 (' D ' + $auxPaths[0])))
-    $cases.Add((& $variant 13 ('D  ' + $auxPaths[0])))
-    $cases.Add((& $variant 13 ('R  scripts/Old.ps1 -> ' + $auxPaths[0])))
+    $cases.Add((& $variant $modified ('?? ' + $overlayModifiedPaths[0])))
+    $cases.Add((& $variant $modified ('M  ' + $overlayModifiedPaths[0])))
+    $cases.Add((& $variant $modified ('MM ' + $overlayModifiedPaths[0])))
+    $cases.Add((& $variant $aux (' D ' + $auxPaths[0])))
+    $cases.Add((& $variant $aux ('D  ' + $auxPaths[0])))
+    $cases.Add((& $variant $aux ('R  scripts/Old.ps1 -> ' + $auxPaths[0])))
+    $cases.Add((& $variant $last (' M ' + $newAuxPaths[0])))
+    $cases.Add((& $variant $last ('A  ' + $newAuxPaths[0])))
     foreach ($case in $cases) { Expect-Rejection { Assert-ScopeEntries $case $true } 'Scope check accepted an invalid pending Git status fixture' }
     Expect-Rejection { Assert-ScopeEntries @(' M ' + $auxPaths[0]) $false } 'Normal mode accepted a dirty Git status fixture'
-    Pass "Scope self-tests: exact 7 ?? + 10 M and clean normal mode accepted; $($cases.Count + 1) invalid status fixtures rejected"
+    Pass "Scope self-tests: exact $($untracked.Count) ?? + $($overlayModifiedPaths.Count + $auxPaths.Count) M and clean normal mode accepted; $($cases.Count + 1) invalid status fixtures rejected"
 }
 function Inventory-SelfTests {
     $prefix = 'smartaudits-backend/src/main/resources/db/migration/'
@@ -628,16 +660,17 @@ function Inventory-SelfTests {
     $cases = New-Object 'System.Collections.Generic.List[object]'
     $cases.Add([string[]]@($base | Where-Object { $_ -cne ($prefix + 'V8__create_scans.sql') }))
     $cases.Add([string[]]@($base | Where-Object { $_ -cne ($prefix + 'V9__create_joint_audits.sql') }))
-    foreach ($extra in @('V10__future.sql','V8__create_scans_copy.sql','V9000__f3_harness_future_probe.sql',
+    $cases.Add([string[]]@($base | Where-Object { $_ -cne ($prefix + 'V10__create_site_url_identities.sql') }))
+    foreach ($extra in @('V11__future.sql','V8__create_scans_copy.sql','V9000__f3_harness_future_probe.sql',
         'V0__zero.sql','R__repeatable.sql','V8.1__point.sql')) { $cases.Add([string[]]($base + @($prefix + $extra))) }
     foreach ($case in $cases) { Expect-Rejection { $null = Get-VersionInventory $case } 'Migration inventory accepted an invalid fixture' }
-    Pass "Inventory self-tests: exact V1-V9 accepted; $($cases.Count) rejected (V8 absent, V9 absent, V10, duplicate V8, publishable V9000, V0, repeatable, dotted)"
+    Pass "Inventory self-tests: exact V1-V10 accepted; $($cases.Count) rejected (V8 absent, V9 absent, V10 absent, V11, duplicate V8, publishable V9000, V0, repeatable, dotted)"
 }
 function Migration-SelfTests {
     $source = Join-Path $repo 'smartaudits-backend/src/main/resources/db/migration'
     $dir = Join-Path $tempRoot 'migration-fixture'
     $jar = Join-Path $tempRoot 'migration-fixture.jar'
-    $packaged = [long[]]@(1,2,3,4,5,6,7,8,9,9000)
+    $packaged = [long[]]@(1,2,3,4,5,6,7,8,9,10,9000)
     $future = 'V9000__f3_harness_future_probe.sql'
     $altered = [IO.File]::ReadAllText((Join-Path $source 'V8__create_scans.sql')) + ' '
     $reset = {
@@ -666,7 +699,8 @@ function Migration-SelfTests {
         @{ Why='V8 absent'; Do={ Remove-Item -LiteralPath (Join-Path $dir 'V8__create_scans.sql') } },
         @{ Why='V7 modified'; Do={ [IO.File]::WriteAllText((Join-Path $dir 'V7__create_audits.sql'), ([IO.File]::ReadAllText((Join-Path $source 'V7__create_audits.sql')) + ' '), $utf8) } },
         @{ Why='V9 absent'; Do={ Remove-Item -LiteralPath (Join-Path $dir 'V9__create_joint_audits.sql') } },
-        @{ Why='unexpected V10'; Do={ [IO.File]::WriteAllText((Join-Path $dir 'V10__future.sql'), 'CREATE TABLE f3_future (id BIGINT);', $utf8) } },
+        @{ Why='V10 absent'; Do={ Remove-Item -LiteralPath (Join-Path $dir 'V10__create_site_url_identities.sql') } },
+        @{ Why='unexpected V11'; Do={ [IO.File]::WriteAllText((Join-Path $dir 'V11__future.sql'), 'CREATE TABLE f3_future (id BIGINT);', $utf8) } },
         @{ Why='duplicate V8'; Do={ Copy-Item -LiteralPath (Join-Path $dir 'V8__create_scans.sql') -Destination (Join-Path $dir 'V8__create_scans_copy.sql') } },
         @{ Why='publishable V9000'; Do={ [IO.File]::WriteAllText((Join-Path $dir $future), 'CREATE TABLE f3_harness_future_probe (id BIGINT);', $utf8) } },
         @{ Why='incorrect V8 hash'; Do={ Copy-Item -LiteralPath (Join-Path $source 'V7__create_audits.sql') -Destination (Join-Path $dir 'V8__create_scans.sql') -Force } }
@@ -677,7 +711,7 @@ function Migration-SelfTests {
         @{ Why='source and JAR altered identically'; Do={ [IO.File]::WriteAllText((Join-Path $dir 'V8__create_scans.sql'), $altered, $utf8); & $pack $all @{'V8__create_scans.sql'=$altered} } },
         @{ Why='duplicate JAR entry'; Do={ & $pack ([string[]]($all + @('V8__create_scans.sql'))) } },
         @{ Why='JAR V8 absent'; Do={ & $pack ([string[]]@($all | Where-Object { $_ -cne 'V8__create_scans.sql' })) } },
-        @{ Why='unexpected JAR V10'; Do={ & $pack ([string[]]($all + @('V10__future.sql'))) @{'V10__future.sql'='CREATE TABLE f3_future (id BIGINT);'} } },
+        @{ Why='unexpected JAR V11'; Do={ & $pack ([string[]]($all + @('V11__future.sql'))) @{'V11__future.sql'='CREATE TABLE f3_future (id BIGINT);'} } },
         @{ Why='JAR without synthetic V9000'; Do={ & $pack ([string[]]$migrationNames) } }
     )
     try {
@@ -706,7 +740,7 @@ function Migration-SelfTests {
     Pass "Migration hash self-tests: LF and CRLF+BOM accepted; $($sourceCases.Count) source and $($jarCases.Count) JAR negatives rejected; literals never derived from files"
 }
 function Overlay-SelfTest {
-    if (-not $IncludePendingScan) { Pass 'Overlay self-test not applicable: normal mode never overlays NEW'; return }
+    if (-not $IncludePendingSiteIdentity) { Pass 'Overlay self-test not applicable: normal mode never overlays NEW'; return }
     $root = Join-Path $tempRoot 'overlay-fixture'
     $prepare = {
         param([switch]$WithNew, [switch]$WithoutModified)
@@ -727,7 +761,7 @@ function Overlay-SelfTest {
         Copy-Overlay $root
         Assert-That (@(Get-ChildItem -LiteralPath $root -Recurse -File -Force).Count -eq $overlayPaths.Count) 'Overlay fixture must contain exactly the overlay files'
         & $prepare -WithNew
-        Expect-Rejection { Copy-Overlay $root } 'Overlay accepted a new V8 file already present in NEW'
+        Expect-Rejection { Copy-Overlay $root } 'Overlay accepted a new V10 file already present in NEW'
         & $prepare -WithoutModified
         Expect-Rejection { Copy-Overlay $root } 'Overlay accepted a missing tracked overlay file'
     } finally { if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force } }
@@ -834,24 +868,24 @@ function Get-VersionInventory([string[]]$Files) {
         Assert-That ($version -gt 0 -and $version -lt 9000 -and -not $versions.ContainsKey($version)) 'Duplicate/reserved migration version'
         $versions[$version] = $file
     }
-    Assert-That ((($versions.Keys | Sort-Object) -join ',') -ceq '1,2,3,4,5,6,7,8,9') 'Expected exactly versioned V1-V9 (pending V8 only with -IncludePendingScan)'
+    Assert-That ((($versions.Keys | Sort-Object) -join ',') -ceq '1,2,3,4,5,6,7,8,9,10') 'Expected exactly versioned V1-V10 (pending V10 only with -IncludePendingSiteIdentity)'
     return $versions
 }
 function Real-Migrations {
     $relative = 'smartaudits-backend/src/main/resources/db/migration'
     $status = Native 'Git migration status' 'git' @('status','--porcelain','--untracked-files=all','--',$relative)
-    if ($IncludePendingScan) { Assert-That ($status -ceq "?? $migrationCandidate") 'Pending Scan mode requires exactly the new V8 migration candidate' }
+    if ($IncludePendingSiteIdentity) { Assert-That ($status -ceq "?? $migrationCandidate") 'Pending Site identity mode requires exactly the new V10 migration candidate' }
     else { Assert-That (-not $status) 'Normal mode requires migrations equal to HEAD' }
     $files = @((Native 'Git migration inventory' 'git' @('ls-tree','-r','--name-only',$head,'--',$relative)) -split '\r?\n')
-    if ($IncludePendingScan) {
-        Assert-That ($files -cnotcontains $migrationCandidate) 'Pending V8 candidate is already tracked'
+    if ($IncludePendingSiteIdentity) {
+        Assert-That ($files -cnotcontains $migrationCandidate) 'Pending V10 candidate is already tracked'
         $files += $migrationCandidate
     }
     $versions = Get-VersionInventory $files
     foreach ($version in @($versions.Keys | Where-Object { $_ -ge 4 })) { Assert-Expansion (Join-Path $repo $versions[$version]) -RequireTableOptions }
     $real = @($versions.Keys | Where-Object { $_ -ge 4 } | Sort-Object)
     $script:expectedVersions = @(1,2,3) + $real + @(9000)
-    Pass "Real V4+: $($real -join ','); pending Scan candidates=$IncludePendingScan; expected Flyway versions=$($expectedVersions -join ','); count=$($expectedVersions.Count)"
+    Pass "Real V4+: $($real -join ','); pending Site identity candidates=$IncludePendingSiteIdentity; expected Flyway versions=$($expectedVersions -join ','); count=$($expectedVersions.Count)"
 }
 function Assert-VersionedSources {
     foreach ($path in @('smartaudits-backend/src/main/java/com/smartaudits/v2/time/UtcMicros.java',
@@ -864,26 +898,26 @@ function Assert-VersionedSources {
 }
 function Assert-ScopeEntries([string[]]$Entries, [bool]$Pending) {
     if (-not $Pending) {
-        Assert-That ($Entries.Count -eq 0) 'Normal mode requires a clean Git working tree and index; only -IncludePendingScan accepts the exact V8 candidate'
+        Assert-That ($Entries.Count -eq 0) 'Normal mode requires a clean Git working tree and index; only -IncludePendingSiteIdentity accepts the exact V10 candidate'
         return
     }
     # Equal count + unique in-scope paths with exact states == exact set; staging, D and R never match.
-    Assert-That ($Entries.Count -eq $scopePaths.Count) "Pending Scan mode requires exactly $($scopePaths.Count) Git entries"
+    Assert-That ($Entries.Count -eq $scopePaths.Count) "Pending Site identity mode requires exactly $($scopePaths.Count) Git entries"
     $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
     foreach ($entry in $Entries) {
         Assert-That ($entry.Length -gt 3 -and $entry.Substring(2,1) -ceq ' ') 'Malformed Git status'
         $state = $entry.Substring(0,2)
         $path = $entry.Substring(3)
-        Assert-That ($scopePaths -ccontains $path) "Unexpected path outside V8 scope: $path"
-        $expectedState = if ($newPaths -ccontains $path) { '??' } else { ' M' }
+        Assert-That ($scopePaths -ccontains $path) "Unexpected path outside V10 scope: $path"
+        $expectedState = if (($newPaths + $newAuxPaths) -ccontains $path) { '??' } else { ' M' }
         Assert-That ($state -ceq $expectedState) "Unexpected Git status '$state' for $path"
         Assert-That ($seen.Add($path)) "Duplicate Git status entry: $path"
     }
 }
 function Assert-Candidates {
-    $status = Native 'Git exact V8 scope entries' 'git' @('-c','core.quotePath=false','status','--porcelain=v1','--untracked-files=all') -KeepLeadingWhitespace
-    Assert-ScopeEntries @(if ($status) { $status -split '\r?\n' }) $IncludePendingScan.IsPresent
-    if (-not $IncludePendingScan) { return }
+    $status = Native 'Git exact V10 scope entries' 'git' @('-c','core.quotePath=false','status','--porcelain=v1','--untracked-files=all') -KeepLeadingWhitespace
+    Assert-ScopeEntries @(if ($status) { $status -split '\r?\n' }) $IncludePendingSiteIdentity.IsPresent
+    if (-not $IncludePendingSiteIdentity) { return }
     foreach ($path in $scopePaths) {
         $item=Get-Item -LiteralPath (Join-Path $repo $path) -Force
         Assert-That (-not $item.PSIsContainer -and -not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) "Scope entry must be a regular file: $path"
@@ -897,16 +931,16 @@ function Assert-Candidates {
 }
 function Copy-Overlay([string]$Root) {
     # NEW starts as git archive HEAD; only the thirteen reviewed overlay files are added.
-    Assert-That $IncludePendingScan 'Overlay requires -IncludePendingScan'
+    Assert-That $IncludePendingSiteIdentity 'Overlay requires -IncludePendingSiteIdentity'
     foreach ($path in $overlayPaths) {
         $target=Join-Path $Root $path
-        if ($newPaths -ccontains $path) { Assert-That (-not (Test-Path -LiteralPath $target)) "New V8 file already present in NEW: $path" }
+        if ($newPaths -ccontains $path) { Assert-That (-not (Test-Path -LiteralPath $target)) "New V10 file already present in NEW: $path" }
         else { Assert-That (Test-Path -LiteralPath $target -PathType Leaf) "Tracked overlay file missing from NEW: $path" }
         $null=New-Item -ItemType Directory -Force -Path (Split-Path $target)
         Copy-Item -LiteralPath (Join-Path $repo $path) -Destination $target -Force
         Assert-That ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash -ceq $candidateHashes[$path]) "Copied overlay hash mismatch: $path"
     }
-    foreach ($path in $auxPaths) { Assert-That (-not (Test-Path -LiteralPath (Join-Path $Root $path))) "Auxiliary file must never enter NEW: $path" }
+    foreach ($path in ($auxPaths + $newAuxPaths)) { Assert-That (-not (Test-Path -LiteralPath (Join-Path $Root $path))) "Auxiliary file must never enter NEW: $path" }
 }
 function Assert-History {
     Assert-That ((Sql 'SELECT GROUP_CONCAT(version ORDER BY installed_rank) FROM flyway_schema_history') -ceq ($expectedVersions -join ',')) 'Unexpected Flyway version set/order'
@@ -1011,6 +1045,12 @@ function Snapshot {
     $filters['sites']='1=1'
     $filters['audits']='1=1' # From V8 only the service commits Audits, each together with its first Scan (ADR-0001).
     $filters['scans']='1=1'
+    if ((Sql "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='site_url_identities'") -eq '1') {
+        # V10: every identity row, including the ARCHIVED reservation. No OLD release maps this table.
+        $filters['site_url_identities']='1=1'
+        $strays = Sql 'SELECT COUNT(*) FROM site_url_identities i LEFT JOIN sites s ON s.organization_id=i.organization_id AND s.id=i.site_id WHERE s.id IS NULL'
+        Assert-That ($strays -eq '0') "Site identity without its Site in its organization: $strays"
+    }
     # Invariant checked on every snapshot: no committed Audit lacks a Scan.
     $orphans = Sql 'SELECT COUNT(*) FROM audits a WHERE NOT EXISTS (SELECT 1 FROM scans s WHERE s.organization_id=a.organization_id AND s.audit_id=a.id)'
     Assert-That ($orphans -eq '0') "Audit without Scan found in snapshot: $orphans"
@@ -1018,7 +1058,11 @@ function Snapshot {
     foreach ($table in $filters.Keys) {
         $columns = (Sql "SELECT COLUMN_NAME FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='$table' ORDER BY ORDINAL_POSITION").Split("`n")
         $quoted = ($columns | ForEach-Object { '``'.Substring(0,1) + $_.Trim() + '``'.Substring(0,1) }) -join ','
-        $order = if ($table -eq 'usuarios_roles') { 'usuario_id,rol_id' } elseif ($table -eq 'flyway_schema_history') { 'installed_rank' } else { 'id' }
+        if ($table -ceq 'site_url_identities') {
+            Assert-That ((($columns | ForEach-Object { $_.Trim() }) -join ',') -ceq 'site_id,organization_id,canonical_origin') 'Unexpected Site identity columns'
+            $quoted = 'site_id,organization_id,HEX(canonical_origin)' # exact bytes, never a character-set conversion
+        }
+        $order = if ($table -eq 'usuarios_roles') { 'usuario_id,rol_id' } elseif ($table -eq 'flyway_schema_history') { 'installed_rank' } elseif ($table -eq 'site_url_identities') { 'site_id' } else { 'id' }
         $rows = Sql "SELECT JSON_ARRAY($quoted) FROM $table WHERE $($filters[$table]) ORDER BY $order"
         $count = Sql "SELECT COUNT(*) FROM $table WHERE $($filters[$table])"
         # E2E legitimately advances auto-increment counters. No row/history field is excluded.
@@ -1032,7 +1076,7 @@ function Assert-Snapshot($Expected, [string]$Stage) {
     foreach ($table in $Expected.Keys) {
         Assert-That ($actual[$table] -ceq $Expected[$table]) "$Stage integrity mismatch: $table"
     }
-    Pass "$Stage legacy sentinels + future row + Flyway history + table structures unchanged"
+    Pass "$Stage legacy sentinels + future row + Flyway history + 2.0 rows incl. V10 identities + table structures unchanged"
 }
 function Probe([string]$Mode, [hashtable]$Extra = @{}, [string]$Timezone = 'Asia/Kathmandu') {
     Assert-That ($Timezone -cin @('Asia/Kathmandu','Europe/Madrid')) 'Unexpected probe timezone'
@@ -1167,6 +1211,18 @@ function Scan-Probe([string]$Mode, [hashtable]$DatabaseEnv = $dbEnv, [string]$Ti
     }
     Assert-That ($output.Contains($marker)) 'Missing Scan proof marker'
     foreach ($line in ($output -split '\r?\n')) { if ($line.StartsWith($marker) -or $line.StartsWith('SCAN CONCURRENCY OBSERVED:')) { Pass $line } }
+}
+function SiteIdentity-Probe([string]$Mode, [hashtable]$DatabaseEnv = $dbEnv, [string]$Timezone = 'Europe/Madrid') {
+    # V10 sentinels: one identity per Site sentinel (ACTIVE and ARCHIVED). verify changes no row.
+    Assert-That ($Mode -cin @('seed','verify')) 'Unexpected Site identity probe mode'
+    Assert-That ($Timezone -cin @('Asia/Kathmandu','Europe/Madrid')) 'Unexpected Site identity timezone'
+    $environment=@{} + $DatabaseEnv + @{F3_SITE_IDENTITY_MODE=$Mode;F3_TIMEZONE=$Timezone;
+        F3_EXPECTED_VERSIONS=($expectedVersions -join ',');F3_SITE_IDENTITY_HARNESS_RUN_ID=$runId}
+    $output=Maven $newBackend "-Dtest=com.smartaudits.v2.model.SiteUrlIdentityHarnessProbe -DargLine=-Duser.timezone=$Timezone test" $environment
+    Assert-That ($output -match 'Tests run: 1, Failures: 0, Errors: 0, Skipped: 0') 'Site identity MariaDB probe did not pass'
+    $marker = switch ($Mode) { 'seed' {'SITE IDENTITY SENTINELS PASS:'}; 'verify' {'SITE IDENTITY VERIFY PASS:'} }
+    Assert-That ($output.Contains($marker)) 'Missing Site identity proof marker'
+    foreach ($line in ($output -split '\r?\n')) { if ($line.StartsWith($marker)) { Pass $line } }
 }
 function Populated-V7-Upgrade {
     $upgradeDb='f3_harness_' + [Guid]::NewGuid().ToString('N')
@@ -1308,9 +1364,9 @@ try {
     $oldBackend=Join-Path $tempRoot 'old/smartaudits-backend'
     Assert-VersionedSources
     Assert-Candidates
-    if ($IncludePendingScan) {
+    if ($IncludePendingSiteIdentity) {
         Copy-Overlay (Join-Path $tempRoot 'new')
-        Pass "Overlay: exactly $($overlayPaths.Count) reviewed V8 files copied into NEW with matching hashes; $($auxPaths.Count) auxiliary files excluded"
+        Pass "Overlay: exactly $($overlayPaths.Count) reviewed V10 files copied into NEW with matching hashes; $($auxPaths.Count + $newAuxPaths.Count) auxiliary files excluded"
     } else {
         Pass 'Normal mode: clean working tree and index; NEW is git archive HEAD without overlay'
     }
@@ -1332,10 +1388,10 @@ CREATE TABLE f3_harness_future_probe (
     $null = Maven $oldBackend '-DskipTests package'
     Pass "Exact baseline built from Git archive: $baseline"
     $null = Maven $newBackend '-DskipTests package'
-    Pass "New JAR from HEAD $head + V9000; explicit Scan candidates=$IncludePendingScan"
+    Pass "New JAR from HEAD $head + V9000; explicit Site identity candidates=$IncludePendingSiteIdentity"
     $oldJar=Join-Path $oldBackend 'target/smartaudits-backend-1.0.0.jar'
     $newJar=Join-Path $newBackend 'target/smartaudits-backend-1.0.0.jar'
-    Assert-Migrations -Jar $newJar # OLD may have V1-V3 up to V1-V7; never require V8 in OLD.
+    Assert-Migrations -Jar $newJar # OLD may have V1-V3 up to V1-V9; never require V10 in OLD.
     }
     $volumeRegistered=$true
     $null = Docker @('volume','create','--label',"$label=$runId",$volume)
@@ -1392,6 +1448,9 @@ CREATE TABLE f3_harness_future_probe (
     Assert-That ((Sql 'SELECT COUNT(*) FROM organization_memberships') -eq '2') 'Expected ACTIVE and REVOKED Membership sentinels'
     Site-Probe 'seed'
     Assert-That ((Sql 'SELECT GROUP_CONCAT(status ORDER BY status) FROM sites') -ceq 'ACTIVE,ARCHIVED') 'Expected ACTIVE and ARCHIVED Site sentinels'
+    SiteIdentity-Probe 'seed'
+    Assert-That ((Sql "SELECT GROUP_CONCAT(CONCAT(s.status,':',HEX(i.canonical_origin)) ORDER BY s.status) FROM site_url_identities i JOIN sites s ON s.organization_id=i.organization_id AND s.id=i.site_id") -ceq 'ACTIVE:68747470733A2F2F73656E74696E656C2D66332E6578616D706C652E636F6D,ARCHIVED:687474703A2F2F61726368697665642D66332E6578616D706C652E6F7267') 'Expected exact ACTIVE and ARCHIVED Site identity sentinels'
+    SiteIdentity-Probe 'verify'
     Scan-Probe 'seed'
     Assert-That ((Sql "SELECT CONCAT((SELECT COUNT(*) FROM audits),'|',(SELECT COUNT(*) FROM scans),'|',(SELECT GROUP_CONCAT(CONCAT(attempt_number,':',status) ORDER BY audit_id,attempt_number) FROM scans))") -ceq '2|3|1:PENDING,1:FAILED,2:PENDING') 'Expected 2 Audit and 3 Scan sentinels created by the service'
     $before=Snapshot
@@ -1409,13 +1468,16 @@ CREATE TABLE f3_harness_future_probe (
         'test','flows.spec.js','--config',(Join-Path $frontend 'playwright.config.js'),'--output',(Join-Path $tempRoot 'playwright-output')) $frontend @{
             E2E_RUN_ID=$runId;E2E_BASE_URL="http://127.0.0.1:$webPort";E2E_ADMIN_EMAIL=$adminEmail;E2E_PASSWORD=$e2ePassword
         } 240
-    Assert-That ($e2e -match 'Running 4 tests' -and $e2e -match '\b4 passed\b') 'Expected exactly four passing legacy scenarios'
-    Pass "LEGACY E2E: 4/4 PASS (exact $RollbackRelease; versions=$($expectedVersions -join ','); isolated MariaDB 11.2)"
+    $suite = $legacyE2E[$RollbackRelease]
+    Assert-That ($e2e -match "Running $($suite.Scenarios) tests" -and $e2e -match "\b$($suite.Scenarios) passed\b") "Expected exactly $($suite.Scenarios) passing legacy scenarios of $RollbackRelease"
+    Pass "LEGACY E2E: $($suite.Scenarios)/$($suite.Scenarios) PASS (exact $RollbackRelease; versions=$($expectedVersions -join ','); isolated MariaDB 11.2)"
     Force-Stop $web
     Assert-Snapshot $before 'POST rollback ON + E2E'
     # Verify the actual E2E-created rows separately, not by weakening sentinel comparisons.
     Assert-That ((Sql "SELECT COUNT(*) FROM usuarios WHERE email LIKE 'client-%-$runId@example.invalid'") -eq '3') 'Expected three E2E-created clients'
     Assert-That ((Sql "SELECT COUNT(*) FROM auditorias a JOIN usuarios u ON u.id=a.usuario_id WHERE u.email='client-audit-$runId@example.invalid'") -eq '1') 'Expected one E2E-created audit'
+    Assert-That ((Sql 'SELECT COUNT(*) FROM auditorias WHERE usuario_id=900002') -eq [string]$suite.AdminAudits) "Expected $($suite.AdminAudits) audits created by the E2E ADMIN"
+    Assert-That ((Sql 'SELECT COUNT(*) FROM auditorias_conjuntas WHERE usuario_id=900002') -eq [string]$suite.JointAudits) "Expected $($suite.JointAudits) joint audits created by the E2E ADMIN"
     Stop-Backend $backend
     $backend=Start-Backend $oldJar $false "OLD exact $RollbackRelease Flyway OFF"
     Legacy-Access $backend.Port
@@ -1424,6 +1486,8 @@ CREATE TABLE f3_harness_future_probe (
     $backend=Start-Backend $newJar $true 'NEW return forward'
     Assert-Snapshot $before 'NEW return forward'
     Stop-Backend $backend
+    SiteIdentity-Probe 'verify'
+    Assert-Snapshot $before 'POST identity verify'
     Timestamp-Matrix
     Assert-Snapshot $before 'POST timestamp'
     }
@@ -1436,7 +1500,7 @@ CREATE TABLE f3_harness_future_probe (
     Assert-Candidates
     Assert-VersionedSources
     Assert-That ((Native 'Git HEAD verification' 'git' @('rev-parse','HEAD')) -ceq $head) 'Main checkout moved'
-    Pass 'V1/V2/V3/V4/V5/V6/V7/V8 bytes and normalized hashes intact'
+    Pass 'V1-V10 bytes and normalized hashes intact'
 } catch {
     $failure=Protect $_.Exception.Message
     Write-Host "FAIL $failure"
